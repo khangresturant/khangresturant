@@ -17,6 +17,7 @@ import {
   PERMANENT_PLAN_LABEL,
   isFlame9Brand,
   shouldDisableBackupRestore,
+  shouldHideSupportTickets,
 } from "@/lib/deployment/flame9-brand";
 import { isLocalSqliteEnabled } from "@/lib/config";
 import { FLAME9_LOCAL_SHOP_ID } from "@/lib/local-sqlite/seed-data";
@@ -385,6 +386,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
           const canAccessDashboardPath = (p: string) => {
             if (hideBilling && p.startsWith("/dashboard/billing")) return false;
             if (shouldDisableBackupRestore() && p.startsWith("/dashboard/backup")) return false;
+            if (shouldHideSupportTickets() && p.startsWith("/dashboard/support")) return false;
             return canAccessPath(access, p);
           };
 

@@ -43,6 +43,12 @@ export function shouldDisableBackupRestore(): boolean {
   return isFlame9Brand() || process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE === "true";
 }
 
+/** Hide Support Tickets in sidebar; page stays in codebase for SaaS builds. */
+export function shouldHideSupportTickets(): boolean {
+  if (process.env.NEXT_PUBLIC_HIDE_SUPPORT === "true") return true;
+  return isPermanentRestaurantLicense();
+}
+
 /** Primary super-admin email hint for login (public env only). */
 export function getFlame9AdminEmailHint(): string {
   const explicit = process.env.NEXT_PUBLIC_FLAME9_ADMIN_EMAIL?.trim();

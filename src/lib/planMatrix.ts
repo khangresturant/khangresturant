@@ -4,6 +4,8 @@
  * Remote plan JSON from platform config may override individual flags.
  */
 
+import { shouldHideSupportTickets } from "@/lib/deployment/flame9-brand";
+
 export type PlanId = "free" | "starter" | "premium";
 
 export type PlanFeatures = {
@@ -319,7 +321,10 @@ export function isPathAllowedForPlan(path: string, plan: PlanFeatures): boolean 
     return false;
   }
 
-  if (path.startsWith("/dashboard/support") && !plan.allow_support) {
+  if (
+    path.startsWith("/dashboard/support") &&
+    (!plan.allow_support || shouldHideSupportTickets())
+  ) {
     return false;
   }
 

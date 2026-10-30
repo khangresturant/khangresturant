@@ -50,7 +50,11 @@ import {
   Smartphone,
 } from "lucide-react";
 import { getEffectiveTierId, resolvePlan } from "@/lib/planMatrix";
-import { shouldHideBillingAndPlans, shouldDisableBackupRestore } from "@/lib/deployment/flame9-brand";
+import {
+  shouldHideBillingAndPlans,
+  shouldDisableBackupRestore,
+  shouldHideSupportTickets,
+} from "@/lib/deployment/flame9-brand";
 import type { SectionColorKey, SidebarLink, SidebarSection, SidebarSectionsInput } from "@/lib/dashboard/sidebar-types";
 
 function buildIndustryModuleSection(
@@ -465,7 +469,7 @@ export function buildSidebarSections(input: SidebarSectionsInput): SidebarSectio
   const effectiveTier = getEffectiveTierId(input.subscriptionTier, input.subscriptionExpiresAt);
   const planForSupport = resolvePlan(effectiveTier, input.remotePlans || []);
 
-  if (planForSupport.allow_support) {
+  if (planForSupport.allow_support && !shouldHideSupportTickets()) {
     sections.push({
       titleKey: "support_section",
       colorKey: "indigo",

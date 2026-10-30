@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useShop } from "@/context/ShopContext";
+import { shouldHideSupportTickets } from "@/lib/deployment/flame9-brand";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,8 +32,15 @@ interface Reply {
 }
 
 export default function SupportPage() {
+  const router = useRouter();
   const { shopId, subscriptionTier, userName } = useShop();
   const supabase = createClient();
+
+  useEffect(() => {
+    if (shouldHideSupportTickets()) {
+      router.replace("/dashboard/restaurant/pos");
+    }
+  }, [router]);
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
