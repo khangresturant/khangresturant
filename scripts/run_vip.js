@@ -1,0 +1,1 @@
+console.log(" VIP Script Builder Ready);

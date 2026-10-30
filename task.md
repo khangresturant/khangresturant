@@ -1,0 +1,31 @@
+- `[x]` Implement split-screen visual components in `src/app/login/page.tsx`
+  - `[x]` Build left side: Feature showcase panel, glowing orbs, live activity chart simulation, branding logo
+  - `[x]` Build right side: Glassmorphic form card, language selector, footer
+- `[x]` Add password visibility toggle state and logic (Login Page)
+- `[x]` Refine styling (focus rings, button glows, Urdu translations compatibility)
+- `[x]` Implement password instructions checklist in `src/app/register/page.tsx`
+- `[x]` Add password strength progress bar (Register Page)
+- `[x]` Enforce Step-1 password validation lock & warning highlights (Register Page)
+- `[x]` Add password visibility toggle state and logic (Register Page)
+- `[x]` Fix multi-business display bug (group all shops per owner client-side)
+- `[x]` Build live feature toggles & subscription tier/expiry editors inside registrations card
+- `[x]` Integrate platform audit trail tab querying the `audit_logs` table
+- `[x]` Resolve DB RLS INSERT constraints for shops, user_profiles, and user_shops
+- `[x]` Resolve DB RLS SELECT constraints for shops during client-side `.insert().select().single()`
+- `[x]` Add automatic Step-1 redirection and Sign In link on email conflict
+- `[x]` Cache user ID (`registeredUserId`) during registration failure to prevent retry 'User already registered' loop
+- `[x]` Display all registered user profiles in admin panel (remove hardcoded superadmin role filter)
+- `[x]` Fetch and map user_shops assignments for all roles in admin directory
+- `[x]` Add a dynamic Role Filter dropdown in the admin directory listings
+- `[x]` Build interactive PWA Installation Assistant modal in `TheAccountsLanding3D.tsx`
+- `[x]` Implement PC/iOS/Android device switcher tabs inside PWA modal
+- `[x]` Gate `/dashboard/settings/closing` route manually with `SubscriptionBlocker`
+- `[x]` Query and verify previous shop counts before granting 14-day free trial (enforce single-trial policy)
+- `[x]` Fix UTC-shift date discrepancy in database auto-posting accounting triggers (force Asia/Karachi PKT conversion)
+- `[x]` Replace frontend generic UTC date string split values with client-offset adjusted local dates in Accounts & Khata vouchers
+- `[x]` Compress, transfer, build, and publish the codebase live on the VPS (`31.97.215.18`) for the domain `theaccounts.cloud`
+- `[x]` Restart PM2 processes on the remote server and visually verify the live deployment
+- `[x]` Resolve database query sluggishness (identify missing indexes on products, variants, invoices, and accounting entries)
+- `[x]` Deploy database-wide performance B-Tree indexes on foreign keys (`shop_id`, `product_id`, `invoice_id`, `entry_id`)
+- `[x]` Run final TypeScript checks (Clean build!)
+- `[x]` Create walkthrough.md with validation summary

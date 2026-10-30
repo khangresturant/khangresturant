@@ -1,0 +1,63 @@
+name: 🚀 Deploy to VPS (theaccounts.cloud)
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to theaccounts.cloud VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔑 Deploy via SSH to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          command_timeout: 18m
+          script: |
+            set -e
+            echo "╔══════════════════════════════════════════════════╗"
+            echo "║   THEACCOUNTS — AUTO DEPLOYING FROM GITHUB       ║"
+            echo "╚══════════════════════════════════════════════════╝"
+
+            APP_DIR="/var/www/theaccounts"
+
+            # Clone if fresh, otherwise pull
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "→ Fresh clone..."
+              git clone -b main https://github.com/usmandevcore/hisabultimate.git $APP_DIR
+            fi
+
+            cd $APP_DIR
+
+            echo "→ Pulling latest code..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "→ Installing dependencies..."
+            npm install --production=false
+
+            echo "→ Building Next.js..."
+            npm run build
+
+            echo "→ Restarting PM2..."
+            if pm2 list | grep -q "theaccounts"; then
+              pm2 restart theaccounts
+            else
+              pm2 start npm --name "theaccounts" -- start
+            fi
+            pm2 save
+
+            echo "→ Reloading Nginx..."
+            nginx -t && systemctl reload nginx
+
+            echo "✅ DEPLOYMENT COMPLETE! → https://theaccounts.cloud"
+            pm2 status
