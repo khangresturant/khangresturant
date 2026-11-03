@@ -260,14 +260,8 @@ export default function UnitsPage() {
     <div className="space-y-3 font-sans text-slate-800">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-200/80">
-        <div>
-          <h2 className="text-lg md:text-xl font-black tracking-tight text-slate-900">Units &amp; Packings</h2>
-          <p className="text-slate-500 text-[11px] mt-0.5">
-            Manage single base units and sub-unit packaging conversions
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-2.5 pb-2.5 border-b border-slate-200/80">
+        <div className="flex flex-wrap items-center gap-2 justify-end">
           {units.length === 0 && (
             <Button 
               onClick={handlePrepopulate} 
@@ -326,18 +320,18 @@ export default function UnitsPage() {
                   className="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between"
                 >
                   <div className="flex flex-col">
-                    <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Pack Unit</span>
-                    <span className="text-xs font-black text-slate-800 mt-0.5">{unit.name} ({unit.code})</span>
+                    <div className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Pack Unit</div>
+                    <div className="text-xs font-black text-slate-800 mt-0.5">{unit.name} ({unit.code})</div>
                   </div>
                   
                   <div className="flex items-center gap-1 text-slate-400">
-                    <span className="text-[10px] font-mono font-bold bg-slate-100 px-1.5 py-0.2 rounded text-slate-600">x{unit.conversion_factor}</span>
+                    <div className="text-[10px] font-mono font-bold bg-slate-100 px-1.5 py-0.2 rounded text-slate-600">x{unit.conversion_factor}</div>
                     <ArrowRight size={12} className="text-blue-500" />
                   </div>
 
                   <div className="flex flex-col text-right">
-                    <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Base</span>
-                    <span className="text-xs font-black text-blue-600 mt-0.5">{unit.conversion_factor} × {baseCode}</span>
+                    <div className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Base</div>
+                    <div className="text-xs font-black text-blue-600 mt-0.5">{unit.conversion_factor} × {baseCode}</div>
                   </div>
                 </motion.div>
               );
@@ -352,9 +346,9 @@ export default function UnitsPage() {
           <h3 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
             <Layers className="text-blue-500" size={14} /> Configured Units &amp; Packings
           </h3>
-          <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.2 rounded-full">
+          <div className="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.2 rounded-full">
             {units.length} Units
-          </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -390,21 +384,21 @@ export default function UnitsPage() {
                         <td className="px-6 py-4 font-bold text-slate-800">{unit.name}</td>
                         <td className="px-6 py-4 font-mono text-xs text-slate-500 font-semibold uppercase">{unit.code}</td>
                         <td className="px-6 py-4">
-                          <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold border ${
+                          <div className={`px-2.5 py-0.5 rounded text-[11px] font-bold border ${
                             isBase 
                               ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
                               : "bg-blue-50 text-blue-700 border-blue-100"
                           }`}>
                             {isBase ? "Base Unit" : "Secondary packing"}
-                          </span>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           {isBase ? (
-                            <span className="text-slate-400">—</span>
+                            <div className="text-slate-400">-</div>
                           ) : (
-                            <span className="text-slate-700 font-medium">
+                            <div className="text-slate-700 font-medium">
                               Maps to {getParentUnitDetails(unit.parent_unit).name} ({getParentUnitDetails(unit.parent_unit).code})
-                            </span>
+                            </div>
                           )}
                         </td>
                         <td className="px-6 py-4 text-center font-bold text-slate-800">

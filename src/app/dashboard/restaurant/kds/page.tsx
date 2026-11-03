@@ -262,7 +262,7 @@ export default function KitchenDisplayPage() {
 
       toast.success(
         newStatus === "ready"
-          ? "Ticket marked READY — waitstaff can pick up"
+          ? "Ticket marked READY - waitstaff can pick up"
           : "Ticket bumped / served"
       );
       fetchActiveTickets(false);
@@ -300,15 +300,12 @@ export default function KitchenDisplayPage() {
               <ArrowLeft size={16} />
             </button>
           </Link>
-          <div>
-            <h1 className="text-xl font-black flex items-center gap-2 text-white">
-              <span className="p-2 bg-amber-500 rounded-xl text-slate-950">
-                <ChefHat className="h-5 w-5 animate-pulse" />
-              </span>
-              Kitchen Display Monitor (KDS)
-            </h1>
-            <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
-              Live KOTs from dining, takeaway, and delivery — synced to kitchen_orders.
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-amber-500 rounded-xl text-slate-950">
+              <ChefHat className="h-4 w-4 animate-pulse" />
+            </div>
+            <p className="text-[11px] text-slate-400 font-bold hidden sm:block">
+              Live Kitchen Queue
             </p>
           </div>
         </div>
@@ -403,23 +400,23 @@ export default function KitchenDisplayPage() {
                     }`}
                   >
                     <div>
-                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">
+                      <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">
                         {serviceLabel(t)}
-                      </span>
+                      </div>
                       <h4 className="font-black text-sm text-white mt-0.5">
                         {t.order_number
                           ? `Order ${t.order_number}`
                           : `KOT #${t.id.slice(0, 6).toUpperCase()}`}
                       </h4>
-                      <span className="text-[10px] text-slate-500 font-semibold">
+                      <div className="text-[10px] text-slate-500 font-semibold">
                         {t.status === "cooking" ? "Cooking" : "Ready for pickup"}
-                      </span>
+                      </div>
                     </div>
                     <div
                       className={`flex items-center gap-1 text-[10px] font-bold border px-2 py-0.5 rounded-full ${ageColor} ${badgePulse}`}
                     >
                       <Clock size={10} />
-                      <span>{age}m</span>
+                      <div>{age}m</div>
                     </div>
                   </div>
 
@@ -428,15 +425,15 @@ export default function KitchenDisplayPage() {
                       <div key={item.id} className="flex justify-between items-start gap-3">
                         <div>
                           <p className="font-extrabold text-sm text-slate-100 flex items-center gap-2">
-                            <span className="text-amber-500 font-mono text-base font-black">
+                            <div className="text-amber-500 font-mono text-base font-black">
                               x{item.quantity}
-                            </span>
+                            </div>
                             {item.product_name}
                           </p>
                           {item.remarks ? (
-                            <span className="text-[10px] text-amber-400 font-bold block bg-amber-950/20 border border-amber-900/40 px-2 py-0.5 rounded mt-1">
+                            <div className="text-[10px] text-amber-400 font-bold block bg-amber-950/20 border border-amber-900/40 px-2 py-0.5 rounded mt-1">
                               Note: {item.remarks}
-                            </span>
+                            </div>
                           ) : null}
                         </div>
                       </div>

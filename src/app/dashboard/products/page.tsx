@@ -372,7 +372,7 @@ function ProductsPageContent() {
         },
         offline: (snap) => snap.products,
         onOfflineUsed: (savedAt) => {
-          toast.message("Offline mode — showing cached products", {
+          toast.message("Offline mode - showing cached products", {
             description: savedAt ? `Last synced ${new Date(savedAt).toLocaleString()}` : undefined,
           });
         },
@@ -1058,7 +1058,7 @@ function ProductsPageContent() {
           shopId!,
           `${editingProduct ? "Update" : "New"} product: ${formData.name}`
         );
-        toast.success("Product saved offline — will sync when online");
+        toast.success("Product saved offline - will sync when online");
         setIsModalOpen(false);
         fetchProducts();
         setIsSubmitting(false);
@@ -1134,7 +1134,7 @@ function ProductsPageContent() {
         await supabase.from("product_variants").delete().eq("product_id", productId);
       }
 
-      // Build final variations list — inject box packing if checked
+      // Build final variations list - inject box packing if checked
       let finalVariations = [...variations];
       if (hasBoxPacking && boxPackSize > 0) {
         const boxVarName = `${boxPackingName} (${boxPackSize} ${formData.unit || 'pcs'})`;
@@ -1530,25 +1530,8 @@ function ProductsPageContent() {
       
       {/* Header & Main Toolbar */}
       <div className="flex flex-col gap-2.5 border-b border-slate-200/80 pb-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h2 className="text-base sm:text-lg md:text-xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-              {activeTab === "products" && (industryType === "restaurant" ? "Menu Items" : (industryType === "tailor" ? "Materials & Fabrics" : "Products Catalog"))}
-              {activeTab === "categories" && (industryType === "restaurant" ? "Menu Categories" : (industryType === "tailor" ? "Material Categories" : "Product Categories"))}
-              {activeTab === "brands" && (industryType === "tailor" ? "Brands & Suppliers" : "Brands & Companies")}
-              {activeTab === "master-drugs" && "💊 DRAP Master Drug Registry"}
-              {activeTab === "master-karyana" && "🛒 Karyana Master Registry"}
-              {activeTab === "master-general" && "📦 General Master Registry"}
-              {activeTab === "master-electronics" && "⚡ Electronics Master Registry"}
-              {activeTab === "products" && (
-                <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {filteredProducts.length}
-                </span>
-              )}
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
             {activeTab === "products" && (
               <>
                 {/* Desktop Action Buttons */}
@@ -1706,9 +1689,9 @@ function ProductsPageContent() {
               }`}
             >
               <Filter size={13} />
-              <span>Filters</span>
+              <div>Filters</div>
               {(filterCategory !== "all" || filterBrand !== "all" || filterStockStatus !== "all") && (
-                <span className="w-2 h-2 rounded-full bg-blue-600 ml-0.5 animate-pulse" />
+                <div className="w-2 h-2 rounded-full bg-blue-600 ml-0.5 animate-pulse" />
               )}
             </button>
 
@@ -1862,9 +1845,9 @@ function ProductsPageContent() {
           {showMobileFilters && (
             <div className="sm:hidden bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-                <span className="text-xs font-black uppercase text-slate-700 flex items-center gap-1.5">
+                <div className="text-xs font-black uppercase text-slate-700 flex items-center gap-1.5">
                   <Filter size={13} className="text-blue-600" /> Filter & Sort
-                </span>
+                </div>
                 {(filterCategory !== "all" || filterBrand !== "all" || filterStockStatus !== "all" || searchQuery.trim() !== "") && (
                   <button
                     type="button"
@@ -1952,7 +1935,7 @@ function ProductsPageContent() {
               {/* Category Filter */}
               <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
                 <Layers size={13} className="text-slate-400" />
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Category:</span>
+                <div className="text-[10px] font-bold text-slate-400 uppercase">Category:</div>
                 <select
                   value={filterCategory}
                   onChange={(e) => { setFilterCategory(e.target.value); setProductsPage(1); }}
@@ -1969,7 +1952,7 @@ function ProductsPageContent() {
               {industryType !== "restaurant" && (
                 <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
                   <Building size={13} className="text-slate-400" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Brand:</span>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Brand:</div>
                   <select
                     value={filterBrand}
                     onChange={(e) => { setFilterBrand(e.target.value); setProductsPage(1); }}
@@ -1986,7 +1969,7 @@ function ProductsPageContent() {
               {/* Stock Status Filter */}
               <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
                 <AlertTriangle size={13} className="text-slate-400" />
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Stock:</span>
+                <div className="text-[10px] font-bold text-slate-400 uppercase">Stock:</div>
                 <select
                   value={filterStockStatus}
                   onChange={(e) => { setFilterStockStatus(e.target.value as any); setProductsPage(1); }}
@@ -2002,7 +1985,7 @@ function ProductsPageContent() {
               {/* Sort Order */}
               <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
                 <ArrowUpDown size={13} className="text-slate-400" />
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Sort:</span>
+                <div className="text-[10px] font-bold text-slate-400 uppercase">Sort:</div>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
@@ -2044,7 +2027,7 @@ function ProductsPageContent() {
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer"
                 >
                   <Columns3 size={13} />
-                  <span>Columns ({Object.values(visibleColumns).filter(Boolean).length})</span>
+                  <div>Columns ({Object.values(visibleColumns).filter(Boolean).length})</div>
                 </button>
 
                 {isColumnPickerOpen && (
@@ -2067,7 +2050,7 @@ function ProductsPageContent() {
                           onClick={() => setVisibleColumns(prev => ({ ...prev, [key]: !isChecked }))}
                           className="w-full flex items-center justify-between p-1.5 rounded-lg hover:bg-slate-50 text-left font-bold text-slate-700 cursor-pointer"
                         >
-                          <span>{label}</span>
+                          <div>{label}</div>
                           <div className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[9px] ${
                             isChecked ? "bg-blue-600 text-white" : "border border-slate-300"
                           }`}>
@@ -2116,31 +2099,31 @@ function ProductsPageContent() {
                           </p>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
                             {product.code && (
-                              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                              <div className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
                                 #{product.code}
-                              </span>
+                              </div>
                             )}
                             {catName !== "Uncategorized" && (
-                              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                              <div className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
                                 {catName}
-                              </span>
+                              </div>
                             )}
                             {brandName !== "No Brand" && (
-                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                              <div className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
                                 {brandName}
-                              </span>
+                              </div>
                             )}
                             {product.shelf_location && (
-                              <span className="text-[10px] font-medium text-slate-400 flex items-center gap-0.5">
+                              <div className="text-[10px] font-medium text-slate-400 flex items-center gap-0.5">
                                 <MapPin size={9} /> {product.shelf_location}
-                              </span>
+                              </div>
                             )}
                           </div>
                         </div>
 
                         {/* Stock status badge */}
                         <div className="shrink-0 text-right">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black ${
+                          <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black ${
                             isOut
                               ? "bg-red-100 text-red-700"
                               : isLow
@@ -2148,20 +2131,20 @@ function ProductsPageContent() {
                                 : "bg-emerald-100 text-emerald-800"
                           }`}>
                             {isOut ? "Out of Stock" : `${product.current_stock} ${product.unit || "pcs"}`}
-                          </span>
+                          </div>
                         </div>
                       </div>
 
                       {/* Bottom row: Pricing & Quick Actions */}
                       <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-base font-black text-slate-900">
+                          <div className="text-base font-black text-slate-900">
                             Rs {product.sale_price_single?.toLocaleString()}
-                          </span>
+                          </div>
                           {product.purchase_price_single && product.purchase_price_single > 0 && (
-                            <span className="text-[11px] font-medium text-slate-400">
+                            <div className="text-[11px] font-medium text-slate-400">
                               Cost: Rs {product.purchase_price_single.toLocaleString()}
-                            </span>
+                            </div>
                           )}
                         </div>
 
@@ -2237,70 +2220,70 @@ function ProductsPageContent() {
                               {product.translated_names && typeof product.translated_names === "object" && Object.entries(product.translated_names).length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   {Object.entries(product.translated_names).map(([lang, val]) => (
-                                    <span key={lang} className="text-[9px] font-sans font-black bg-indigo-50 text-indigo-800 border border-indigo-100 px-1.5 py-0.2 rounded uppercase shadow-2xs">
+                                    <div key={lang} className="text-[9px] font-sans font-black bg-indigo-50 text-indigo-800 border border-indigo-100 px-1.5 py-0.2 rounded uppercase shadow-2xs">
                                       {lang}: {String(val)}
-                                    </span>
+                                    </div>
                                   ))}
                                 </div>
                               )}
                               <div className="flex gap-1.5 flex-wrap mt-1">
                                 {product.shelf_location && !visibleColumns.shelfLocation && (
-                                  <span className="text-[9.5px] text-slate-400 font-normal flex items-center gap-0.5">
+                                  <div className="text-[9.5px] text-slate-400 font-normal flex items-center gap-0.5">
                                     <MapPin size={9} /> {product.shelf_location}
-                                  </span>
+                                  </div>
                                 )}
                                 {industryType === "hardware" && (product as any).measurement_type && (product as any).measurement_type !== "standard" && (
-                                  <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-semibold border ${
+                                  <div className={`text-[9.5px] px-1.5 py-0.2 rounded font-semibold border ${
                                     (product as any).measurement_type === "dimension"
                                       ? "bg-purple-50 text-purple-700 border-purple-200"
                                       : "bg-blue-50 text-blue-700 border-blue-200"
                                   }`}>
                                     {(product as any).measurement_type === "dimension" ? "📐 Dimension" : "📏 Length"}
-                                  </span>
+                                  </div>
                                 )}
                                 {product.pack_size && product.pack_size > 0 && (
-                                  <span className="text-[9.5px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
+                                  <div className="text-[9.5px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
                                     📦 {product.pack_size} {product.unit || 'pcs'}/pack
-                                  </span>
+                                  </div>
                                 )}
                                 {industryType === "pharmacy" && isControlledDrug(product) && (
-                                  <span className="text-[9.5px] bg-red-100 text-red-800 border border-red-200 px-1.5 py-0.2 rounded font-black flex items-center gap-1 shadow-2xs">
+                                  <div className="text-[9.5px] bg-red-100 text-red-800 border border-red-200 px-1.5 py-0.2 rounded font-black flex items-center gap-1 shadow-2xs">
                                     🚨 Controlled (Schedule G)
-                                  </span>
+                                  </div>
                                 )}
                                 {industryType === "restaurant" && product.is_ingredient && (
-                                  <span className="text-[9.5px] bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.2 rounded font-semibold">
+                                  <div className="text-[9.5px] bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.2 rounded font-semibold">
                                     🥕 Raw
-                                  </span>
+                                  </div>
                                 )}
                                 {industryType === "restaurant" && !product.is_ingredient && product.note === "DYNAMIC_PRICE" && (
-                                  <span className="text-[9.5px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
+                                  <div className="text-[9.5px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded font-semibold">
                                     💬 Dynamic
-                                  </span>
+                                  </div>
                                 )}
                                 {industryType === "restaurant" && !product.is_ingredient && product.note !== "DYNAMIC_PRICE" && (
-                                  <span className="text-[9.5px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded font-semibold">
+                                  <div className="text-[9.5px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.2 rounded font-semibold">
                                     🏷️ Fixed
-                                  </span>
+                                  </div>
                                 )}
                                 {industryType === "restaurant" && (product.is_ingredient || product.unit) && (
-                                  <span className="text-[9.5px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded font-semibold">
+                                  <div className="text-[9.5px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.2 rounded font-semibold">
                                     📦 Tracked
-                                  </span>
+                                  </div>
                                 )}
                               </div>
                             </div>
                           </td>
                           {visibleColumns.code && (
                             <td className="px-3 py-2 text-slate-500 font-mono text-[11px]">
-                              {product.code || "—"}
+                              {product.code || "-"}
                             </td>
                           )}
                           {visibleColumns.category && (
                             <td className="px-3 py-2">
-                              <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded text-[10px]">
+                              <div className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded text-[10px]">
                                 {getCategoryName(product.categories)}
-                              </span>
+                              </div>
                             </td>
                           )}
                           {visibleColumns.brand && industryType !== "restaurant" && (
@@ -2310,22 +2293,22 @@ function ProductsPageContent() {
                           )}
                           {visibleColumns.purchasePrice && (
                             <td className="px-3 py-2 text-right font-semibold text-slate-600 text-xs">
-                              {industryType === "restaurant" && product.purchase_price_single === 0 ? "—" : `Rs ${product.purchase_price_single?.toLocaleString()}`}
+                              {industryType === "restaurant" && product.purchase_price_single === 0 ? "-" : `Rs ${product.purchase_price_single?.toLocaleString()}`}
                             </td>
                           )}
                           {visibleColumns.salePrice && (
                             <td className="px-3 py-2 text-right font-black text-indigo-600 text-xs">
                               {industryType === "restaurant" && product.is_ingredient
-                                ? <span className="text-slate-400 font-normal text-[11px]">— (Raw)</span>
+                                ? <div className="text-slate-400 font-normal text-[11px]">- (Raw)</div>
                                 : industryType === "restaurant" && product.note === "DYNAMIC_PRICE"
-                                  ? <span className="text-amber-600 font-bold text-[11px]">Ask</span>
+                                  ? <div className="text-amber-600 font-bold text-[11px]">Ask</div>
                                   : `Rs ${product.sale_price_single?.toLocaleString()}`
                               }
                             </td>
                           )}
                           {visibleColumns.stock && (
                             <td className="px-3 py-2 text-center">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              <div className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 isOut 
                                    ? "bg-red-100 text-red-700" 
                                    : isLow 
@@ -2333,12 +2316,12 @@ function ProductsPageContent() {
                                      : "bg-emerald-100 text-emerald-700"
                               }`}>
                                 {product.current_stock} {product.unit || "pcs"}
-                              </span>
+                              </div>
                             </td>
                           )}
                           {visibleColumns.shelfLocation && (
                             <td className="px-3 py-2 text-slate-500 font-medium text-[11px]">
-                              {product.shelf_location || "—"}
+                              {product.shelf_location || "-"}
                             </td>
                           )}
                           {visibleColumns.actions && (
@@ -2383,9 +2366,9 @@ function ProductsPageContent() {
                   >
                     Previous
                   </button>
-                  <span className="text-slate-800 font-extrabold text-xs px-1">
+                  <div className="text-slate-800 font-extrabold text-xs px-1">
                     Page {productsPage} / {totalProductsPages}
-                  </span>
+                  </div>
                   <button
                     onClick={() => setProductsPage(prev => Math.min(totalProductsPages, prev + 1))}
                     disabled={productsPage === totalProductsPages}
@@ -2908,7 +2891,7 @@ function ProductsPageContent() {
                         {isDynamicPricing && (
                           <div className="p-4 border-t border-amber-200 bg-amber-50">
                             <div className="flex items-start gap-2.5">
-                              <span className="text-lg">💬</span>
+                              <div className="text-lg">💬</div>
                               <div>
                                 <p className="text-xs font-bold text-amber-800">Price will be asked at order time</p>
                                 <p className="text-[11px] text-amber-600 mt-0.5">When waiter adds this item in POS, a popup will appear asking for the price. Example: "50 ki daal dena"</p>
@@ -2932,7 +2915,7 @@ function ProductsPageContent() {
                           <p className="text-[10px] text-slate-400 mt-1">Average supplier cost for purchase orders and expense reports.</p>
                         </div>
                         <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-3.5 flex items-start gap-2">
-                          <span className="text-base mt-0.5">💡</span>
+                          <div className="text-base mt-0.5">💡</div>
                           <div className="text-left">
                             <p className="text-xs font-bold text-orange-950">Raw Material Mode</p>
                             <p className="text-[10px] text-orange-700/80 font-semibold mt-0.5">This item is set as a raw material/ingredient. It will only be visible in the stock purchases, not in the POS menu.</p>
@@ -3019,9 +3002,9 @@ function ProductsPageContent() {
                         />
                         <label htmlFor="requires_prescription_cnic" className="text-xs font-black text-rose-900 cursor-pointer select-none">
                           🚨 Requires Prescription & CNIC (Controlled Substance)
-                          <span className="block text-[10px] font-semibold text-slate-500 mt-0.5">
+                          <div className="block text-[10px] font-semibold text-slate-500 mt-0.5">
                             Legally forces prompt for Customer CNIC and prescription verification during POS checkout.
-                          </span>
+                          </div>
                         </label>
                       </div>
                     )}
@@ -3031,7 +3014,7 @@ function ProductsPageContent() {
                       <div className="border-2 border-emerald-400 rounded-2xl overflow-hidden bg-emerald-50/10">
                         <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-200">
                           <p className="font-bold text-sm text-emerald-800 flex items-center gap-1.5">
-                            <span>📦</span> Raw Material Stock & Inventory Management
+                            <div>📦</div> Raw Material Stock & Inventory Management
                           </p>
                           <p className="text-[11px] text-slate-500 mt-0.5">
                             Set measurement units, initial stock, and low stock warnings for purchase tracking.
@@ -3082,8 +3065,8 @@ function ProductsPageContent() {
                             />
                           </div>
                           <div className="col-span-3 bg-emerald-100/60 rounded-lg p-2.5 text-[11px] text-emerald-900 font-semibold flex items-center gap-2">
-                            <span>📋</span>
-                            <span>This raw material will be restocked via <strong>Ingredient Purchases</strong>.</span>
+                            <div>📋</div>
+                            <div>This raw material will be restocked via <strong>Ingredient Purchases</strong>.</div>
                           </div>
                         </div>
                       </div>
@@ -3104,14 +3087,14 @@ function ProductsPageContent() {
                           <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
                             isInventoryManaged ? "bg-emerald-500 border-emerald-500" : "border-slate-300"
                           }`}>
-                            {isInventoryManaged && <span className="text-white text-xs font-black">✓</span>}
+                            {isInventoryManaged && <div className="text-white text-xs font-black">✓</div>}
                           </div>
                           <div>
                             <p className={`font-bold text-sm ${isInventoryManaged ? "text-emerald-700" : "text-slate-700"}`}>
                               📦 Track Inventory / Stock
                             </p>
                             <p className="text-[11px] text-slate-400 mt-0.5">
-                              Enable for bottles, drinks, disposables — items that run out. Can be restocked via Purchase Orders.
+                              Enable for bottles, drinks, disposables - items that run out. Can be restocked via Purchase Orders.
                             </p>
                           </div>
                         </button>
@@ -3162,8 +3145,8 @@ function ProductsPageContent() {
                               />
                             </div>
                             <div className="col-span-3 bg-emerald-100 rounded-lg p-2.5 text-[11px] text-emerald-800 font-medium flex items-center gap-2">
-                              <span>📋</span>
-                              <span>This item can be restocked via <strong>Purchase Orders</strong>. Stock will reduce automatically on each sale.</span>
+                              <div>📋</div>
+                              <div>This item can be restocked via <strong>Purchase Orders</strong>. Stock will reduce automatically on each sale.</div>
                             </div>
                           </div>
                         )}
@@ -3283,7 +3266,7 @@ function ProductsPageContent() {
                               <option key={u.id} value={u.code}>{u.name} ({u.code})</option>
                             ))}
                           </select>
-                          <span className="text-[10px] text-slate-400 mt-1 block">Only custom Base Units are listed.</span>
+                          <div className="text-[10px] text-slate-400 mt-1 block">Only custom Base Units are listed.</div>
                         </div>
                       )}
                     </div>
@@ -3297,7 +3280,7 @@ function ProductsPageContent() {
                           onChange={(e) => setHasBoxPacking(e.target.checked)}
                           className="rounded text-amber-500 focus:ring-amber-500/20 w-4 h-4"
                         />
-                        <span>📦 {industryType === "pharmacy" ? "Has Box/Carton Packing?" : (industryType === "tailor" ? "Has Bulk Packing? (e.g. Roll, Box, Pack)" : "Has Bulk Packing? (e.g. Carton, Sack, Box, Drum)")}</span>
+                        <div>📦 {industryType === "pharmacy" ? "Has Box/Carton Packing?" : (industryType === "tailor" ? "Has Bulk Packing? (e.g. Roll, Box, Pack)" : "Has Bulk Packing? (e.g. Carton, Sack, Box, Drum)")}</div>
                       </label>
 
                       {hasBoxPacking && (
@@ -3379,7 +3362,7 @@ function ProductsPageContent() {
                             />
                           </div>
                           <div className="col-span-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-[11px] text-amber-800 font-medium">
-                            💡 Prices per base unit ({formData.unit || 'unit'}) will be auto-calculated below: Purchase = {boxPackSize > 0 ? `Rs ${(boxPurchasePrice / boxPackSize).toFixed(2)}` : '—'} / {formData.unit || 'unit'}
+                            💡 Prices per base unit ({formData.unit || 'unit'}) will be auto-calculated below: Purchase = {boxPackSize > 0 ? `Rs ${(boxPurchasePrice / boxPackSize).toFixed(2)}` : '-'} / {formData.unit || 'unit'}
                           </div>
                         </div>
                       )}
@@ -3576,7 +3559,7 @@ function ProductsPageContent() {
                     {industryType === "pharmacy" && (
                       <div className="bg-rose-50/70 border border-rose-200 p-3 rounded-2xl flex items-center justify-between">
                         <div className="flex items-center gap-2.5">
-                          <span className="p-2 bg-rose-100 text-rose-700 rounded-xl text-sm">🚨</span>
+                          <div className="p-2 bg-rose-100 text-rose-700 rounded-xl text-sm">🚨</div>
                           <div>
                             <p className="text-xs font-black text-rose-950 flex items-center gap-1.5">
                               Controlled / Schedule G Drug
@@ -3713,7 +3696,7 @@ function ProductsPageContent() {
 
                   {industryType === "garments" && (
                     <div className="bg-indigo-50/40 p-4 border border-indigo-150 rounded-2xl space-y-3.5">
-                      <span className="text-[10px] font-black text-indigo-650 uppercase tracking-widest block">⚡ Auto-Generate Sizing-Coloring Matrix</span>
+                      <div className="text-[10px] font-black text-indigo-650 uppercase tracking-widest block">⚡ Auto-Generate Sizing-Coloring Matrix</div>
                       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                         <div className="col-span-2 md:col-span-1">
                           <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">Sizes (comma separated)</label>
@@ -3859,7 +3842,7 @@ function ProductsPageContent() {
                           {variations.map((v, idx) => (
                             <tr key={idx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                               <td className="px-4 py-2.5 font-bold text-slate-800">{v.packing_name}</td>
-                              <td className="px-4 py-2.5 font-mono text-slate-500">{v.barcode || "—"}</td>
+                              <td className="px-4 py-2.5 font-mono text-slate-500">{v.barcode || "-"}</td>
                               <td className="px-4 py-2.5 text-right text-slate-600">Rs {v.purchase_price}</td>
                               <td className="px-4 py-2.5 text-right text-blue-600 font-bold">Rs {v.sale_price}</td>
                               <td className="px-4 py-2.5 text-center font-bold text-slate-700">{v.stock_quantity}</td>
@@ -3981,15 +3964,15 @@ function ProductsPageContent() {
                     <div key={idx} className="flex justify-between items-center bg-white border border-slate-200/80 rounded-xl p-2.5 px-3.5 shadow-sm">
                       <div className="text-left">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-xs font-semibold text-slate-800">IMEI 1: {item.imei1}</span>
-                          {item.imei2 && <span className="text-slate-300 font-mono text-xs">|</span>}
-                          {item.imei2 && <span className="font-mono text-xs font-semibold text-slate-800">IMEI 2: {item.imei2}</span>}
+                          <div className="font-mono text-xs font-semibold text-slate-800">IMEI 1: {item.imei1}</div>
+                          {item.imei2 && <div className="text-slate-300 font-mono text-xs">|</div>}
+                          {item.imei2 && <div className="font-mono text-xs font-semibold text-slate-800">IMEI 2: {item.imei2}</div>}
                         </div>
-                        <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded mt-1.5 inline-block ${
+                        <div className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded mt-1.5 inline-block ${
                           item.status === 'sold' ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-emerald-50 text-emerald-500 border border-emerald-100'
                         }`}>
                           {item.status || 'available'}
-                        </span>
+                        </div>
                       </div>
                       {item.status !== 'sold' && (
                         <button
@@ -4078,7 +4061,7 @@ function ProductsPageContent() {
                 {importingCsv && (
                   <div className="flex items-center gap-2 text-violet-600 justify-center py-4">
                     <Loader2 className="animate-spin h-5 w-5" />
-                    <span>Parsing and uploading products...</span>
+                    <div>Parsing and uploading products...</div>
                   </div>
                 )}
 

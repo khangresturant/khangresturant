@@ -268,18 +268,18 @@ export default function MerchantEcommerceDeskPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 p-6 rounded-3xl text-white shadow-xl">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               Merchant E-Commerce Desk
-            </span>
+            </div>
             {pendingCount > 0 && (
-              <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 animate-pulse">
+              <div className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 animate-pulse">
                 {pendingCount} Pending Orders
-              </span>
+              </div>
             )}
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
-            <Store className="text-emerald-400" size={24} /> Online Customer Orders Desk
-          </h1>
+          <div className="text-xs text-slate-300 font-bold flex items-center gap-1.5 pt-1">
+            <Store className="text-emerald-400" size={16} /> Real-time Storefront Order Desk
+          </div>
           <p className="text-xs text-slate-400">
             Real-time incoming order desk for your E-Commerce storefront
           </p>
@@ -353,24 +353,24 @@ export default function MerchantEcommerceDeskPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${badge.bg} ${badge.text}`}>
+                    <div className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${badge.bg} ${badge.text}`}>
                       <StatusIcon size={12} /> {badge.label}
-                    </span>
-                    <span className="text-[11px] font-mono text-slate-400">
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-400">
                       {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    </div>
                   </div>
 
-                  <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                  <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">
                     Rs {order.total_amount.toLocaleString()}
-                  </span>
+                  </div>
                 </div>
 
                 {/* Customer Details */}
                 <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
                   <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
                     <User size={14} className="text-emerald-500" />
-                    <span>{order.customer_name}</span>
+                    <div>{order.customer_name}</div>
                     <a href={`tel:${order.customer_phone}`} className="ml-auto flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline">
                       <Phone size={12} /> {order.customer_phone}
                     </a>
@@ -378,7 +378,7 @@ export default function MerchantEcommerceDeskPage() {
 
                   <div className="flex items-start gap-2 text-slate-500">
                     <MapPin size={14} className="text-slate-400 shrink-0 mt-0.5" />
-                    <span className="line-clamp-2">{order.delivery_address}</span>
+                    <div className="line-clamp-2">{order.delivery_address}</div>
                   </div>
                 </div>
 
@@ -386,8 +386,8 @@ export default function MerchantEcommerceDeskPage() {
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/80 space-y-1 text-xs">
                   {Array.isArray(order.items) && order.items.map((item: any, idx: number) => (
                     <div key={idx} className="flex justify-between items-center text-slate-700 dark:text-slate-300 font-medium">
-                      <span>• {item.name} <strong className="text-emerald-600 dark:text-emerald-400">(x{item.quantity})</strong></span>
-                      <span>Rs {(item.subtotal || item.unit_price * item.quantity).toLocaleString()}</span>
+                      <div>• {item.name} <strong className="text-emerald-600 dark:text-emerald-400">(x{item.quantity})</strong></div>
+                      <div>Rs {(item.subtotal || item.unit_price * item.quantity).toLocaleString()}</div>
                     </div>
                   ))}
                 </div>
@@ -395,9 +395,9 @@ export default function MerchantEcommerceDeskPage() {
                 {/* Actions Bar */}
                 <div className="flex flex-wrap items-center justify-between pt-2 gap-2 border-t border-slate-100 dark:border-slate-800/80">
                   {order.invoice_id ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-black border border-emerald-200 dark:border-emerald-800">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-black border border-emerald-200 dark:border-emerald-800">
                       <CheckCircle2 size={14} className="text-emerald-500" /> POS Bill Processed (بل بن چکا ہے)
-                    </span>
+                    </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       <Button

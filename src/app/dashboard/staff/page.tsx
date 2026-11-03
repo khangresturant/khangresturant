@@ -1348,14 +1348,8 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-black text-zinc-900 flex items-center gap-2">
-            <Users className="text-blue-600" />
-            HR & Staff Management
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-end gap-4">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {hasPayroll && (
             <div className="bg-slate-100 p-1 rounded-xl inline-flex text-xs font-semibold shrink-0">
               <button
@@ -1376,7 +1370,7 @@ export default function StaffPage() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 className="animate-spin text-zinc-400 mb-3" size={32} />
-          <span className="text-zinc-500 text-sm">Loading data...</span>
+          <div className="text-zinc-500 text-sm">Loading data...</div>
         </div>
       ) : activeTab === "staff" ? (
         staffList.length === 0 ? (
@@ -1417,12 +1411,12 @@ export default function StaffPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-semibold text-zinc-950 leading-tight">{staff.name}</h3>
                         {staff.permissions?.is_offline && (
-                          <span className="inline-block text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                          <div className="inline-block text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
                             Offline
-                          </span>
+                          </div>
                         )}
                       </div>
-                      <span className={`inline-block text-[10px] font-black uppercase tracking-wider mt-1 px-2 py-0.5 rounded-full ${
+                      <div className={`inline-block text-[10px] font-black uppercase tracking-wider mt-1 px-2 py-0.5 rounded-full ${
                         staff.role === "superadmin" 
                           ? "bg-purple-100 text-purple-700" 
                           : staff.role === "manager" 
@@ -1430,7 +1424,7 @@ export default function StaffPage() {
                           : "bg-zinc-100 text-zinc-700"
                       }`}>
                         {staff.role}
-                      </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1438,17 +1432,17 @@ export default function StaffPage() {
                 <div className="space-y-2.5 text-xs text-zinc-600 border-t border-zinc-100 pt-3">
                   <div className="flex items-center gap-2">
                     <Mail size={14} className="text-zinc-400" />
-                    <span className="truncate">{staff.permissions?.is_offline ? "No Login Account" : (staff.email || "No Email")}</span>
+                    <div className="truncate">{staff.permissions?.is_offline ? "No Login Account" : (staff.email || "No Email")}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Shield size={14} className="text-zinc-400" />
-                    <span>
+                    <div>
                       {staff.permissions?.is_offline
                         ? "Payroll / Attendance only"
                         : staff.role === "superadmin"
                           ? "Full Administrative Access"
                           : `${Object.values(staff.permissions?.panels || {}).filter(Boolean).length} / ${PANELS.length} Panels enabled`}
-                    </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1543,7 +1537,7 @@ export default function StaffPage() {
                   // PROFILE & ROLE VIEW
                   <div className="space-y-6 animate-fadeIn">
 
-                    {/* Offline Employee Toggle — only when adding new (not editing system user) */}
+                    {/* Offline Employee Toggle - only when adding new (not editing system user) */}
                     {(!selectedStaff || selectedStaff.permissions?.is_offline) && (
                       <button
                         type="button"
@@ -1684,7 +1678,7 @@ export default function StaffPage() {
                           >
                             <div className="w-full">
                               <div className="flex justify-between items-center w-full mb-1">
-                                <span className={`font-black text-xs block ${
+                                <div className={`font-black text-xs block ${
                                   role === r.key
                                     ? r.key === "salesman"
                                       ? "text-blue-700"
@@ -1694,8 +1688,8 @@ export default function StaffPage() {
                                     : "text-slate-800"
                                 }`}>
                                   {r.title}
-                                </span>
-                                <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${
+                                </div>
+                                <div className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${
                                   role === r.key 
                                     ? r.key === "superadmin" 
                                       ? "bg-purple-100 text-purple-700" 
@@ -1703,11 +1697,11 @@ export default function StaffPage() {
                                     : "bg-slate-100 text-slate-550"
                                 }`}>
                                   {r.badge}
-                                </span>
+                                </div>
                               </div>
-                              <span className="text-[10px] text-slate-400 font-semibold leading-relaxed mt-1 block">
+                              <div className="text-[10px] text-slate-400 font-semibold leading-relaxed mt-1 block">
                                 {r.desc}
-                              </span>
+                              </div>
                             </div>
                           </button>
                         ))}
@@ -1748,7 +1742,7 @@ export default function StaffPage() {
                                   : "border-slate-200 hover:border-slate-350 bg-white text-slate-500"
                               }`}
                             >
-                              <span className="truncate">{p.label}</span>
+                              <div className="truncate">{p.label}</div>
                               <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-200 shrink-0 ${
                                 enabled ? "bg-emerald-600 flex justify-end" : "bg-slate-200 flex justify-start"
                               }`}>
@@ -1779,7 +1773,7 @@ export default function StaffPage() {
                                   : "border-slate-200 hover:border-slate-350 bg-white text-slate-500"
                               }`}
                             >
-                              <span className="truncate">{a.label}</span>
+                              <div className="truncate">{a.label}</div>
                               <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors duration-200 shrink-0 ${
                                 enabled ? "bg-emerald-600 flex justify-end" : "bg-slate-200 flex justify-start"
                               }`}>
@@ -1806,9 +1800,9 @@ export default function StaffPage() {
                             onChange={(e) => setMaxDiscountPercentage(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
                             className="w-24 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition"
                           />
-                          <span className="text-[10px] text-slate-400 font-semibold leading-normal">
+                          <div className="text-[10px] text-slate-400 font-semibold leading-normal">
                             This staff member will be blocked from offering discounts higher than this percentage during POS billing. Set to 100 for unlimited.
-                          </span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1932,7 +1926,7 @@ export default function StaffPage() {
             {/* Flexible Payroll Frequency / Cycle Bar */}
             <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 p-3.5 bg-slate-50/80 border border-slate-200/80 rounded-2xl">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Disbursement Cycle:</span>
+                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Disbursement Cycle:</div>
                 <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
                   {[
                     { key: "monthly", label: "💼 Monthly" },
@@ -1999,7 +1993,7 @@ export default function StaffPage() {
                       }}
                       className="h-8.5 px-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
                     />
-                    <span className="text-slate-400 font-bold text-xs">to</span>
+                    <div className="text-slate-400 font-bold text-xs">to</div>
                     <input
                       type="date"
                       value={slipWeekEnd}
@@ -2018,7 +2012,7 @@ export default function StaffPage() {
                       onChange={(e) => setSlipCustomStart(e.target.value)}
                       className="h-8.5 px-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
                     />
-                    <span className="text-slate-400 font-bold text-xs">To:</span>
+                    <div className="text-slate-400 font-bold text-xs">To:</div>
                     <input
                       type="date"
                       value={slipCustomEnd}
@@ -2030,9 +2024,9 @@ export default function StaffPage() {
 
                 {/* Active Period Badge */}
                 <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
-                  <span className="text-[11px] font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 font-mono">
+                  <div className="text-[11px] font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 font-mono">
                     {getPeriodLabel()} ({getCycleTotalDays()} Days)
-                  </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2114,13 +2108,13 @@ export default function StaffPage() {
                                   {isChecked ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} />}
                                 </button>
                               ) : (
-                                <span className="text-emerald-500 font-bold">✓</span>
+                                <div className="text-emerald-500 font-bold">✓</div>
                               )}
                             </td>
                             <td className="py-3.5 px-4">
                               <div className="flex flex-col">
-                                <span className="font-bold text-slate-800 text-sm">{staff.name}</span>
-                                <span className="text-[10px] text-slate-400 capitalize">{staff.role}</span>
+                                <div className="font-bold text-slate-800 text-sm">{staff.name}</div>
+                                <div className="text-[10px] text-slate-400 capitalize">{staff.role}</div>
                               </div>
                             </td>
                             <td className="py-3.5 px-3 text-center w-32">
@@ -2187,9 +2181,9 @@ export default function StaffPage() {
                             </td>
                             <td className="py-3.5 px-4 text-center">
                               {alreadyPaid ? (
-                                <span className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">
+                                <div className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">
                                   {t("already_issued")}
-                                </span>
+                                </div>
                               ) : (
                                 <button
                                   type="button"
@@ -2212,9 +2206,9 @@ export default function StaffPage() {
               {/* Bulk action disburse footer */}
               {staffList.length > 0 && (
                 <div className="bg-slate-50 border-t border-slate-150 p-4 px-6 flex justify-between items-center">
-                  <span className="text-slate-500 text-xs font-bold">
+                  <div className="text-slate-500 text-xs font-bold">
                     {selectedEmployeeIds.length} employees selected for processing.
-                  </span>
+                  </div>
                   <button
                     type="button"
                     disabled={submitting || selectedEmployeeIds.length === 0}
@@ -2258,9 +2252,9 @@ export default function StaffPage() {
                           <td className="py-3.5 px-5 text-right">Rs {Number(slip.base_salary).toLocaleString()}</td>
                           <td className="py-3.5 px-5 text-right font-black text-emerald-600">Rs {Number(slip.net_payable).toLocaleString()}</td>
                           <td className="py-3.5 px-5 text-center">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">
+                            <div className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">
                               {slip.status}
-                            </span>
+                            </div>
                           </td>
                           <td className="py-3.5 px-5 text-center">
                             <button
@@ -2374,18 +2368,18 @@ export default function StaffPage() {
                             <tr key={staff.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors/50">
                               <td className="py-3.5 px-5">
                                 <div className="flex flex-col">
-                                  <span className="font-bold text-slate-800 text-sm">{staff.name}</span>
-                                  <span className="text-[10px] text-slate-400">
+                                  <div className="font-bold text-slate-800 text-sm">{staff.name}</div>
+                                  <div className="text-[10px] text-slate-400">
                                     {staff.permissions?.is_offline ? "Offline Employee" : (staff.email || "No Email")}
-                                  </span>
+                                  </div>
                                 </div>
                               </td>
                               <td className="py-3.5 px-5">
-                                <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                <div className={`inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
                                   staff.role === "manager" ? "bg-blue-100 text-blue-700" : "bg-zinc-100 text-zinc-700"
                                 }`}>
                                   {staff.role}
-                                </span>
+                                </div>
                               </td>
                               <td className="py-3.5 px-5 text-center">
                                 <div className="flex justify-center gap-1.5">
@@ -2497,7 +2491,7 @@ export default function StaffPage() {
                               <td className="py-3.5 px-5 font-bold text-slate-800">{staff.name}</td>
                               <td className="py-3.5 px-5 text-blue-600 font-bold">{leave.date}</td>
                               <td className="py-3.5 px-5 text-center">
-                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                <div className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
                                   leave.type === "unpaid" 
                                     ? "bg-rose-50 text-rose-600 border border-rose-100" 
                                     : leave.type === "sick"
@@ -2505,7 +2499,7 @@ export default function StaffPage() {
                                     : "bg-emerald-50 text-emerald-600 border border-emerald-100"
                                 }`}>
                                   {leave.type}
-                                </span>
+                                </div>
                               </td>
                               <td className="py-3.5 px-5 text-slate-500 truncate max-w-xs">{leave.reason || "No reason details"}</td>
                             </tr>
@@ -2575,13 +2569,13 @@ export default function StaffPage() {
                               <td className="py-3.5 px-5 text-right text-rose-600">Rs {loan.installmentAmount.toLocaleString()}/mo</td>
                               <td className="py-3.5 px-5 text-right font-black text-slate-900">Rs {loan.remainingAmount.toLocaleString()}</td>
                               <td className="py-3.5 px-5 text-center">
-                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                <div className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
                                   loan.remainingAmount <= 0
                                     ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
                                     : "bg-amber-50 text-amber-600 border border-amber-100"
                                 }`}>
                                   {loan.remainingAmount <= 0 ? "Cleared" : "Active"}
-                                </span>
+                                </div>
                               </td>
                             </tr>
                           ))
@@ -2857,7 +2851,7 @@ export default function StaffPage() {
                           />
                         )}
 
-                        <span className={`text-4xl transition-colors duration-300 ${
+                        <div className={`text-4xl transition-colors duration-300 ${
                           isScanning 
                             ? "text-blue-550 animate-pulse" 
                             : scanCompleted 
@@ -2867,7 +2861,7 @@ export default function StaffPage() {
                         onClick={handleSimulateScan}
                         >
                           📳
-                        </span>
+                        </div>
                       </div>
                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-4">
                         {isScanning 

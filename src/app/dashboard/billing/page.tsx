@@ -295,7 +295,7 @@ export default function BillingPage() {
       <div className="flex h-64 flex-col items-center justify-center text-slate-500">
         <CheckCircle2 className="h-10 w-10 text-emerald-500 mb-2" />
         <p className="text-sm font-bold text-slate-800">{PERMANENT_PLAN_LABEL}</p>
-        <p className="text-xs font-medium mt-1">No payment plans — redirecting to Restaurant POS…</p>
+        <p className="text-xs font-medium mt-1">No payment plans - redirecting to Restaurant POS…</p>
       </div>
     );
   }
@@ -323,7 +323,7 @@ export default function BillingPage() {
     allowedGateways.includes("easypaisa") && gatewayConfig.easypaisa_active && { id: "easypaisa", label: "EasyPaisa", subtitle: `Wallet: ${gatewayConfig.easypaisa_wallet}`, icon: "💚", color: "bg-emerald-50 border-emerald-200 text-emerald-700" },
     allowedGateways.includes("bank") && gatewayConfig.bank_active && { id: "bank", label: "Bank Transfer", subtitle: `${gatewayConfig.bank_name} • ${gatewayConfig.bank_account_num}`, icon: "🏦", color: "bg-blue-50 border-blue-200 text-blue-700" },
     allowedGateways.includes("safepay") && gatewayConfig.safepay_active && { id: "safepay", label: "Card / Safepay", subtitle: "Visa, Mastercard, JazzCash, EasyPaisa", icon: "💳", color: "bg-indigo-50 border-indigo-200 text-indigo-700" },
-    allowedGateways.includes("stripe") && gatewayConfig.stripe_active && { id: "stripe", label: "Stripe (Card)", subtitle: "Visa, Mastercard, Amex — International", icon: "💳", color: "bg-violet-50 border-violet-200 text-violet-700" },
+    allowedGateways.includes("stripe") && gatewayConfig.stripe_active && { id: "stripe", label: "Stripe (Card)", subtitle: "Visa, Mastercard, Amex - International", icon: "💳", color: "bg-violet-50 border-violet-200 text-violet-700" },
     allowedGateways.includes("paypal") && gatewayConfig.paypal_active && { id: "paypal", label: "PayPal", subtitle: "Pay via PayPal wallet or card", icon: "🅿️", color: "bg-blue-50 border-blue-200 text-blue-700" },
   ].filter(Boolean) as Array<{ id: string; label: string; subtitle: string; icon: string; color: string }> : [];
 
@@ -396,11 +396,7 @@ export default function BillingPage() {
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-12">
       {/* Title + Country Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-850 tracking-tight uppercase">Billing & Subscription</h2>
-          
-        </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
         {/* Country Toggle */}
         <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-2xl border border-slate-200">
           <button
@@ -426,25 +422,25 @@ export default function BillingPage() {
       <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">Current Business Active Plan</span>
-            <span className={`px-3 py-0.5 rounded-full text-[9px] font-sans font-black uppercase tracking-wider ${isExpired && currentTier !== "free" ? "bg-red-50 text-red-600 border border-red-150" : "bg-indigo-50 text-indigo-700 border border-indigo-150"}`}>
+            <div className="text-[10px] text-slate-400 font-black uppercase tracking-wider block">Current Business Active Plan</div>
+            <div className={`px-3 py-0.5 rounded-full text-[9px] font-sans font-black uppercase tracking-wider ${isExpired && currentTier !== "free" ? "bg-red-50 text-red-600 border border-red-150" : "bg-indigo-50 text-indigo-700 border border-indigo-150"}`}>
               {planName || currentTier}
-            </span>
+            </div>
           </div>
           <h3 className="text-2xl font-black text-[#1e3a5f] capitalize">{shopName}</h3>
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
             <Calendar size={14} className="text-indigo-550" />
             {expiryDate ? (
-              <span>Plan {isExpired ? "expired on" : "expires on"} <strong className="text-slate-700">{expiryDate.toLocaleDateString()}</strong></span>
+              <div>Plan {isExpired ? "expired on" : "expires on"} <strong className="text-slate-700">{expiryDate.toLocaleDateString()}</strong></div>
             ) : (
-              <span>No active expiration (Unlimited Trial Mode)</span>
+              <div>No active expiration (Unlimited Trial Mode)</div>
             )}
           </div>
         </div>
         {isExpired && currentTier !== "free" && (
           <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 text-rose-800 text-xs flex items-center gap-2 max-w-sm">
             <AlertTriangle className="text-rose-600 shrink-0" size={16} />
-            <span>Subscription expired! Please choose a plan below to resume all actions.</span>
+            <div>Subscription expired! Please choose a plan below to resume all actions.</div>
           </div>
         )}
       </div>
@@ -463,13 +459,13 @@ export default function BillingPage() {
                   <p className="text-[10px] text-slate-400 mt-0.5">{sub.gateway} • {new Date(sub.submitted_at).toLocaleString()}</p>
                   {sub.admin_note && <p className="text-[10px] text-amber-600 mt-0.5">Note: {sub.admin_note}</p>}
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                <div className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
                   sub.status === "approved" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
                   sub.status === "rejected" ? "bg-red-50 text-red-700 border border-red-200" :
                   "bg-amber-50 text-amber-700 border border-amber-200"
                 }`}>
                   {sub.status}
-                </span>
+                </div>
               </div>
             ))}
           </div>
@@ -489,12 +485,12 @@ export default function BillingPage() {
             </p>
             <div className="bg-slate-50 border border-slate-200/60 p-3 rounded-2xl space-y-2">
               <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase">
-                <span>Starter Plan Payout</span>
-                <span className="text-emerald-700 font-black">Rs 50</span>
+                <div>Starter Plan Payout</div>
+                <div className="text-emerald-700 font-black">Rs 50</div>
               </div>
               <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase">
-                <span>Premium Plan Payout</span>
-                <span className="text-emerald-700 font-black">Rs 80</span>
+                <div>Premium Plan Payout</div>
+                <div className="text-emerald-700 font-black">Rs 80</div>
               </div>
             </div>
           </div>
@@ -556,13 +552,13 @@ export default function BillingPage() {
                         <p className="text-[11px] font-bold text-slate-800 truncate max-w-[130px]">{refShop.name}</p>
                         <p className="text-[9px] text-slate-400">Joined: {new Date(refShop.created_at).toLocaleDateString()}</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
+                      <div className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
                         isRefExpired || refShop.subscription_tier === "free"
                           ? "bg-slate-200 text-slate-650"
                           : "bg-emerald-50 text-emerald-700 border border-emerald-150"
                       }`}>
                         {refShop.subscription_tier}
-                      </span>
+                      </div>
                     </div>
                   );
                 })}
@@ -588,9 +584,9 @@ export default function BillingPage() {
                       <p className="text-[10px] text-slate-700 font-semibold truncate leading-tight">{tx.description}</p>
                       <p className="text-[8px] text-slate-400 mt-0.5">{new Date(tx.created_at).toLocaleString()}</p>
                     </div>
-                    <span className={`font-black text-[11px] shrink-0 ${tx.type === "reward" ? "text-emerald-600" : "text-rose-600"}`}>
+                    <div className={`font-black text-[11px] shrink-0 ${tx.type === "reward" ? "text-emerald-600" : "text-rose-600"}`}>
                       {tx.type === "reward" ? "+" : "-"}Rs {tx.amount}
-                    </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -599,7 +595,7 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Pricing Options — synced with admin panel + landing page */}
+      {/* Pricing Options - synced with admin panel + landing page */}
       <div className="space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between max-w-6xl mx-auto">
           <div>
@@ -620,7 +616,7 @@ export default function BillingPage() {
               >
                 {period === "monthly" ? "Pay Monthly" : "Pay Yearly"}
                 {period === "yearly" ? (
-                  <span
+                  <div
                     className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
                       billingPeriod === "yearly"
                         ? "bg-emerald-400 text-slate-900"
@@ -628,7 +624,7 @@ export default function BillingPage() {
                     }`}
                   >
                     Save big
-                  </span>
+                  </div>
                 ) : null}
               </button>
             ))}
@@ -674,7 +670,7 @@ export default function BillingPage() {
                       {plan.name}
                     </div>
                     {billingPeriod === "yearly" && plan.yearlySavePercent > 0 ? (
-                      <span
+                      <div
                         className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${
                           featured
                             ? "bg-emerald-400 text-slate-900"
@@ -682,33 +678,33 @@ export default function BillingPage() {
                         }`}
                       >
                         Save {plan.yearlySavePercent}%
-                      </span>
+                      </div>
                     ) : featured ? (
-                      <span className="shrink-0 rounded-full bg-indigo-500 px-2.5 py-1 text-[9px] font-black uppercase text-white">
+                      <div className="shrink-0 rounded-full bg-indigo-500 px-2.5 py-1 text-[9px] font-black uppercase text-white">
                         Popular
-                      </span>
+                      </div>
                     ) : null}
                   </div>
 
                   <div className="mt-3 pb-5 border-b border-dashed border-inherit">
                     <div className="flex items-baseline gap-1">
                       {plan.isZeroCost ? (
-                        <span className={`text-3xl font-black ${featured ? "text-white" : "text-emerald-700"}`}>
+                        <div className={`text-3xl font-black ${featured ? "text-white" : "text-emerald-700"}`}>
                           Free
-                        </span>
+                        </div>
                       ) : (
-                        <span className="text-3xl font-black tracking-tight">
+                        <div className="text-3xl font-black tracking-tight">
                           {currencySymbol} {price.toLocaleString()}
                           {!isPakistan ? " USD" : ""}
-                        </span>
+                        </div>
                       )}
-                      <span
+                      <div
                         className={`text-xs font-bold ${
                           featured ? "text-white/60" : "text-slate-400"
                         }`}
                       >
                         /{billingPeriod === "monthly" ? "mo" : "yr"}
-                      </span>
+                      </div>
                     </div>
                     <p className={`mt-2 text-[10px] font-bold uppercase tracking-wider ${featured ? "text-white/50" : "text-slate-400"}`}>
                       {plan.max_devices === "unlimited"
@@ -725,8 +721,8 @@ export default function BillingPage() {
                           featured ? "border-white/10" : "border-slate-100"
                         }`}
                       >
-                        <span className={featured ? "text-white/85" : "text-slate-700"}>{row.label}</span>
-                        <span
+                        <div className={featured ? "text-white/85" : "text-slate-700"}>{row.label}</div>
+                        <div
                           className={`shrink-0 text-[10px] font-black uppercase tracking-wide ${
                             row.active
                               ? featured
@@ -738,7 +734,7 @@ export default function BillingPage() {
                           }`}
                         >
                           {row.active ? "✓ Active" : "✕ Blocked"}
-                        </span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -854,7 +850,7 @@ export default function BillingPage() {
                     When this payment is approved, this remaining credit will be converted into <strong className="text-emerald-700">{prorationWarning.creditDays} days</strong> on your new plan, stacking on top of your new payment for a total of <strong className="text-slate-800">{prorationWarning.totalDays} active days</strong>.
                   </p>
                   <div className="pt-1.5 border-t border-indigo-150 flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-slate-500">Estimated New Expiry:</span>
+                    <div className="font-bold text-slate-500">Estimated New Expiry:</div>
                     <strong className="text-indigo-700 font-extrabold">{prorationWarning.newExpiry.toLocaleDateString()}</strong>
                   </div>
                 </div>
@@ -884,12 +880,12 @@ export default function BillingPage() {
                           }}
                           className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40 bg-white text-left transition-all group"
                         >
-                          <span className="text-2xl">{gw.icon}</span>
+                          <div className="text-2xl">{gw.icon}</div>
                           <div className="flex-1">
                             <p className="text-sm font-black text-slate-800">{gw.label}</p>
                             <p className="text-[10px] text-slate-500">{gw.subtitle}</p>
                           </div>
-                          <span className="text-slate-300 group-hover:text-indigo-500 font-black text-lg transition">→</span>
+                          <div className="text-slate-300 group-hover:text-indigo-500 font-black text-lg transition">→</div>
                         </button>
                       ))}
                     </>
@@ -908,19 +904,19 @@ export default function BillingPage() {
                       <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Send Payment To:</p>
                       {details.accountTitle && (
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-slate-500">Account Title</span>
-                          <span className="text-sm font-black text-slate-900">{details.accountTitle}</span>
+                          <div className="text-xs font-semibold text-slate-500">Account Title</div>
+                          <div className="text-sm font-black text-slate-900">{details.accountTitle}</div>
                         </div>
                       )}
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-600">{details.label}</span>
-                        <span className="text-sm font-black text-slate-900 font-mono">{details.account}</span>
+                        <div className="text-xs font-semibold text-slate-600">{details.label}</div>
+                        <div className="text-sm font-black text-slate-900 font-mono">{details.account}</div>
                       </div>
                       <div className="flex items-center justify-between pt-1 border-t mt-1">
-                        <span className="text-xs font-semibold text-slate-600">Amount to Send:</span>
-                        <span className="text-base font-black text-emerald-700">
+                        <div className="text-xs font-semibold text-slate-600">Amount to Send:</div>
+                        <div className="text-base font-black text-emerald-700">
                           {currencySymbol} {(useCreditsDiscount ? Math.max(0, selectedPlan.price - Number(shopDetails?.referral_credits || 0)) : selectedPlan.price).toLocaleString()}
-                        </span>
+                        </div>
                       </div>
                     </div>
 
@@ -963,8 +959,8 @@ export default function BillingPage() {
                           className="w-full border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-6 flex flex-col items-center gap-2 text-slate-400 hover:text-indigo-500 transition"
                         >
                           <Upload size={20} />
-                          <span className="text-xs font-bold">Click to upload screenshot</span>
-                          <span className="text-[10px]">JPG, PNG, WEBP up to 5MB</span>
+                          <div className="text-xs font-bold">Click to upload screenshot</div>
+                          <div className="text-[10px]">JPG, PNG, WEBP up to 5MB</div>
                         </button>
                       )}
                       <input

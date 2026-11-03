@@ -12,9 +12,24 @@ export function ImpersonationBanner() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const active = localStorage.getItem("is_impersonating") === "true";
-      setIsImpersonating(active);
-      setShopName(localStorage.getItem("impersonated_shop_name") || "Customer Shop");
-      setUserName(localStorage.getItem("impersonated_user_name") || "User");
+      const sName = localStorage.getItem("impersonated_shop_name");
+      const uName = localStorage.getItem("impersonated_user_name");
+
+      // Only real superadmin impersonations originating from /admin/shops have impersonated_shop_name
+      if (active && sName) {
+        setIsImpersonating(true);
+        setShopName(sName);
+        setUserName(uName || "Customer User");
+      } else {
+        // Clear rogue or stale impersonation state from previous sessions
+        if (active && !sName) {
+          localStorage.removeItem("is_impersonating");
+          localStorage.removeItem("impersonated_shop_id");
+          localStorage.removeItem("impersonated_shop_name");
+          localStorage.removeItem("impersonated_user_name");
+        }
+        setIsImpersonating(false);
+      }
     }
   }, []);
 
@@ -36,9 +51,9 @@ export function ImpersonationBanner() {
     <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-black flex items-center justify-between shadow-md z-[200] relative">
       <div className="flex items-center gap-2">
         <ShieldAlert size={16} className="animate-pulse text-slate-950 shrink-0" />
-        <span>
-          ⚠️ SAAS ADMIN IMPERSONATION MODE: Currently viewing & managing <u>{shopName}</u> ({userName}). All changes reflect live!
-        </span>
+        <p className="font-bold">
+          ⚠️ SAAS ADMIN IMPERSONATION MODE: Currently viewing and managing <u>{shopName}</u> ({userName}). All changes reflect live!
+        </p>
       </div>
 
       <Button

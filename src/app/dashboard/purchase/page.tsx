@@ -630,7 +630,7 @@ export default function PurchasePage() {
       if (cart.length === 0) { toast.warning("Cart is empty!"); return; }
       setIsCartFocused(true); setSelectedCartIdx(0);
       document.getElementById("purchase-search-input")?.blur();
-      toast.info("Cart focused — use ↑↓ to navigate, ← to edit price, → to edit qty, Del to remove");
+      toast.info("Cart focused - use ↑↓ to navigate, ← to edit price, → to edit qty, Del to remove");
     }
     if (e.key === "F4" || (e.altKey && e.key.toLowerCase() === "d")) {
       e.preventDefault();
@@ -748,7 +748,7 @@ export default function PurchasePage() {
           accounts: snap.cashAccounts,
         }),
         onOfflineUsed: (savedAt) => {
-          toast.message("Offline mode — showing cached purchase data", {
+          toast.message("Offline mode - showing cached purchase data", {
             description: savedAt ? `Last synced ${new Date(savedAt).toLocaleString()}` : undefined,
           });
         },
@@ -1314,7 +1314,7 @@ export default function PurchasePage() {
         });
 
         if (saveResult.queued) {
-          toast.success("Purchase saved offline — will sync when online 📦");
+          toast.success("Purchase saved offline - will sync when online 📦");
           resetCart();
           setIsSubmitting(false);
           return;
@@ -1573,23 +1573,8 @@ export default function PurchasePage() {
     <div className="space-y-0 font-sans text-slate-800">
 
       {/* Header */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-200/80 mb-3 max-w-full overflow-hidden font-sans">
-        <div>
-          <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span className="p-1.5 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl text-white shadow-2xs">
-              <Truck className="h-4 w-4" />
-            </span>
-            Purchase / Stock-In
-          </h1>
-          <p className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-1.5">
-            Record purchases · weighted avg cost · supplier Khata · F10 for shortcuts
-            <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[8.5px] font-black border ${isLive ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-slate-100 text-slate-400 border-slate-200"}`}>
-              <span className={`w-1 h-1 rounded-full ${isLive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
-              {isLive ? "LIVE" : "Connecting..."}
-            </span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5 shrink-0 max-w-full">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-end gap-2.5 pb-2.5 border-b border-slate-200/80 mb-3 max-w-full overflow-hidden font-sans">
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0 max-w-full justify-end">
           {/* Shortcuts hint button */}
           <button onClick={() => setIsShortcutsOpen(true)}
             className="flex items-center gap-1 px-2.5 h-8 bg-slate-100 hover:bg-violet-100 hover:text-violet-700 text-slate-500 rounded-lg text-[10px] font-black transition-all border border-slate-200 shadow-2xs cursor-pointer">
@@ -1601,7 +1586,7 @@ export default function PurchasePage() {
             className="flex items-center gap-1.5 px-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer h-8 shrink-0"
           >
             <Sparkles size={12} className="animate-pulse" />
-            <span>{industryType === "pharmacy" ? "Short-Book" : "Auto-PO"}</span>
+            <div>{industryType === "pharmacy" ? "Short-Book" : "Auto-PO"}</div>
           </button>
 
           {/* AI Invoice Import Trigger */}
@@ -1610,7 +1595,7 @@ export default function PurchasePage() {
             className="flex items-center gap-1.5 px-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer h-8 shrink-0"
           >
             <Sparkles size={12} className="animate-pulse" />
-            <span>AI Import</span>
+            <div>AI Import</div>
             {!isPremium && <Lock size={9} className="ml-0.5 text-indigo-200" />}
           </button>
 
@@ -1732,14 +1717,14 @@ export default function PurchasePage() {
                     return (
                       <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl space-y-1.5 text-xs">
                         <div className="flex justify-between font-bold text-purple-900">
-                          <span>Paid Qty: {q} | Bonus Free Qty: {b}</span>
-                          <span className="font-extrabold">Total Stock Received: {totalUnitsReceived}</span>
+                          <div>Paid Qty: {q} | Bonus Free Qty: {b}</div>
+                          <div className="font-extrabold">Total Stock Received: {totalUnitsReceived}</div>
                         </div>
                         <div className="flex justify-between items-center font-black text-purple-950 text-[11px] pt-1.5 border-t border-purple-200">
-                          <span>Net Item Bill Cost: Rs {netTotalCost.toLocaleString()}</span>
-                          <span className="bg-purple-600 text-white px-2 py-0.5 rounded-md text-[10.5px]">
+                          <div>Net Item Bill Cost: Rs {netTotalCost.toLocaleString()}</div>
+                          <div className="bg-purple-600 text-white px-2 py-0.5 rounded-md text-[10.5px]">
                             Avg Rate: Rs {effectiveAvgUnitCost.toFixed(2)} / unit
-                          </span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1830,7 +1815,7 @@ export default function PurchasePage() {
                       title="Quickly add new product / medicine to catalog & purchase cart"
                     >
                       <Plus size={15} />
-                      <span className="hidden sm:inline">+ Add Item</span>
+                      <div className="hidden sm:inline">+ Add Item</div>
                     </Button>
                   </div>
 
@@ -1858,14 +1843,14 @@ export default function PurchasePage() {
                                 className="h-8.5 px-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white text-xs font-black rounded-xl shadow-xs cursor-pointer inline-flex items-center gap-1.5"
                               >
                                 <Plus size={14} />
-                                <span>+ Add &quot;{searchQuery}&quot; as New Item</span>
+                                <div>+ Add &quot;{searchQuery}&quot; as New Item</div>
                               </button>
                             </div>
                           </div>
                         ) : (
                           <>
                             <div className="flex items-center justify-between px-2.5 py-1 mb-1.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[10px] text-zinc-400">
-                              <span className="font-bold">Found {autocompleteResults.length} matching items</span>
+                              <div className="font-bold">Found {autocompleteResults.length} matching items</div>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1876,7 +1861,7 @@ export default function PurchasePage() {
                                 className="text-violet-400 hover:text-violet-300 font-bold flex items-center gap-0.5 cursor-pointer bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700"
                               >
                                 <Plus size={11} />
-                                <span>+ Add &quot;{searchQuery.slice(0, 15)}&quot;</span>
+                                <div>+ Add &quot;{searchQuery.slice(0, 15)}&quot;</div>
                               </button>
                             </div>
                             {autocompleteResults.map((product, pIdx) => {
@@ -1898,22 +1883,22 @@ export default function PurchasePage() {
                               >
                                 <div className="flex-1 min-w-0 pr-3">
                                   <div className="flex items-center gap-2">
-                                    <span className="font-extrabold text-xs truncate text-white">
+                                    <div className="font-extrabold text-xs truncate text-white">
                                       {product.name}
-                                    </span>
+                                    </div>
                                     {product.code && (
-                                      <span className={`text-[9px] font-mono tracking-wider ${isHighlighted ? "text-violet-200" : "text-zinc-500"}`}>
+                                      <div className={`text-[9px] font-mono tracking-wider ${isHighlighted ? "text-violet-200" : "text-zinc-500"}`}>
                                         {product.code}
-                                      </span>
+                                      </div>
                                     )}
                                   </div>
                                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                    <span className={`text-[9.5px] font-bold ${isHighlighted ? "text-violet-200" : "text-zinc-400"}`}>
+                                    <div className={`text-[9.5px] font-bold ${isHighlighted ? "text-violet-200" : "text-zinc-400"}`}>
                                       Stock: {product.current_stock} {product.unit || "unit"}
-                                    </span>
-                                    <span className={`text-[9.5px] font-bold ${isHighlighted ? "text-violet-200" : "text-violet-400"}`}>
+                                    </div>
+                                    <div className={`text-[9.5px] font-bold ${isHighlighted ? "text-violet-200" : "text-violet-400"}`}>
                                       Cost: Rs {product.purchase_price_single}
-                                    </span>
+                                    </div>
                                   </div>
                                 </div>
 
@@ -1959,7 +1944,7 @@ export default function PurchasePage() {
                                     className="text-[9px] font-black px-1.5 py-1 rounded border border-amber-500/40 bg-amber-950/40 text-amber-300 hover:bg-amber-600 hover:text-white transition-all flex items-center gap-0.5"
                                     title="Edit or Add Packing / Pack Size in Product Directory"
                                   >
-                                    <span>⚙️ Packing</span>
+                                    <div>⚙️ Packing</div>
                                   </button>
                                 </div>
                               </div>
@@ -1983,7 +1968,7 @@ export default function PurchasePage() {
                     title="Open Retail POS in a new tab for instant customer billing without closing this purchase"
                   >
                     <ExternalLink size={12} />
-                    <span>Open POS (2nd Tab)</span>
+                    <div>Open POS (2nd Tab)</div>
                   </a>
 
                   {/* Hold Bill Button */}
@@ -1995,7 +1980,7 @@ export default function PurchasePage() {
                       title="Hold / Park this purchase order (F6)"
                     >
                       <Pause size={12} />
-                      <span>Hold (F6)</span>
+                      <div>Hold (F6)</div>
                     </button>
                   )}
 
@@ -2008,14 +1993,14 @@ export default function PurchasePage() {
                       title="View and resume held purchase bills"
                     >
                       <Play size={11} className="fill-current" />
-                      <span>Held ({heldPurchases.length})</span>
+                      <div>Held ({heldPurchases.length})</div>
                     </button>
                   )}
 
-                  <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200/80 flex items-center gap-1">
+                  <div className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200/80 flex items-center gap-1">
                     <ShoppingCart size={13} className="text-violet-600" />
                     Items: <strong className="text-slate-900 font-mono">{cart.length}</strong>
-                  </span>
+                  </div>
                   {cart.length > 0 && (
                     <button 
                       onClick={resetCart} 
@@ -2027,20 +2012,20 @@ export default function PurchasePage() {
                 </div>
               </div>
 
-              {/* Cart Table List — Professional Excel Grid View */}
+              {/* Cart Table List - Professional Excel Grid View */}
               <div className="flex-1 overflow-auto border border-slate-200 rounded-xl bg-white custom-scrollbar min-h-0 shadow-inner">
                 {/* Active Edit Mode Banner */}
                 {editingPOId && (
                   <div className="m-2 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-orange-500/10 border border-amber-300 rounded-xl p-2.5 px-3 flex items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
-                      <span className="font-black text-amber-950 flex items-center gap-1.5">
+                      <div className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+                      <div className="font-black text-amber-950 flex items-center gap-1.5">
                         <Edit3 size={14} className="text-amber-600" />
                         Editing Purchase Bill #{editingPONumber}
-                      </span>
-                      <span className="text-amber-700 font-medium text-[11px] hidden sm:inline">
+                      </div>
+                      <div className="text-amber-700 font-medium text-[11px] hidden sm:inline">
                         (Mistakes can be corrected; changes will recalculate stock & ledger)
-                      </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
@@ -2058,13 +2043,13 @@ export default function PurchasePage() {
                 {isDraftRestored && cart.length > 0 && (
                   <div className="m-2 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-2 px-3 flex items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="flex h-2 w-2 rounded-full bg-violet-600 animate-ping" />
-                      <span className="font-bold text-violet-900">
+                      <div className="flex h-2 w-2 rounded-full bg-violet-600 animate-ping" />
+                      <div className="font-bold text-violet-900">
                         ⚡ Active Purchase Draft Auto-Recovered
-                      </span>
-                      <span className="text-violet-600 font-medium text-[11px] hidden sm:inline">
+                      </div>
+                      <div className="text-violet-600 font-medium text-[11px] hidden sm:inline">
                         ({cart.length} items{draftSavedTime ? ` · Last active ${draftSavedTime}` : ""})
-                      </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
@@ -2169,7 +2154,7 @@ export default function PurchasePage() {
                                     className="mt-1 flex items-center gap-1 text-[9.5px] font-extrabold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md px-2 py-0.5 transition-colors cursor-pointer"
                                   >
                                     <Smartphone size={10} />
-                                    <span>IMEI / Serial ({item.imeis?.length || 0} entered)</span>
+                                    <div>IMEI / Serial ({item.imeis?.length || 0} entered)</div>
                                   </button>
                                 )}
 
@@ -2211,9 +2196,9 @@ export default function PurchasePage() {
                                           ))}
                                         </select>
                                       ) : item.packingName ? (
-                                        <span className="inline-block bg-violet-50 text-violet-800 text-[8.5px] font-extrabold px-1.5 py-0.5 rounded border border-violet-200 uppercase tracking-wide">
+                                        <div className="inline-block bg-violet-50 text-violet-800 text-[8.5px] font-extrabold px-1.5 py-0.5 rounded border border-violet-200 uppercase tracking-wide">
                                           {item.packingName}
-                                        </span>
+                                        </div>
                                       ) : null}
 
                                       {/* Quick Edit Packing Button in Cart */}
@@ -2224,7 +2209,7 @@ export default function PurchasePage() {
                                           className="text-[9px] font-black px-1.5 py-0.5 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 transition-colors flex items-center gap-0.5 cursor-pointer shadow-2xs"
                                           title="Edit or Fix Packing, Pack Size & Prices for this Product"
                                         >
-                                          <span>⚙️ Packing</span>
+                                          <div>⚙️ Packing</div>
                                         </button>
                                       )}
                                     </div>
@@ -2433,9 +2418,9 @@ export default function PurchasePage() {
 
                               {/* Eff. Cost Badge */}
                               <td className="py-2 px-2 text-right border-r border-slate-100">
-                                <span className="text-[10px] font-extrabold text-slate-700 font-mono">
+                                <div className="text-[10px] font-extrabold text-slate-700 font-mono">
                                   Rs {effRate.toFixed(2)}
-                                </span>
+                                </div>
                               </td>
 
                               {/* Profit Margin % Editable Input */}
@@ -2543,9 +2528,9 @@ export default function PurchasePage() {
                           onFocus={(e) => e.target.select()}
                           className="w-20 text-xs font-extrabold h-7 bg-white border border-slate-200 rounded-lg pl-1.5 pr-6 focus:outline-none focus:ring-1 focus:ring-violet-500" 
                         />
-                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400 pointer-events-none">
+                        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400 pointer-events-none">
                           {discountType === "percentage" ? "%" : "Rs"}
-                        </span>
+                        </div>
                       </div>
                     </div>
 
@@ -2577,9 +2562,9 @@ export default function PurchasePage() {
                             onFocus={(e) => e.target.select()}
                             className="w-18 text-xs font-extrabold h-7 bg-white border border-slate-200 rounded-lg pl-1.5 pr-6 focus:outline-none focus:ring-1 focus:ring-violet-500" 
                           />
-                          <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400 pointer-events-none">
+                          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400 pointer-events-none">
                             {taxType === "percentage" ? "%" : "Rs"}
-                          </span>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -2596,8 +2581,8 @@ export default function PurchasePage() {
                   {/* NET TOTAL BADGE */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     <div className="bg-gradient-to-r from-violet-600 to-purple-700 text-white px-3 py-1 rounded-xl shadow-sm flex flex-col items-end">
-                      <span className="text-[8px] font-black text-violet-200 uppercase tracking-wider">NET PAYABLE</span>
-                      <span className="text-sm font-black font-mono leading-none">Rs {Math.round(total).toLocaleString()}</span>
+                      <div className="text-[8px] font-black text-violet-200 uppercase tracking-wider">NET PAYABLE</div>
+                      <div className="text-sm font-black font-mono leading-none">Rs {Math.round(total).toLocaleString()}</div>
                     </div>
                   </div>
                 </div>
@@ -2628,7 +2613,7 @@ export default function PurchasePage() {
                   {/* Account Selector (Paid from) */}
                   {(paymentMode !== "credit" || paidNow > 0) && accounts.length > 0 && (
                     <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2 h-8 shadow-2xs">
-                      <span className="text-[8.5px] font-black text-slate-400 uppercase whitespace-nowrap">Account:</span>
+                      <div className="text-[8.5px] font-black text-slate-400 uppercase whitespace-nowrap">Account:</div>
                       <select
                         value={selectedAccountId}
                         onChange={e => setSelectedAccountId(e.target.value)}
@@ -2736,7 +2721,7 @@ export default function PurchasePage() {
                             className="font-mono text-slate-800 h-10 pr-10" autoFocus
                             onKeyDown={(e) => { if (e.key === "Enter") document.getElementById("hw-pur-len-in")?.focus(); }}
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">ft</span>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">ft</div>
                         </div>
                         <div className="relative">
                           <Input id="hw-pur-len-in" type="number" min={0} max={11} placeholder="0"
@@ -2745,7 +2730,7 @@ export default function PurchasePage() {
                             className="font-mono text-slate-800 h-10 pr-10"
                             onKeyDown={(e) => { if (e.key === "Enter") document.getElementById("hw-pur-wid-ft")?.focus(); }}
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">in</span>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">in</div>
                         </div>
                       </div>
                     </div>
@@ -2761,7 +2746,7 @@ export default function PurchasePage() {
                             className="font-mono text-slate-800 h-10 pr-10"
                             onKeyDown={(e) => { if (e.key === "Enter") document.getElementById("hw-pur-wid-in")?.focus(); }}
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">ft</span>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">ft</div>
                         </div>
                         <div className="relative">
                           <Input id="hw-pur-wid-in" type="number" min={0} max={11} placeholder="0"
@@ -2770,7 +2755,7 @@ export default function PurchasePage() {
                             className="font-mono text-slate-800 h-10 pr-10"
                             onKeyDown={(e) => { if (e.key === "Enter") document.getElementById("hw-pur-qty-input")?.focus(); }}
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">in</span>
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">in</div>
                         </div>
                       </div>
                     </div>
@@ -2786,7 +2771,7 @@ export default function PurchasePage() {
                           className="font-mono text-slate-800 h-10 pr-10" autoFocus
                           onKeyDown={(e) => { if (e.key === "Enter") document.getElementById("hw-pur-len-in")?.focus(); }}
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">ft</span>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">ft</div>
                       </div>
                       <div className="relative">
                         <Input id="hw-pur-len-in" type="number" min={0} max={11} placeholder="0"
@@ -2795,7 +2780,7 @@ export default function PurchasePage() {
                           className="font-mono text-slate-800 h-10 pr-10"
                           onKeyDown={(e) => { if (e.key === "Enter") document.getElementById("hw-pur-qty-input")?.focus(); }}
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">in</span>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">in</div>
                       </div>
                     </div>
                   </div>
@@ -2822,12 +2807,12 @@ export default function PurchasePage() {
                   return (
                     <div className="bg-gradient-to-br from-slate-50 to-violet-50 p-4 rounded-xl border border-violet-100 mt-1 space-y-2 text-xs">
                       <div className="flex justify-between items-center text-slate-500">
-                        <span>Total Area / Qty:</span>
-                        <span className="font-bold text-violet-700 font-mono text-sm">{computed.toFixed(3)} sq ft</span>
+                        <div>Total Area / Qty:</div>
+                        <div className="font-bold text-violet-700 font-mono text-sm">{computed.toFixed(3)} sq ft</div>
                       </div>
                       <div className="flex justify-between items-center border-t border-violet-200 pt-2 font-bold text-sm">
-                        <span className="text-slate-600">Total Purchase Cost:</span>
-                        <span className="font-mono text-violet-600">Rs {total.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                        <div className="text-slate-600">Total Purchase Cost:</div>
+                        <div className="font-mono text-violet-600">Rs {total.toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
                       </div>
                     </div>
                   );
@@ -2904,12 +2889,12 @@ export default function PurchasePage() {
                         <p className="text-[10px] text-slate-450">Stock: {opt.stock} units</p>
                       </div>
                       <div className="text-right">
-                        <span className={`block font-extrabold text-xs ${isChoiceSelected ? "text-violet-700" : "text-slate-900"}`}>
+                        <div className={`block font-extrabold text-xs ${isChoiceSelected ? "text-violet-700" : "text-slate-900"}`}>
                           Cost: Rs {opt.purchasePrice}
-                        </span>
-                        <span className="block text-[9px] text-slate-400">
+                        </div>
+                        <div className="block text-[9px] text-slate-400">
                           Sale: Rs {opt.price}
-                        </span>
+                        </div>
                       </div>
                     </button>
                   );
@@ -3062,7 +3047,7 @@ export default function PurchasePage() {
                       <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider">
                         Or Paste Multi-line IMEIs (Supplier Sheet)
                       </label>
-                      <span className="text-[10px] text-slate-400">One per line or "IMEI1, IMEI2"</span>
+                      <div className="text-[10px] text-slate-400">One per line or "IMEI1, IMEI2"</div>
                     </div>
                     <textarea
                       value={imeiBulkText}
@@ -3078,16 +3063,16 @@ export default function PurchasePage() {
                       className="w-full text-xs font-bold text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 border-indigo-200 h-8.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <Sparkles size={13} />
-                      <span>⚡ Parse &amp; Populate IMEIs</span>
+                      <div>⚡ Parse &amp; Populate IMEIs</div>
                     </Button>
                   </div>
 
                   {/* Live preview badge */}
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs font-bold">
-                    <span className="text-slate-600">Total Valid Devices Loaded:</span>
-                    <span className="text-indigo-700 font-extrabold font-mono text-sm bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                    <div className="text-slate-600">Total Valid Devices Loaded:</div>
+                    <div className="text-indigo-700 font-extrabold font-mono text-sm bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
                       {imeiPurchaseInputs.filter(i => i.imei1.trim()).length} Devices
-                    </span>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -3096,7 +3081,7 @@ export default function PurchasePage() {
                   {imeiPurchaseInputs.map((input, idx) => (
                     <div key={idx} className="p-3 bg-slate-50/50 border border-slate-100 rounded-2xl flex flex-col gap-2 relative">
                       <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-black text-indigo-650 uppercase tracking-widest">Device #{idx + 1}</span>
+                        <div className="text-[10px] font-black text-indigo-650 uppercase tracking-widest">Device #{idx + 1}</div>
                         {imeiPurchaseInputs.length > 1 && (
                           <button 
                             type="button"
@@ -3245,8 +3230,8 @@ export default function PurchasePage() {
               </div>
             </div>
             <div className="flex items-center gap-1.5 bg-white/20 px-3 py-1.5 rounded-xl border border-white/20 text-xs font-extrabold">
-              <span>Resume</span>
-              <span>→</span>
+              <div>Resume</div>
+              <div>→</div>
             </div>
           </button>
         </div>

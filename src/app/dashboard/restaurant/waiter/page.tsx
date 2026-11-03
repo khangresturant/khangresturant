@@ -117,20 +117,14 @@ export default function RestaurantWaiterPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6 font-sans max-w-lg mx-auto">
-      <div className="flex items-center justify-between gap-2 mb-5">
-        <div>
-          <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-            <Coffee className="text-amber-600" /> Waiter
-          </h1>
-          <p className="text-[11px] text-slate-500 font-semibold">Mobile-first floor run</p>
-        </div>
+      <div className="flex items-center justify-end gap-2 mb-4">
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)} className="relative">
             <Bell size={14} />
             {badge > 0 && (
-              <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-rose-500 text-[9px] text-white flex items-center justify-center px-1">
+              <div className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-rose-500 text-[9px] text-white flex items-center justify-center px-1">
                 {badge}
-              </span>
+              </div>
             )}
           </Button>
           <Button variant="outline" size="sm" onClick={load}>

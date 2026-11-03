@@ -1994,51 +1994,7 @@ export default function AccountsPage() {
     <div className="space-y-3 font-sans text-slate-800">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-200/80">
-        <div>
-          <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span className="p-1.5 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl text-white shadow-2xs">
-              <Wallet className="h-4 w-4" />
-            </span>
-            {activeTab === "wallets" 
-              ? "Cash & Bank Accounts" 
-              : activeTab === "chart" 
-                ? "General Ledger (Chart of Accounts)" 
-                : activeTab === "journal"
-                  ? "General Journal Ledger"
-                  : activeTab === "trial"
-                    ? "Trial Balance Statement"
-                    : activeTab === "statements"
-                      ? "Formal Financial Statements"
-                      : activeTab === "valuation"
-                        ? "Inventory Valuation"
-                        : activeTab === "currency"
-                          ? "Multi-Currency Accounting"
-                          : activeTab === "reconciliation"
-                            ? "Bank Statement Reconciliation"
-                            : "Post-Dated Cheques & Assets"}
-          </h1>
-          <p className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-1.5">
-            {activeTab === "wallets" 
-              ? "Track register drawer, bank ledgers, and mobile wallet cash flow" 
-              : activeTab === "chart" 
-                ? "Unified accounting ledger classifications and live balances" 
-                : activeTab === "journal"
-                  ? "Audit chronological ledger debit/credit postings"
-                  : activeTab === "statements"
-                    ? "Automated Profit & Loss and Balance Sheet Reports"
-                    : activeTab === "valuation"
-                      ? "Inventory asset costing with FIFO and Weighted Average"
-                      : activeTab === "currency"
-                        ? "Exchange rate tables and multi-currency conversions"
-                        : "Double-entry accounting sheet"}
-            <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[8.5px] font-black border ${isLive ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-slate-100 text-slate-400 border-slate-200"}`}>
-              <span className={`w-1 h-1 rounded-full ${isLive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
-              {isLive ? "LIVE" : "Connecting..."}
-            </span>
-          </p>
-        </div>
-
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-2.5 pb-2.5 border-b border-slate-200/80">
         <div className="flex items-center gap-1.5">
           {activeTab === "wallets" && permissions?.actions?.edit_account !== false && !activeClosingBook && (
             <>
@@ -2221,7 +2177,7 @@ export default function AccountsPage() {
               <div className="lg:col-span-4 space-y-2">
                 <div className="flex items-center justify-between px-1">
                   <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">My Wallets & Accounts</h2>
-                  <span className="text-[10px] font-bold text-slate-400">{accounts.length} Active</span>
+                  <div className="text-[10px] font-bold text-slate-400">{accounts.length} Active</div>
                 </div>
 
                 {/* Consolidated All-Accounts Card */}
@@ -2240,15 +2196,15 @@ export default function AccountsPage() {
                       </p>
                       <h3 className="font-extrabold text-slate-800 text-xs mt-0.5">All Accounts & Wallets</h3>
                     </div>
-                    <span className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
+                    <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
                       <Layers size={14} />
-                    </span>
+                    </div>
                   </div>
                   <div className="mt-2.5 flex items-baseline justify-between">
-                    <span className="text-slate-400 text-[10px] font-semibold">Total Funds</span>
-                    <span className="text-sm font-black text-slate-900 font-mono">
+                    <div className="text-slate-400 text-[10px] font-semibold">Total Funds</div>
+                    <div className="text-sm font-black text-slate-900 font-mono">
                       Rs {accounts.reduce((s, a) => s + Number(a.current_balance || 0), 0).toLocaleString()}
-                    </span>
+                    </div>
                   </div>
                 </div>
 
@@ -2291,16 +2247,16 @@ export default function AccountsPage() {
                                 <Trash2 size={11} />
                               </button>
                             )}
-                            <span className={`p-1.5 rounded-lg ${
+                            <div className={`p-1.5 rounded-lg ${
                               acc.type === "cash" ? "bg-amber-50 text-amber-600" : acc.type === "bank" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600"
                             }`}>
                               {acc.type === "cash" ? <Landmark size={14} /> : acc.type === "bank" ? <Landmark size={14} /> : <Wallet size={14} />}
-                            </span>
+                            </div>
                           </div>
                         </div>
                         <div className="mt-2.5 flex items-baseline justify-between">
-                          <span className="text-slate-400 text-[10px] font-semibold">Balance</span>
-                          <span className="text-sm font-black text-slate-900 font-mono">Rs {Number(acc.current_balance).toLocaleString()}</span>
+                          <div className="text-slate-400 text-[10px] font-semibold">Balance</div>
+                          <div className="text-sm font-black text-slate-900 font-mono">Rs {Number(acc.current_balance).toLocaleString()}</div>
                         </div>
                       </div>
                     );
@@ -2340,33 +2296,33 @@ export default function AccountsPage() {
                 {/* Dynamic Live Balance KPI Banner */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3.5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-150 shadow-2xs">
-                    <span className="text-[9px] font-black uppercase text-blue-600 tracking-wider block">Net Live Balance</span>
+                    <div className="text-[9px] font-black uppercase text-blue-600 tracking-wider block">Net Live Balance</div>
                     <h4 className="text-xl font-black text-blue-900 mt-1 font-mono">
                       Rs {walletSummary.netBalance.toLocaleString()}
                     </h4>
-                    <span className="text-[10px] font-semibold text-blue-700 mt-1 flex items-center gap-1">
+                    <div className="text-[10px] font-semibold text-blue-700 mt-1 flex items-center gap-1">
                       <CheckCircle2 size={11} className="text-blue-600" /> Live Ledger Verified
-                    </span>
+                    </div>
                   </div>
 
                   <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-150 shadow-2xs">
-                    <span className="text-[9px] font-black uppercase text-emerald-700 tracking-wider block">Total Inflows (وصولیاں)</span>
+                    <div className="text-[9px] font-black uppercase text-emerald-700 tracking-wider block">Total Inflows (وصولیاں)</div>
                     <h4 className="text-xl font-black text-emerald-900 mt-1 font-mono">
                       + Rs {walletSummary.totalInflows.toLocaleString()}
                     </h4>
-                    <span className="text-[10px] font-semibold text-emerald-700 mt-1 block">
+                    <div className="text-[10px] font-semibold text-emerald-700 mt-1 block">
                       {walletSummary.inflowCount} Inflow Transactions
-                    </span>
+                    </div>
                   </div>
 
                   <div className="p-3.5 rounded-2xl bg-rose-50/60 border border-rose-150 shadow-2xs">
-                    <span className="text-[9px] font-black uppercase text-rose-700 tracking-wider block">Total Outflows (ادائیگی)</span>
+                    <div className="text-[9px] font-black uppercase text-rose-700 tracking-wider block">Total Outflows (ادائیگی)</div>
                     <h4 className="text-xl font-black text-rose-900 mt-1 font-mono">
                       - Rs {walletSummary.totalOutflows.toLocaleString()}
                     </h4>
-                    <span className="text-[10px] font-semibold text-rose-700 mt-1 block">
+                    <div className="text-[10px] font-semibold text-rose-700 mt-1 block">
                       {walletSummary.outflowCount} Outflow Transactions
-                    </span>
+                    </div>
                   </div>
                 </div>
 
@@ -2401,12 +2357,12 @@ export default function AccountsPage() {
                                   {tx.account_name}
                                 </td>
                                 <td className="py-2.5 px-3">
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-black text-[9px] ${
+                                  <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-black text-[9px] ${
                                     isInflow ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"
                                   }`}>
                                     {isInflow ? <ArrowDownLeft size={10} /> : <ArrowUpRight size={10} />}
                                     {tx.type.replace("_", " ").toUpperCase()}
-                                  </span>
+                                  </div>
                                 </td>
                                 <td className="py-2.5 px-3 text-slate-650 font-medium max-w-md">
                                   {tx.remarks || "-"}
@@ -2430,7 +2386,7 @@ export default function AccountsPage() {
                       {filteredTransactions.length > 0 && (
                         <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
                           <div className="flex items-center gap-2 text-slate-500 font-bold text-xs">
-                            <span>Showing {(txPage - 1) * txPerPage + 1} to {Math.min(txPage * txPerPage, filteredTransactions.length)} of {filteredTransactions.length} entries</span>
+                            <div>Showing {(txPage - 1) * txPerPage + 1} to {Math.min(txPage * txPerPage, filteredTransactions.length)} of {filteredTransactions.length} entries</div>
                             <select
                               value={txPerPage}
                               onChange={(e) => { setTxPerPage(Number(e.target.value)); setTxPage(1); }}
@@ -2451,9 +2407,9 @@ export default function AccountsPage() {
                             >
                               Previous
                             </button>
-                            <span className="px-2 font-bold text-slate-700 text-xs">
+                            <div className="px-2 font-bold text-slate-700 text-xs">
                               Page {txPage} of {totalTxPages}
-                            </span>
+                            </div>
                             <button
                               type="button"
                               disabled={txPage === totalTxPages}
@@ -2482,12 +2438,12 @@ export default function AccountsPage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-black text-slate-800 text-sm">Balance Sheet Equation</span>
-                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                      <div className="font-black text-slate-800 text-sm">Balance Sheet Equation</div>
+                      <div className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
                         isBalanceSheetBalanced ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
                       }`}>
                         {isBalanceSheetBalanced ? "Strictly Balanced (متوازن)" : "Variance"}
-                      </span>
+                      </div>
                     </div>
                     <p className="text-slate-500 font-mono text-[11px] mt-0.5">
                       Total Assets (Rs {totalAssetsVal.toLocaleString()}) = Total Liabilities (Rs {totalLiabilitiesVal.toLocaleString()}) + Owner Equity & Retained Earnings (Rs {totalEquityWithProfitVal.toLocaleString()})
@@ -2495,9 +2451,9 @@ export default function AccountsPage() {
                   </div>
                 </div>
                 {industryType === "showroom" && (
-                  <span className="text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 px-2.5 py-1 rounded-xl">
+                  <div className="text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 px-2.5 py-1 rounded-xl">
                     Auto-Synced with Showroom Sub-Ledgers
-                  </span>
+                  </div>
                 )}
               </div>
 
@@ -2508,9 +2464,9 @@ export default function AccountsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1.5 bg-blue-500" />
                   <div>
                     <h3 className="font-black text-slate-800 text-sm mb-4 flex items-center gap-2">
-                      <span className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                      <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
                         <Landmark size={15} />
-                      </span>
+                      </div>
                       Assets (1000)
                     </h3>
                     <div className="space-y-3">
@@ -2522,17 +2478,17 @@ export default function AccountsPage() {
                               <p className="text-xs font-bold text-slate-700">{t.name}</p>
                               <p className="text-[9px] text-slate-400 font-semibold uppercase">{t.code}</p>
                             </div>
-                            <span className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</span>
+                            <div className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
                   <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-baseline">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Assets</span>
-                    <span className="text-sm font-black text-blue-650">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Assets</div>
+                    <div className="text-sm font-black text-blue-650">
                       Rs {totalAssetsVal.toLocaleString()}
-                    </span>
+                    </div>
                   </div>
                 </div>
 
@@ -2541,9 +2497,9 @@ export default function AccountsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1.5 bg-rose-500" />
                   <div>
                     <h3 className="font-black text-slate-800 text-sm mb-4 flex items-center gap-2">
-                      <span className="p-1.5 bg-rose-50 text-rose-600 rounded-lg">
+                      <div className="p-1.5 bg-rose-50 text-rose-600 rounded-lg">
                         <Users size={15} />
-                      </span>
+                      </div>
                       Liabilities (2000)
                     </h3>
                     <div className="space-y-3">
@@ -2555,15 +2511,15 @@ export default function AccountsPage() {
                               <p className="text-xs font-bold text-slate-700">{t.name}</p>
                               <p className="text-[9px] text-slate-400 font-semibold uppercase">{t.code}</p>
                             </div>
-                            <span className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</span>
+                            <div className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
                   <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-baseline">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Liabilities</span>
-                    <span className="text-sm font-black text-rose-650">Rs {totalLiabilitiesVal.toLocaleString()}</span>
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Liabilities</div>
+                    <div className="text-sm font-black text-rose-650">Rs {totalLiabilitiesVal.toLocaleString()}</div>
                   </div>
                 </div>
 
@@ -2572,9 +2528,9 @@ export default function AccountsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1.5 bg-amber-500" />
                   <div>
                     <h3 className="font-black text-slate-800 text-sm mb-4 flex items-center gap-2">
-                      <span className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
+                      <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
                         <Scale size={15} />
-                      </span>
+                      </div>
                       Equity (3000)
                     </h3>
                     <div className="space-y-3">
@@ -2586,15 +2542,15 @@ export default function AccountsPage() {
                               <p className="text-xs font-bold text-slate-700">{t.name}</p>
                               <p className="text-[9px] text-slate-400 font-semibold uppercase">{t.code}</p>
                             </div>
-                            <span className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</span>
+                            <div className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
                   <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-baseline">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Equity</span>
-                    <span className="text-sm font-black text-amber-655">Rs {totalEquityVal.toLocaleString()}</span>
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Equity</div>
+                    <div className="text-sm font-black text-amber-655">Rs {totalEquityVal.toLocaleString()}</div>
                   </div>
                 </div>
 
@@ -2603,9 +2559,9 @@ export default function AccountsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1.5 bg-emerald-500" />
                   <div>
                     <h3 className="font-black text-slate-800 text-sm mb-4 flex items-center gap-2">
-                      <span className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
+                      <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
                         <TrendingUp size={15} />
-                      </span>
+                      </div>
                       Revenue (4000)
                     </h3>
                     <div className="space-y-3">
@@ -2617,15 +2573,15 @@ export default function AccountsPage() {
                               <p className="text-xs font-bold text-slate-700">{t.name}</p>
                               <p className="text-[9px] text-slate-400 font-semibold uppercase">{t.code}</p>
                             </div>
-                            <span className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</span>
+                            <div className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
                   <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-baseline">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Revenue</span>
-                    <span className="text-sm font-black text-emerald-650">Rs {totalRevenueVal.toLocaleString()}</span>
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Revenue</div>
+                    <div className="text-sm font-black text-emerald-650">Rs {totalRevenueVal.toLocaleString()}</div>
                   </div>
                 </div>
 
@@ -2634,9 +2590,9 @@ export default function AccountsPage() {
                   <div className="absolute top-0 left-0 right-0 h-1.5 bg-violet-500" />
                   <div>
                     <h3 className="font-black text-slate-800 text-sm mb-4 flex items-center gap-2">
-                      <span className="p-1.5 bg-violet-50 text-violet-600 rounded-lg">
+                      <div className="p-1.5 bg-violet-50 text-violet-600 rounded-lg">
                         <Coins size={15} />
-                      </span>
+                      </div>
                       Expenses (5000)
                     </h3>
                     <div className="space-y-3">
@@ -2648,15 +2604,15 @@ export default function AccountsPage() {
                               <p className="text-xs font-bold text-slate-700">{t.name}</p>
                               <p className="text-[9px] text-slate-400 font-semibold uppercase">{t.code}</p>
                             </div>
-                            <span className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</span>
+                            <div className="text-xs font-black text-slate-800">Rs {bal.toLocaleString()}</div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
                   <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-baseline">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Expenses</span>
-                    <span className="text-sm font-black text-violet-650">Rs {totalExpensesVal.toLocaleString()}</span>
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Expenses</div>
+                    <div className="text-sm font-black text-violet-650">Rs {totalExpensesVal.toLocaleString()}</div>
                   </div>
                 </div>
 
@@ -2682,20 +2638,20 @@ export default function AccountsPage() {
                       <div key={entry.id} className="border border-slate-150 rounded-2xl overflow-hidden shadow-xs">
                         <div className="bg-slate-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-150">
                           <div>
-                            <span className="text-[10px] font-mono font-bold text-slate-400 uppercase">
+                            <div className="text-[10px] font-mono font-bold text-slate-400 uppercase">
                               Entry: #{entry.id.substring(0, 8).toUpperCase()}
-                            </span>
+                            </div>
                             <h4 className="text-xs font-black text-slate-800 mt-0.5">
                               {entry.narration || "General Journal Entry Adjustment"}
                             </h4>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-[10px] font-black uppercase bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
+                            <div className="text-[10px] font-black uppercase bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded">
                               {entry.ref_type || "manual"}
-                            </span>
-                            <span className="text-[10px] font-mono font-black text-slate-500">
+                            </div>
+                            <div className="text-[10px] font-mono font-black text-slate-500">
                               {new Date(entry.entry_date).toLocaleDateString()}
-                            </span>
+                            </div>
                           </div>
                         </div>
                         <table className="w-full text-left text-xs">
@@ -2729,7 +2685,7 @@ export default function AccountsPage() {
                     {journalEntries.length > 0 && (
                       <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <div className="flex items-center gap-2 text-slate-500 font-bold text-xs">
-                          <span>Showing {(journalPage - 1) * journalPerPage + 1} to {Math.min(journalPage * journalPerPage, journalEntries.length)} of {journalEntries.length} entries</span>
+                          <div>Showing {(journalPage - 1) * journalPerPage + 1} to {Math.min(journalPage * journalPerPage, journalEntries.length)} of {journalEntries.length} entries</div>
                           <select
                             value={journalPerPage}
                             onChange={(e) => { setJournalPerPage(Number(e.target.value)); setJournalPage(1); }}
@@ -2750,9 +2706,9 @@ export default function AccountsPage() {
                           >
                             Previous
                           </button>
-                          <span className="px-2 font-bold text-slate-700 text-xs">
+                          <div className="px-2 font-bold text-slate-700 text-xs">
                             Page {journalPage} of {totalJournalPages}
-                          </span>
+                          </div>
                           <button
                             type="button"
                             disabled={journalPage === totalJournalPages}
@@ -2819,21 +2775,21 @@ export default function AccountsPage() {
                           <td className="py-3 px-3 font-mono font-semibold text-slate-400">{t.code}</td>
                           <td className="py-3 px-3 font-bold text-slate-850">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span>{t.name}</span>
+                              <div>{t.name}</div>
                               {t.type === "Asset" && credit > 0 && (
-                                <span className="text-[8.5px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded-md">
+                                <div className="text-[8.5px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded-md">
                                   Overdraft (Credit Bal)
-                                </span>
+                                </div>
                               )}
                               {t.type === "Liability" && debit > 0 && (
-                                <span className="text-[8.5px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
+                                <div className="text-[8.5px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
                                   Advance (Debit Bal)
-                                </span>
+                                </div>
                               )}
                             </div>
                           </td>
                           <td className="py-3 px-3">
-                            <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black border uppercase leading-none ${
+                            <div className={`px-2.5 py-0.5 rounded-full text-[9px] font-black border uppercase leading-none ${
                               t.type === "Asset" ? "bg-blue-50 text-blue-600 border-blue-100" :
                               t.type === "Liability" ? "bg-rose-50 text-rose-600 border-rose-100" :
                               t.type === "Equity" ? "bg-amber-50 text-amber-600 border-amber-100" :
@@ -2841,7 +2797,7 @@ export default function AccountsPage() {
                               "bg-violet-50 text-violet-600 border-violet-100"
                             }`}>
                               {t.type}
-                            </span>
+                            </div>
                           </td>
                           <td className="py-3 px-3 text-right font-semibold text-slate-750 font-mono">
                             {debit > 0 ? `Rs ${debit.toLocaleString()}` : "-"}
@@ -2874,19 +2830,19 @@ export default function AccountsPage() {
                 {isTrialBalanced ? (
                   <div className="flex items-center gap-2 text-emerald-700 font-bold">
                     <CheckCircle2 size={16} className="text-emerald-600" />
-                    <span>Accounting Equality Verified: Total Debits (Rs {sumDebitsVal.toLocaleString()}) = Total Credits (Rs {sumCreditsVal.toLocaleString()})</span>
+                    <div>Accounting Equality Verified: Total Debits (Rs {sumDebitsVal.toLocaleString()}) = Total Credits (Rs {sumCreditsVal.toLocaleString()})</div>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 text-amber-700 font-bold">
                     <ShieldAlert size={16} className="text-amber-600" />
-                    <span>Trial Balance Variance: Rs {Math.abs(sumDebitsVal - sumCreditsVal).toLocaleString()}</span>
+                    <div>Trial Balance Variance: Rs {Math.abs(sumDebitsVal - sumCreditsVal).toLocaleString()}</div>
                   </div>
                 )}
-                <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                <div className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
                   isTrialBalanced ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
                 }`}>
                   {isTrialBalanced ? "Strictly Balanced (متوازن)" : "Variance"}
-                </span>
+                </div>
               </div>
             </div>
           )}
@@ -2905,10 +2861,10 @@ export default function AccountsPage() {
 
                 <div className="flex items-center gap-3">
                   <div className="hidden sm:flex items-center gap-2 bg-blue-50/70 border border-blue-200/60 px-3 py-1.5 rounded-xl">
-                    <span className="text-[10px] font-black text-blue-700 uppercase tracking-wider">Total Book Value:</span>
-                    <span className="text-xs font-black text-blue-900 font-mono">
+                    <div className="text-[10px] font-black text-blue-700 uppercase tracking-wider">Total Book Value:</div>
+                    <div className="text-xs font-black text-blue-900 font-mono">
                       Rs {fixedAssets.reduce((s, a) => s + Number(a.current_value || 0), 0).toLocaleString()}
-                    </span>
+                    </div>
                   </div>
 
                   {permissions?.actions?.edit_account !== false && !activeClosingBook && (
@@ -2957,17 +2913,17 @@ export default function AccountsPage() {
                               <div>
                                 <p className="font-extrabold text-slate-900 text-xs">{asset.name}</p>
                                 <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
-                                  <span>Acquired: {asset.purchase_date ? new Date(asset.purchase_date).toLocaleDateString() : "-"}</span>
-                                  <span>·</span>
-                                  <span className="font-mono text-slate-400 text-[9px]">ID: #{asset.id.slice(0, 6).toUpperCase()}</span>
+                                  <div>Acquired: {asset.purchase_date ? new Date(asset.purchase_date).toLocaleDateString() : "-"}</div>
+                                  <div>·</div>
+                                  <div className="font-mono text-slate-400 text-[9px]">ID: #{asset.id.slice(0, 6).toUpperCase()}</div>
                                 </div>
                               </div>
                             </td>
 
                             <td className="py-3 px-3.5">
-                              <span className="uppercase text-[10px] font-black px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                              <div className="uppercase text-[10px] font-black px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
                                 {asset.asset_type || "General"}
-                              </span>
+                              </div>
                             </td>
 
                             <td className="py-3 px-3.5 text-right font-mono font-medium text-slate-600">
@@ -2994,11 +2950,11 @@ export default function AccountsPage() {
                                 title="Click to view full revision history & audit trail"
                               >
                                 <History size={12} className={editCount > 0 ? "text-amber-600" : "text-slate-400"} />
-                                <span>v{versionNum}</span>
+                                <div>v{versionNum}</div>
                                 {editCount > 0 && (
-                                  <span className="bg-amber-200/80 text-amber-900 text-[9px] px-1 rounded-full font-bold">
+                                  <div className="bg-amber-200/80 text-amber-900 text-[9px] px-1 rounded-full font-bold">
                                     {editCount} {editCount === 1 ? "edit" : "edits"}
-                                  </span>
+                                  </div>
                                 )}
                               </button>
                             </td>
@@ -3090,24 +3046,24 @@ export default function AccountsPage() {
                       {cheques.map(ch => (
                         <tr key={ch.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors/50">
                           <td className="py-3 px-3 font-bold text-slate-800">{ch.cheque_number}</td>
-                          <td className="py-3 px-3 text-slate-600">{ch.party_name || "—"}</td>
-                          <td className="py-3 px-3 text-slate-500">{ch.bank_name || "—"}</td>
+                          <td className="py-3 px-3 text-slate-600">{ch.party_name || "-"}</td>
+                          <td className="py-3 px-3 text-slate-500">{ch.bank_name || "-"}</td>
                           <td className="py-3 px-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${ch.cheque_type === "receivable" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                            <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${ch.cheque_type === "receivable" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
                               {ch.cheque_type === "receivable" ? "Receivable" : "Payable"}
-                            </span>
+                            </div>
                           </td>
                           <td className="py-3 px-3 text-right font-black text-slate-800">Rs {Number(ch.amount).toLocaleString()}</td>
                           <td className="py-3 px-3 text-slate-500">{new Date(ch.due_date).toLocaleDateString()}</td>
                           <td className="py-3 px-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               ch.status === "cleared" ? "bg-blue-100 text-blue-700"
                               : ch.status === "bounced" ? "bg-red-100 text-red-700"
                               : ch.status === "cancelled" ? "bg-slate-100 text-slate-500"
                               : "bg-amber-100 text-amber-700"
                             }`}>
                               {ch.status.charAt(0).toUpperCase() + ch.status.slice(1)}
-                            </span>
+                            </div>
                           </td>
                           <td className="py-3 px-3">
                             {ch.status === "pending" && !activeClosingBook && (
@@ -3180,7 +3136,7 @@ export default function AccountsPage() {
                       }}
                       className="w-full h-10 rounded-xl border border-slate-200 text-xs px-3 focus:outline-none focus:ring-2 focus:ring-teal-500/30 font-bold"
                     >
-                      <option value="">— Select Account —</option>
+                      <option value="">- Select Account -</option>
                       {accounts.filter(a => a.type === "bank" || a.type === "cash").map(a => (
                         <option key={a.id} value={a.id}>{a.name} (Rs {Number(a.current_balance).toLocaleString()})</option>
                       ))}
@@ -3212,16 +3168,16 @@ export default function AccountsPage() {
                 {csvRows.length > 0 && (
                   <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-teal-800">Uploaded Bank Statement Lines ({csvRows.length} items parsed)</span>
-                      <span className="text-[10px] font-black bg-teal-600 text-white px-2 py-0.5 rounded-full">
+                      <div className="text-xs font-black text-teal-800">Uploaded Bank Statement Lines ({csvRows.length} items parsed)</div>
+                      <div className="text-[10px] font-black bg-teal-600 text-white px-2 py-0.5 rounded-full">
                         {csvRows.filter(r => r.matchedTxId).length} Auto-Matched
-                      </span>
+                      </div>
                     </div>
                     <div className="max-h-36 overflow-y-auto space-y-1">
                       {csvRows.map((r, i) => (
                         <div key={i} className="flex justify-between items-center text-[11px] font-semibold bg-white p-2 rounded-xl border border-teal-100">
-                          <span>{r.date} — {r.description}</span>
-                          <span className="font-bold text-teal-700">Rs {r.amount.toLocaleString()}</span>
+                          <div>{r.date} - {r.description}</div>
+                          <div className="font-bold text-teal-700">Rs {r.amount.toLocaleString()}</div>
                         </div>
                       ))}
                     </div>
@@ -3304,11 +3260,11 @@ export default function AccountsPage() {
                             </td>
                             <td className="py-3 px-3 text-slate-500">{new Date(tx.created_at).toLocaleDateString()}</td>
                             <td className="py-3 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                              <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
                                 tx.type === "deposit" || tx.type === "transfer_in" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
-                              }`}>{tx.type.replace("_", " ")}</span>
+                              }`}>{tx.type.replace("_", " ")}</div>
                             </td>
-                            <td className="py-3 px-3 text-slate-500 max-w-[180px] truncate">{tx.remarks || "—"}</td>
+                            <td className="py-3 px-3 text-slate-500 max-w-[180px] truncate">{tx.remarks || "-"}</td>
                             <td className={`py-3 px-3 text-right font-black ${tx.type === "deposit" || tx.type === "transfer_in" ? "text-emerald-700" : "text-rose-700"}`}>
                               {tx.type === "deposit" || tx.type === "transfer_in" ? "+" : "-"} Rs {Number(tx.amount).toLocaleString()}
                             </td>
@@ -3347,57 +3303,57 @@ export default function AccountsPage() {
                   <div className="p-6 space-y-4 font-semibold text-xs">
                     <div className="space-y-2 border-b border-slate-100 pb-3">
                       <div className="flex justify-between font-black text-slate-500 text-[10px] uppercase">
-                        <span>Revenue Category</span>
-                        <span>Amount (PKR)</span>
+                        <div>Revenue Category</div>
+                        <div>Amount (PKR)</div>
                       </div>
                       <div className="flex justify-between text-slate-700">
-                        <span>Sales Revenue & Operating Income</span>
-                        <span className="font-bold text-emerald-600">Rs {totalRevenueVal.toLocaleString()}</span>
+                        <div>Sales Revenue & Operating Income</div>
+                        <div className="font-bold text-emerald-600">Rs {totalRevenueVal.toLocaleString()}</div>
                       </div>
                       <div className="flex justify-between font-black text-slate-900 pt-1">
-                        <span>Total Revenue</span>
-                        <span className="text-emerald-700">Rs {totalRevenueVal.toLocaleString()}</span>
+                        <div>Total Revenue</div>
+                        <div className="text-emerald-700">Rs {totalRevenueVal.toLocaleString()}</div>
                       </div>
                     </div>
 
                     <div className="space-y-2 border-b border-slate-100 pb-3">
                       <div className="flex justify-between font-black text-slate-500 text-[10px] uppercase">
-                        <span>Cost of Goods Sold (COGS)</span>
-                        <span>Amount (PKR)</span>
+                        <div>Cost of Goods Sold (COGS)</div>
+                        <div>Amount (PKR)</div>
                       </div>
                       <div className="flex justify-between text-slate-700">
-                        <span>Purchases & Stock COGS</span>
-                        <span className="font-bold text-rose-600">Rs {totalPurchases.toLocaleString()}</span>
+                        <div>Purchases & Stock COGS</div>
+                        <div className="font-bold text-rose-600">Rs {totalPurchases.toLocaleString()}</div>
                       </div>
                       <div className="flex justify-between font-black text-slate-900 pt-1">
-                        <span>Gross Profit / (Loss)</span>
-                        <span className={(totalRevenueVal - totalPurchases) >= 0 ? "text-emerald-700" : "text-rose-600"}>
+                        <div>Gross Profit / (Loss)</div>
+                        <div className={(totalRevenueVal - totalPurchases) >= 0 ? "text-emerald-700" : "text-rose-600"}>
                           Rs {(totalRevenueVal - totalPurchases).toLocaleString()}
-                        </span>
+                        </div>
                       </div>
                     </div>
 
                     <div className="space-y-2 border-b border-slate-100 pb-3">
                       <div className="flex justify-between font-black text-slate-500 text-[10px] uppercase">
-                        <span>Operating Expenses</span>
-                        <span>Amount (PKR)</span>
+                        <div>Operating Expenses</div>
+                        <div>Amount (PKR)</div>
                       </div>
                       <div className="flex justify-between text-slate-700">
-                        <span>Overhead, Rent, Utilities & Salaries</span>
-                        <span className="font-bold text-rose-600">Rs {totalExpensesVal.toLocaleString()}</span>
+                        <div>Overhead, Rent, Utilities & Salaries</div>
+                        <div className="font-bold text-rose-600">Rs {totalExpensesVal.toLocaleString()}</div>
                       </div>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-between">
                       <div>
-                        <span className="text-[10px] font-black uppercase text-indigo-400">Net Operating Profit</span>
+                        <div className="text-[10px] font-black uppercase text-indigo-400">Net Operating Profit</div>
                         <h4 className="text-lg font-black text-indigo-900">
                           Rs {((totalRevenueVal - totalPurchases) - totalExpensesVal).toLocaleString()}
                         </h4>
                       </div>
-                      <span className="px-3 py-1 rounded-full text-[11px] font-black bg-indigo-600 text-white">
+                      <div className="px-3 py-1 rounded-full text-[11px] font-black bg-indigo-600 text-white">
                         {((totalRevenueVal - totalPurchases) - totalExpensesVal) >= 0 ? "PROFIT" : "LOSS"}
-                      </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -3423,30 +3379,30 @@ export default function AccountsPage() {
                     <div className="grid grid-cols-2 gap-4">
                       {/* Assets */}
                       <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Total Assets (Rs)</span>
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Total Assets (Rs)</div>
                         <div className="space-y-1 text-slate-600">
-                          <div className="flex justify-between"><span>Cash & Bank:</span><span>{accounts.reduce((s,a)=>s+Number(a.current_balance),0).toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span>Receivables:</span><span>{totalReceivable.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span>Inventory:</span><span>{inventoryValue.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span>Fixed Assets:</span><span>{totalFixedAssetsVal.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><div>Cash & Bank:</div><div>{accounts.reduce((s,a)=>s+Number(a.current_balance),0).toLocaleString()}</div></div>
+                          <div className="flex justify-between"><div>Receivables:</div><div>{totalReceivable.toLocaleString()}</div></div>
+                          <div className="flex justify-between"><div>Inventory:</div><div>{inventoryValue.toLocaleString()}</div></div>
+                          <div className="flex justify-between"><div>Fixed Assets:</div><div>{totalFixedAssetsVal.toLocaleString()}</div></div>
                         </div>
                         <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-slate-900">
-                          <span>Assets Sum:</span>
-                          <span className="text-blue-600">Rs {totalAssetsVal.toLocaleString()}</span>
+                          <div>Assets Sum:</div>
+                          <div className="text-blue-600">Rs {totalAssetsVal.toLocaleString()}</div>
                         </div>
                       </div>
 
                       {/* Liabilities & Equity */}
                       <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Liabilities & Equity (Rs)</span>
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Liabilities & Equity (Rs)</div>
                         <div className="space-y-1 text-slate-600">
-                          <div className="flex justify-between"><span>Payables:</span><span>{totalPayable.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span>Capital:</span><span>{ownersEquityVal.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span>Net Profit:</span><span>{((totalRevenueVal - totalPurchases) - totalExpensesVal).toLocaleString()}</span></div>
+                          <div className="flex justify-between"><div>Payables:</div><div>{totalPayable.toLocaleString()}</div></div>
+                          <div className="flex justify-between"><div>Capital:</div><div>{ownersEquityVal.toLocaleString()}</div></div>
+                          <div className="flex justify-between"><div>Net Profit:</div><div>{((totalRevenueVal - totalPurchases) - totalExpensesVal).toLocaleString()}</div></div>
                         </div>
                         <div className="pt-2 border-t border-slate-200 flex justify-between font-black text-slate-900">
-                          <span>Equity & Liab:</span>
-                          <span className="text-emerald-600">Rs {(totalLiabilitiesVal + ownersEquityVal + ((totalRevenueVal - totalPurchases) - totalExpensesVal)).toLocaleString()}</span>
+                          <div>Equity & Liab:</div>
+                          <div className="text-emerald-600">Rs {(totalLiabilitiesVal + ownersEquityVal + ((totalRevenueVal - totalPurchases) - totalExpensesVal)).toLocaleString()}</div>
                         </div>
                       </div>
                     </div>
@@ -3455,11 +3411,11 @@ export default function AccountsPage() {
                       <div className="flex items-center gap-2">
                         <CheckSquare className="h-5 w-5 text-emerald-600" />
                         <div>
-                          <span className="text-[10px] font-black uppercase text-emerald-600">Balance Sheet Equation</span>
+                          <div className="text-[10px] font-black uppercase text-emerald-600">Balance Sheet Equation</div>
                           <p className="text-xs font-bold text-emerald-900">Assets = Liabilities + Equity (Verified Balance)</p>
                         </div>
                       </div>
-                      <span className="px-3 py-1 rounded-full text-[10px] font-black bg-emerald-600 text-white">EQUAL MATCH</span>
+                      <div className="px-3 py-1 rounded-full text-[10px] font-black bg-emerald-600 text-white">EQUAL MATCH</div>
                     </div>
                   </div>
                 </div>
@@ -3574,9 +3530,9 @@ export default function AccountsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Current Valuation at Cost */}
                   <div className="bg-gradient-to-br from-indigo-50/80 to-blue-50/40 p-4 rounded-2xl border border-indigo-200/70 shadow-xs">
-                    <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest block">
+                    <div className="text-[10px] font-black text-indigo-700 uppercase tracking-widest block">
                       Valuation at Cost ({valuationMethod === "fifo" ? "FIFO" : "Weighted Avg"})
-                    </span>
+                    </div>
                     <h4 className="text-xl font-black text-indigo-950 font-mono mt-1">
                       Rs {Math.round(activeCostVal).toLocaleString()}
                     </h4>
@@ -3587,9 +3543,9 @@ export default function AccountsPage() {
 
                   {/* Retail Realization Value */}
                   <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 p-4 rounded-2xl border border-slate-200 shadow-xs">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">
+                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">
                       Expected Retail Realization (MRP)
-                    </span>
+                    </div>
                     <h4 className="text-xl font-black text-slate-900 font-mono mt-1">
                       Rs {Math.round(totalRetailVal).toLocaleString()}
                     </h4>
@@ -3598,9 +3554,9 @@ export default function AccountsPage() {
 
                   {/* Potential Gross Margin */}
                   <div className="bg-gradient-to-br from-emerald-50/80 to-teal-50/40 p-4 rounded-2xl border border-emerald-200/70 shadow-xs">
-                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest block">
+                    <div className="text-[10px] font-black text-emerald-700 uppercase tracking-widest block">
                       Unrealized Gross Margin
-                    </span>
+                    </div>
                     <h4 className="text-xl font-black text-emerald-900 font-mono mt-1">
                       Rs {Math.round(unrealizedProfit).toLocaleString()}
                     </h4>
@@ -3611,9 +3567,9 @@ export default function AccountsPage() {
 
                   {/* Total Units in Stock */}
                   <div className="bg-gradient-to-br from-purple-50/80 to-pink-50/40 p-4 rounded-2xl border border-purple-200/70 shadow-xs">
-                    <span className="text-[10px] font-black text-purple-700 uppercase tracking-widest block">
+                    <div className="text-[10px] font-black text-purple-700 uppercase tracking-widest block">
                       Total In-Stock Quantity
-                    </span>
+                    </div>
                     <h4 className="text-xl font-black text-purple-950 font-mono mt-1">
                       {totalStockUnits.toLocaleString()} Units
                     </h4>
@@ -3690,21 +3646,21 @@ export default function AccountsPage() {
                                 <div>
                                   <p className="font-extrabold text-slate-900 text-xs">{p.name}</p>
                                   <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
-                                    {p.code && <span className="font-mono bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">{p.code}</span>}
-                                    <span>Unit: {p.unit}</span>
+                                    {p.code && <div className="font-mono bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">{p.code}</div>}
+                                    <div>Unit: {p.unit}</div>
                                     {p.batches && p.batches.length > 0 && (
-                                      <span className="text-indigo-600 font-bold">({p.batches.length} Batches)</span>
+                                      <div className="text-indigo-600 font-bold">({p.batches.length} Batches)</div>
                                     )}
                                   </div>
                                 </div>
                               </td>
 
                               <td className="py-3 px-3.5 text-center">
-                                <span className={`font-mono font-black text-xs px-2 py-0.5 rounded-lg border ${
+                                <div className={`font-mono font-black text-xs px-2 py-0.5 rounded-lg border ${
                                   qty > 0 ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-slate-100 text-slate-400 border-slate-200"
                                 }`}>
                                   {qty} {p.unit}
-                                </span>
+                                </div>
                               </td>
 
                               <td className="py-3 px-3.5 text-right font-mono text-slate-600">
@@ -3766,7 +3722,7 @@ export default function AccountsPage() {
                             </td>
                             <td className="py-2.5 px-3.5 text-xs font-bold">1 {code} = Rs {rate.toFixed(2)} PKR</td>
                             <td className="py-2.5 px-3.5 text-xs text-right">
-                              <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-black">ACTIVE</span>
+                              <div className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-black">ACTIVE</div>
                             </td>
                           </tr>
                         ))}
@@ -3804,7 +3760,7 @@ export default function AccountsPage() {
                     </div>
 
                     <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-center">
-                      <span className="text-[10px] font-black uppercase text-amber-600 block">PKR Equivalent Value</span>
+                      <div className="text-[10px] font-black uppercase text-amber-600 block">PKR Equivalent Value</div>
                       <div className="text-xl font-black text-amber-900">
                         Rs {(calcForeignAmt * (fxRates[calcCurr] || 1)).toLocaleString()} PKR
                       </div>
@@ -4163,7 +4119,7 @@ export default function AccountsPage() {
                         {/* Linked Customer/Supplier Subsidiary Ledger Select Option */}
                         {(line.account_code === "1002" || line.account_code === "2001") && (
                           <div className="flex items-center gap-2 pt-1.5 border-t border-slate-200/50">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Link Customer/Supplier (ذیلی کھاتہ):</span>
+                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Link Customer/Supplier (ذیلی کھاتہ):</div>
                             <select
                               value={line.party_id || ""}
                               onChange={e => handleJournalLineChange(idx, "party_id", e.target.value)}
@@ -4185,10 +4141,10 @@ export default function AccountsPage() {
                   {/* Balancing display */}
                   <div className="bg-slate-100 p-3 rounded-2xl border border-slate-200 flex justify-between text-[11px] font-black text-slate-700">
                     <div>
-                      Total Debits: <span className="text-blue-650">Rs {newJournalLines.reduce((sum, l) => sum + l.debit, 0).toLocaleString()}</span>
+                      Total Debits: <div className="text-blue-650">Rs {newJournalLines.reduce((sum, l) => sum + l.debit, 0).toLocaleString()}</div>
                     </div>
                     <div>
-                      Total Credits: <span className="text-emerald-650">Rs {newJournalLines.reduce((sum, l) => sum + l.credit, 0).toLocaleString()}</span>
+                      Total Credits: <div className="text-emerald-650">Rs {newJournalLines.reduce((sum, l) => sum + l.credit, 0).toLocaleString()}</div>
                     </div>
                     <div className={
                       newJournalLines.reduce((sum, l) => sum + l.debit, 0) === newJournalLines.reduce((sum, l) => sum + l.credit, 0)
@@ -4321,9 +4277,9 @@ export default function AccountsPage() {
                 <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                   <Edit2 size={16} className="text-blue-600" /> Edit Fixed Asset Details
                 </h3>
-                <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
+                <div className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
                   ID: #{editingAsset.id.slice(0, 6).toUpperCase()}
-                </span>
+                </div>
               </div>
 
               <form onSubmit={handleSaveAssetEdit} className="space-y-4 text-xs font-semibold">
@@ -4480,22 +4436,22 @@ export default function AccountsPage() {
                 {/* Summary Strip */}
                 <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/80 text-xs">
                   <div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wide block">Current Book Value</span>
-                    <span className="font-mono font-black text-blue-700 text-sm">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wide block">Current Book Value</div>
+                    <div className="font-mono font-black text-blue-700 text-sm">
                       Rs {Number(selectedHistoryAsset.current_value).toLocaleString()}
-                    </span>
+                    </div>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wide block">Acquisition Cost</span>
-                    <span className="font-mono font-bold text-slate-700">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wide block">Acquisition Cost</div>
+                    <div className="font-mono font-bold text-slate-700">
                       Rs {Number(selectedHistoryAsset.purchase_price).toLocaleString()}
-                    </span>
+                    </div>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wide block">Total Revisions</span>
-                    <span className="font-bold text-amber-700">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wide block">Total Revisions</div>
+                    <div className="font-bold text-amber-700">
                       {historyList.length} Version {historyList.length === 1 ? "Record" : "Records"}
-                    </span>
+                    </div>
                   </div>
                 </div>
 
@@ -4522,39 +4478,39 @@ export default function AccountsPage() {
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/50 pb-2 mb-2.5">
                             <div className="flex items-center gap-2">
-                              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                              <div className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
                                 isInitial 
                                   ? "bg-blue-100 text-blue-800" 
                                   : "bg-amber-100 text-amber-900"
                               }`}>
                                 {isInitial ? "Version #1 (Initial Creation)" : `Version #${entry.version || (historyList.length - idx)} (Revision)`}
-                              </span>
-                              <span className="text-xs font-bold text-slate-700">
+                              </div>
+                              <div className="text-xs font-bold text-slate-700">
                                 {entry.reason || (isInitial ? "Initial Asset Acquisition" : "Asset Details Updated")}
-                              </span>
+                              </div>
                             </div>
 
                             <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
                               <Clock size={11} />
-                              <span>{entry.edited_at ? new Date(entry.edited_at).toLocaleString() : "-"}</span>
-                              <span>· By: <strong className="text-slate-600">{entry.edited_by || "Admin"}</strong></span>
+                              <div>{entry.edited_at ? new Date(entry.edited_at).toLocaleString() : "-"}</div>
+                              <div>· By: <strong className="text-slate-600">{entry.edited_by || "Admin"}</strong></div>
                             </div>
                           </div>
 
                           {/* Changes diff */}
                           {entry.changes && entry.changes.length > 0 && (
                             <div className="space-y-1.5 mt-2">
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
+                              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">
                                 Field Modifications:
-                              </span>
+                              </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {entry.changes.map((ch: any, cIdx: number) => (
                                   <div key={cIdx} className="bg-white/80 border border-slate-200/80 p-2 rounded-xl text-[11px] space-y-0.5">
-                                    <span className="font-bold text-slate-500 text-[10px] block">{ch.field}</span>
+                                    <div className="font-bold text-slate-500 text-[10px] block">{ch.field}</div>
                                     <div className="flex items-center gap-1.5 font-mono">
-                                      <span className="text-rose-600 line-through text-[10px] bg-rose-50 px-1 py-0.2 rounded">{String(ch.from)}</span>
+                                      <div className="text-rose-600 line-through text-[10px] bg-rose-50 px-1 py-0.2 rounded">{String(ch.from)}</div>
                                       <ArrowRight size={10} className="text-slate-400" />
-                                      <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded">{String(ch.to)}</span>
+                                      <div className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded">{String(ch.to)}</div>
                                     </div>
                                   </div>
                                 ))}
@@ -4636,14 +4592,14 @@ export default function AccountsPage() {
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Link to Party (Optional)</label>
                   <select value={newCheque.party_id || ""} onChange={e => setNewCheque({ ...newCheque, party_id: e.target.value })} className="w-full h-9 rounded-xl border border-slate-200 text-xs px-3 focus:outline-none focus:ring-2 focus:ring-violet-500/30 font-bold text-slate-700 cursor-pointer">
-                    <option value="">— No Party —</option>
+                    <option value="">- No Party -</option>
                     {parties.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.type})</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Deposit to Account (on Clear)</label>
                   <select value={newCheque.account_id || ""} onChange={e => setNewCheque({ ...newCheque, account_id: e.target.value })} className="w-full h-9 rounded-xl border border-slate-200 text-xs px-3 focus:outline-none focus:ring-2 focus:ring-violet-500/30 font-bold text-slate-700 cursor-pointer">
-                    <option value="">— No Account —</option>
+                    <option value="">- No Account -</option>
                     {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>

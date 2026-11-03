@@ -287,7 +287,7 @@ export default function RestaurantOrdersPage() {
     }
     try {
       await markBillPrinted(supabase, order.id);
-      toast.success(isEn ? "Bill printed — tap Settle / Mark Paid" : "بل پرنٹ — اب Settle کریں");
+      toast.success(isEn ? "Bill printed - tap Settle / Mark Paid" : "بل پرنٹ - اب Settle کریں");
       scheduleSilentRefresh();
     } catch (e: any) {
       toast.error(e.message);
@@ -335,17 +335,11 @@ export default function RestaurantOrdersPage() {
 
   return (
     <div className="space-y-4 font-sans">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-            <ClipboardList className="text-blue-600" /> {isEn ? "Order History & Management" : "آرڈر ہسٹری"}
-          </h2>
-          
-        </div>
-        <div className="flex gap-2 items-center">
-          <span className="text-[10px] text-emerald-600 font-semibold hidden sm:inline" title={isEn ? "Live updates — no page blink" : "لائیو اپڈیٹ"}>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex gap-2 items-center flex-wrap">
+          <div className="text-[10px] text-emerald-600 font-semibold hidden sm:inline" title={isEn ? "Live updates - no page blink" : "لائیو اپڈیٹ"}>
             ● Live
-          </span>
+          </div>
           <Button
             variant="outline"
             onClick={() => {
@@ -366,7 +360,7 @@ export default function RestaurantOrdersPage() {
         </div>
       )}
 
-      {/* Filters — like src OrderHistoryDialog */}
+      {/* Filters - like src OrderHistoryDialog */}
       <div className="bg-white border rounded-xl p-4 flex flex-wrap gap-3 items-end">
         <div>
           <label className="text-[10px] font-bold text-slate-500 uppercase">Status</label>
@@ -409,7 +403,7 @@ export default function RestaurantOrdersPage() {
         </div>
       </div>
 
-      {/* Table — only full spinner on first load */}
+      {/* Table - only full spinner on first load */}
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm min-h-[200px]">
         {initialLoading && orders.length === 0 ? (
           <div className="py-16 flex justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
@@ -436,13 +430,13 @@ export default function RestaurantOrdersPage() {
                   const st = o.restaurant_order_status || (o.status !== "draft" ? "settled" : "pending");
                   const pay = getPaymentStatus(o);
                   const canSettle = o.status === "draft" && canMarkPaidInHistory(st, o.status);
-                  const itemSummary = o.invoice_items?.slice(0, 3).map((i) => `${i.quantity}x ${i.products?.name}`).join(", ") || "—";
+                  const itemSummary = o.invoice_items?.slice(0, 3).map((i) => `${i.quantity}x ${i.products?.name}`).join(", ") || "-";
                   const cust = o.customer_name || o.parties?.name || "Walk-in";
                   return (
                     <tr key={o.id} className="border-b border-slate-100 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="p-3 font-mono font-bold text-blue-700">{o.order_number || o.id.slice(0, 8).toUpperCase()}</td>
                       <td className="p-3 text-slate-600 whitespace-nowrap">{fmtDate(o.created_at)}</td>
-                      <td className="p-3 font-semibold">{cust}{o.customer_phone ? <span className="text-slate-400 block">{o.customer_phone}</span> : null}</td>
+                      <td className="p-3 font-semibold">{cust}{o.customer_phone ? <div className="text-slate-400 block">{o.customer_phone}</div> : null}</td>
                       <td className="p-3">{o.tableName}</td>
                       <td className="p-3 text-slate-600 max-w-[160px] truncate" title={itemSummary}>{itemSummary}</td>
                       <td className="p-3">
@@ -457,13 +451,13 @@ export default function RestaurantOrdersPage() {
                             ))}
                           </select>
                         ) : (
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${RESTAURANT_ORDER_STATUS_LABELS.settled.color}`}>Completed</span>
+                          <div className={`px-2 py-0.5 rounded text-[10px] font-bold border ${RESTAURANT_ORDER_STATUS_LABELS.settled.color}`}>Completed</div>
                         )}
                       </td>
                       <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${PAYMENT_STATUS_LABELS[pay]?.color || ""}`}>
+                        <div className={`px-2 py-0.5 rounded text-[10px] font-bold ${PAYMENT_STATUS_LABELS[pay]?.color || ""}`}>
                           {PAYMENT_STATUS_LABELS[pay]?.en || pay}
-                        </span>
+                        </div>
                       </td>
                       <td className="p-3 text-right font-mono font-bold">Rs {Number(o.total_amount).toLocaleString()}</td>
                       <td className="p-3">
@@ -512,10 +506,10 @@ export default function RestaurantOrdersPage() {
 
       {/* Pagination */}
       <div className="flex items-center justify-between text-xs text-slate-600">
-        <span>Total: {filtered.length} orders</span>
+        <div>Total: {filtered.length} orders</div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft size={14} /></Button>
-          <span>Page {page} of {totalPages}</span>
+          <div>Page {page} of {totalPages}</div>
           <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}><ChevronRight size={14} /></Button>
         </div>
       </div>

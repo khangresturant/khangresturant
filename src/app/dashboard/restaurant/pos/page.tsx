@@ -1289,7 +1289,7 @@ export default function RestaurantPOSPage() {
 
   if (!mounted) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50 w-full">
+      <div className="flex h-full min-h-[400px] items-center justify-center bg-slate-50 w-full">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -1298,7 +1298,7 @@ export default function RestaurantPOSPage() {
   const totalCartItemCount = cart.reduce((sum, it) => sum + it.quantity, 0);
 
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden bg-slate-100 font-sans select-none">
+    <div className="flex flex-col h-full w-full overflow-hidden bg-slate-100 font-sans select-none">
       {/* Branded Custom Restaurant POS Header */}
       <div
         className={`h-12 text-white border-b flex items-center justify-between px-3 md:px-4 shrink-0 shadow-md ${

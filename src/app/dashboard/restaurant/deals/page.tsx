@@ -240,13 +240,7 @@ export default function RestaurantDealsPage() {
 
   return (
     <div className="space-y-6 font-sans animate-in fade-in">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Tag className="text-orange-600" /> Deals & Menu Sizes
-          </h2>
-          <p className="text-slate-500 text-sm">Manage combo deals and Small/Medium/Large pricing like Fast Food Order View</p>
-        </div>
+      <div className="flex items-center justify-end gap-2">
         <div className="flex gap-2">
           <Button variant={tab === "deals" ? "default" : "outline"} onClick={() => setTab("deals")} className={tab === "deals" ? "bg-orange-600" : ""}>
             <Pizza size={14} className="mr-1" /> Deals
@@ -269,14 +263,14 @@ export default function RestaurantDealsPage() {
               <div key={deal.id} className={`bg-white border rounded-xl p-4 shadow-sm ${!deal.is_active ? "opacity-60" : ""}`}>
                 <div className="flex justify-between items-start">
                   <h3 className="font-bold text-slate-800">{deal.name}</h3>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">
+                  <div className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800">
                     -{dealSavingsPercent(Number(deal.original_price), Number(deal.deal_price))}%
-                  </span>
+                  </div>
                 </div>
                 {deal.description && <p className="text-xs text-slate-500 mt-1">{deal.description}</p>}
                 <div className="mt-3 flex items-baseline gap-2">
-                  <span className="text-sm line-through text-slate-400">Rs {Number(deal.original_price).toLocaleString()}</span>
-                  <span className="text-lg font-black text-orange-700">Rs {Number(deal.deal_price).toLocaleString()}</span>
+                  <div className="text-sm line-through text-slate-400">Rs {Number(deal.original_price).toLocaleString()}</div>
+                  <div className="text-lg font-black text-orange-700">Rs {Number(deal.deal_price).toLocaleString()}</div>
                 </div>
                 <ul className="mt-2 text-[10px] text-slate-600 space-y-0.5">
                   {(deal.restaurant_deal_items || []).map((i) => (
@@ -376,7 +370,7 @@ export default function RestaurantDealsPage() {
               </div>
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-slate-600">Deal Items</span>
+                  <div className="text-xs font-bold text-slate-600">Deal Items</div>
                   <Button size="sm" variant="outline" onClick={addItemToDeal}><Plus size={12} className="mr-1" /> Add Item</Button>
                 </div>
                 {form.items.map((it, idx) => (

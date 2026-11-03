@@ -86,15 +86,7 @@ export default function RestaurantStationsPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 py-4 font-sans">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-            <ChefHat className="text-amber-600" /> Kitchen Stations
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Grill / Fry / Oven / Bar — route KOTs and filter KDS. Kitchen hub = multi-kitchen grouping.
-          </p>
-        </div>
+      <div className="flex items-center justify-end gap-3">
         <Button variant="outline" onClick={seed} disabled={saving}>
           Seed defaults ({DEFAULT_STATIONS.length})
         </Button>

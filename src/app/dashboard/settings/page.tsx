@@ -562,12 +562,7 @@ export default function SettingsPage() {
     <div className="space-y-6 animate-in fade-in duration-500 font-sans pb-16">
       
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
-        <div>
-          <h2 className="text-lg font-black tracking-tight text-slate-900">{t("system_settings")}</h2>
-          
-        </div>
-
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4 border-b border-slate-200 pb-5">
         {/* Tab Switcher */}
         <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200/60 max-w-fit flex-wrap">
           <button
@@ -618,7 +613,7 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="flex items-center gap-1.5 text-indigo-600 text-xs font-bold group-hover:translate-x-1 transition-transform">
-          {t("open_wizard")} <span className="text-lg leading-none">→</span>
+          {t("open_wizard")} <div className="text-lg leading-none">→</div>
         </div>
       </a>
 
@@ -694,16 +689,16 @@ export default function SettingsPage() {
                     />
                     <div>
                       <label htmlFor="show_cost_price_on_pos_toggle" className="text-xs font-black text-slate-850 cursor-pointer select-none flex items-center gap-1.5 flex-wrap">
-                        <span>💰 Show Purchase / Cost Price on POS</span>
+                        <div>💰 Show Purchase / Cost Price on POS</div>
                       </label>
                       <p className="text-[10.5px] text-slate-500 mt-0.5 leading-relaxed">
                         Displays wholesale purchase price & profit margin badges on POS product cards and cart line items so cashiers know exact margins when giving discounts.
                       </p>
                     </div>
                   </div>
-                  <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 border ${showCostPriceOnPosVal ? "bg-emerald-100 text-emerald-900 border-emerald-300" : "bg-slate-200 text-slate-600 border-slate-300"}`}>
+                  <div className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 border ${showCostPriceOnPosVal ? "bg-emerald-100 text-emerald-900 border-emerald-300" : "bg-slate-200 text-slate-600 border-slate-300"}`}>
                     {showCostPriceOnPosVal ? "Enabled" : "Off"}
-                  </span>
+                  </div>
                 </div>
 
                 {industryTypeVal === "crockery" && (
@@ -726,7 +721,7 @@ export default function SettingsPage() {
                   <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300/80 p-4.5 rounded-2xl space-y-3.5 mt-4 shadow-sm">
                     <div className="flex items-center justify-between border-b border-emerald-200/70 pb-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-xl">🏥</span>
+                        <div className="text-xl">🏥</div>
                         <div>
                           <h4 className="text-sm font-black text-emerald-950 flex items-center gap-2">
                             Medical Store & Pharmacy Settings
@@ -734,9 +729,9 @@ export default function SettingsPage() {
                           <p className="text-[11px] text-emerald-800 font-medium">Configure FEFO batch printing, expiry dates, and shelf locations on receipts.</p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-extrabold bg-emerald-200/90 text-emerald-900 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                      <div className="text-[10px] font-extrabold bg-emerald-200/90 text-emerald-900 px-2.5 py-1 rounded-full uppercase tracking-wider">
                         Pharmacy POS
-                      </span>
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-1 gap-2.5">
@@ -807,7 +802,7 @@ export default function SettingsPage() {
                 <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-400 p-5 rounded-2xl space-y-4 mt-4 shadow-sm">
                   <div className="flex items-center justify-between border-b border-emerald-200/80 pb-3">
                     <div className="flex items-center gap-3">
-                      <span className="text-2xl">🇵🇰</span>
+                      <div className="text-2xl">🇵🇰</div>
                       <div>
                         <h4 className="text-sm font-black text-emerald-950 flex items-center gap-2">
                           FBR Digital Invoicing &amp; Tax Compliance
@@ -817,11 +812,11 @@ export default function SettingsPage() {
                         </p>
                       </div>
                     </div>
-                    <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
+                    <div className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
                       enableFbrVal ? "bg-emerald-600 text-white shadow-sm" : "bg-slate-200 text-slate-600"
                     }`}>
                       {enableFbrVal ? "FBR Active" : "Disabled"}
-                    </span>
+                    </div>
                   </div>
 
                   {/* Main FBR Switch Checkbox */}
@@ -855,7 +850,7 @@ export default function SettingsPage() {
                         {/* POS ID */}
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            FBR POS ID <span className="text-rose-500">*</span>
+                            FBR POS ID <div className="text-rose-500">*</div>
                           </label>
                           <Input 
                             placeholder="e.g. 104523"
@@ -945,7 +940,7 @@ export default function SettingsPage() {
                               }}
                               className="h-9 rounded-xl font-bold bg-white text-xs w-28"
                             />
-                            <span className="text-xs font-bold text-slate-600">% GST</span>
+                            <div className="text-xs font-bold text-slate-600">% GST</div>
                           </div>
                         </div>
 
@@ -961,9 +956,9 @@ export default function SettingsPage() {
                               }}
                               className="w-4.5 h-4.5 text-emerald-600 rounded cursor-pointer accent-emerald-600"
                             />
-                            <span className="text-xs font-bold text-slate-800">
+                            <div className="text-xs font-bold text-slate-800">
                               Print Official FBR QR Code on Customer Receipts
-                            </span>
+                            </div>
                           </label>
                         </div>
                       </div>
@@ -972,7 +967,7 @@ export default function SettingsPage() {
                       <div className="flex items-center justify-between gap-3 p-3 bg-white border border-emerald-200/90 rounded-xl mt-2">
                         <div>
                           <p className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                            <span>⚡</span> FBR Connection Diagnostic Tool
+                            <div>⚡</div> FBR Connection Diagnostic Tool
                           </p>
                           <p className="text-[10.5px] text-slate-500">
                             Verify whether POS ID and gateway endpoints respond correctly.
@@ -1001,8 +996,8 @@ export default function SettingsPage() {
                             ? "bg-emerald-100/90 text-emerald-900 border-emerald-300" 
                             : "bg-rose-100 text-rose-900 border-rose-300"
                         }`}>
-                          <span>{fbrTestResult.status === "success" ? "✅" : "⚠️"}</span>
-                          <span>{fbrTestResult.message}</span>
+                          <div>{fbrTestResult.status === "success" ? "✅" : "⚠️"}</div>
+                          <div>{fbrTestResult.message}</div>
                         </div>
                       )}
                     </div>
@@ -1220,27 +1215,27 @@ export default function SettingsPage() {
 
                 <div className="space-y-4 text-xs mt-3">
                   <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
-                    <span className="text-slate-500">{t("active_operator_name")}:</span>
-                    <span className="font-extrabold text-slate-800">{userName || "Operator Admin"}</span>
+                    <div className="text-slate-500">{t("active_operator_name")}:</div>
+                    <div className="font-extrabold text-slate-800">{userName || "Operator Admin"}</div>
                   </div>
                   
                   <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
-                    <span className="text-slate-500">{t("role_level_permission")}:</span>
-                    <span className="bg-blue-50 text-blue-800 text-[10px] px-2.5 py-0.5 rounded font-black uppercase">
+                    <div className="text-slate-500">{t("role_level_permission")}:</div>
+                    <div className="bg-blue-50 text-blue-800 text-[10px] px-2.5 py-0.5 rounded font-black uppercase">
                       {userRole || "Superadmin"}
-                    </span>
+                    </div>
                   </div>
 
                   <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
-                    <span className="text-slate-500">{t("active_store_branch_id")}:</span>
-                    <span className="font-mono text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100">{shopId}</span>
+                    <div className="text-slate-500">{t("active_store_branch_id")}:</div>
+                    <div className="font-mono text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100">{shopId}</div>
                   </div>
 
                   <div className="flex justify-between items-center py-2.5">
-                    <span className="text-slate-500">{t("cloud_sync_server")}:</span>
-                    <span className="text-emerald-600 font-bold flex items-center gap-1">
+                    <div className="text-slate-500">{t("cloud_sync_server")}:</div>
+                    <div className="text-emerald-600 font-bold flex items-center gap-1">
                       <Shield size={12} /> Supabase Secure Cloud (Active)
-                    </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1295,8 +1290,8 @@ export default function SettingsPage() {
                               : "bg-white border-slate-200 hover:border-slate-350 text-slate-500"
                           } ${isEnglish ? "opacity-60 cursor-not-allowed" : ""}`}
                         >
-                          <span className="text-xs font-black block">{lang.native}</span>
-                          <span className="text-[9px] text-slate-400 font-semibold uppercase mt-0.5">{lang.label}</span>
+                          <div className="text-xs font-black block">{lang.native}</div>
+                          <div className="text-[9px] text-slate-400 font-semibold uppercase mt-0.5">{lang.label}</div>
                         </button>
                       );
                     })}
@@ -1364,9 +1359,9 @@ export default function SettingsPage() {
                       <label className="block text-[9px] font-bold text-slate-450 uppercase">
                         Business & POS Timezone (ٹائم زون سیٹنگ)
                       </label>
-                      <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md flex items-center gap-1">
                         <Clock size={11} /> {getCurrentTimezonePreview(selectedTimezoneVal).time}
-                      </span>
+                      </div>
                     </div>
                     <select
                       value={selectedTimezoneVal}
@@ -1384,7 +1379,7 @@ export default function SettingsPage() {
                       ))}
                     </select>
                     <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                      Active Zone: <span className="font-bold text-slate-600">{getCurrentTimezonePreview(selectedTimezoneVal).resolvedTimezone}</span> — {getCurrentTimezonePreview(selectedTimezoneVal).date}
+                      Active Zone: <div className="font-bold text-slate-600">{getCurrentTimezonePreview(selectedTimezoneVal).resolvedTimezone}</div> - {getCurrentTimezonePreview(selectedTimezoneVal).date}
                     </p>
                   </div>
 
@@ -1499,8 +1494,8 @@ export default function SettingsPage() {
                   {/* Font Size Adjuster */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 flex justify-between">
-                      <span>Base Font Size</span>
-                      <span className="font-bold text-slate-700">{receiptSettings.fontSize}px</span>
+                      <div>Base Font Size</div>
+                      <div className="font-bold text-slate-700">{receiptSettings.fontSize}px</div>
                     </label>
                     <div className="flex items-center gap-3">
                       <input 
@@ -1551,7 +1546,7 @@ export default function SettingsPage() {
                     
                     {/* Custom Hex Color */}
                     <div className="flex items-center gap-2 ml-2 border border-slate-200 pl-2 pr-1 h-9 rounded-xl">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase">Custom:</span>
+                      <div className="text-[10px] text-slate-400 font-bold uppercase">Custom:</div>
                       <input 
                         type="color"
                         value={receiptSettings.primaryColor}
@@ -1575,9 +1570,9 @@ export default function SettingsPage() {
                   <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                     <Sliders className="text-indigo-600" size={16} /> Thermal Print Margins & Paper Calibration (پرنٹ مارجن سیٹنگز)
                   </h3>
-                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full">
+                  <div className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full">
                     Zero-Cut Protection
-                  </span>
+                  </div>
                 </div>
 
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
@@ -1586,7 +1581,7 @@ export default function SettingsPage() {
 
                 {/* Quick Calibration Presets */}
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">Quick Presets:</span>
+                  <div className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">Quick Presets:</div>
                   <button
                     type="button"
                     onClick={() => setReceiptSettings(prev => ({ ...prev, marginLeft: 0, marginRight: 0, marginTop: 0, marginBottom: 0 }))}
@@ -1625,8 +1620,8 @@ export default function SettingsPage() {
                         Left Margin (بایاں مارجن)
                       </label>
                       <div className="flex items-center gap-1 font-mono font-black text-indigo-600 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-xs shadow-xs">
-                        <span>{receiptSettings.marginLeft || 0}</span>
-                        <span className="text-[10px] text-slate-400">mm</span>
+                        <div>{receiptSettings.marginLeft || 0}</div>
+                        <div className="text-[10px] text-slate-400">mm</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1650,8 +1645,8 @@ export default function SettingsPage() {
                         Right Margin (دایاں مارجن)
                       </label>
                       <div className="flex items-center gap-1 font-mono font-black text-indigo-600 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-xs shadow-xs">
-                        <span>{receiptSettings.marginRight || 0}</span>
-                        <span className="text-[10px] text-slate-400">mm</span>
+                        <div>{receiptSettings.marginRight || 0}</div>
+                        <div className="text-[10px] text-slate-400">mm</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1675,8 +1670,8 @@ export default function SettingsPage() {
                         Top Margin (اوپری مارجن)
                       </label>
                       <div className="flex items-center gap-1 font-mono font-black text-indigo-600 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-xs shadow-xs">
-                        <span>{receiptSettings.marginTop || 0}</span>
-                        <span className="text-[10px] text-slate-400">mm</span>
+                        <div>{receiptSettings.marginTop || 0}</div>
+                        <div className="text-[10px] text-slate-400">mm</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1700,8 +1695,8 @@ export default function SettingsPage() {
                         Bottom Paper Feed (نیچلا فیڈ کٹر فاصلہ)
                       </label>
                       <div className="flex items-center gap-1 font-mono font-black text-indigo-600 bg-white px-2 py-0.5 rounded-md border border-slate-200 text-xs shadow-xs">
-                        <span>{receiptSettings.marginBottom || 0}</span>
-                        <span className="text-[10px] text-slate-400">mm</span>
+                        <div>{receiptSettings.marginBottom || 0}</div>
+                        <div className="text-[10px] text-slate-400">mm</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -1789,7 +1784,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, showPhone: e.target.checked }))}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-700">Show Phone</span>
+                    <div className="text-xs font-bold text-slate-700">Show Phone</div>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
@@ -1799,7 +1794,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, showAddress: e.target.checked }))}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-700">Show Address</span>
+                    <div className="text-xs font-bold text-slate-700">Show Address</div>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
@@ -1809,7 +1804,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, showEmail: e.target.checked }))}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-700">Show Email</span>
+                    <div className="text-xs font-bold text-slate-700">Show Email</div>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
@@ -1819,7 +1814,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, showWebsite: e.target.checked }))}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-700">Show Website</span>
+                    <div className="text-xs font-bold text-slate-700">Show Website</div>
                   </label>
 
                   {/* Logo Options */}
@@ -1830,7 +1825,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, showLogo: e.target.checked }))}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-700">Show Logo Image</span>
+                    <div className="text-xs font-bold text-slate-700">Show Logo Image</div>
                   </label>
 
                   {/* Invoice / Meta info */}
@@ -1841,7 +1836,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, showCustomerInfo: e.target.checked }))}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-700">Customer Details</span>
+                    <div className="text-xs font-bold text-slate-700">Customer Details</div>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
@@ -1851,7 +1846,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, showPaymentMode: e.target.checked }))}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-700">Payment Methods</span>
+                    <div className="text-xs font-bold text-slate-700">Payment Methods</div>
                   </label>
 
                   {/* Items columns */}
@@ -1862,7 +1857,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, showItemCode: e.target.checked }))}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-700">Product Codes</span>
+                    <div className="text-xs font-bold text-slate-700">Product Codes</div>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
@@ -1872,7 +1867,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, showDiscount: e.target.checked }))}
                       className="w-4 h-4 text-blue-600 rounded cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-700">Tax & Discounts</span>
+                    <div className="text-xs font-bold text-slate-700">Tax & Discounts</div>
                   </label>
 
                   {/* Medical Store / Pharmacy Dedicated Toggles */}
@@ -1885,7 +1880,7 @@ export default function SettingsPage() {
                           onChange={(e) => setReceiptSettings(prev => ({ ...prev, showBatchNumber: e.target.checked }))}
                           className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
                         />
-                        <span className="text-xs font-bold text-emerald-950">Show Batch No</span>
+                        <div className="text-xs font-bold text-emerald-950">Show Batch No</div>
                       </label>
 
                       <label className="flex items-center gap-2 cursor-pointer bg-emerald-50/60 hover:bg-emerald-100/60 p-2 rounded-xl border border-emerald-200 select-none">
@@ -1895,7 +1890,7 @@ export default function SettingsPage() {
                           onChange={(e) => setReceiptSettings(prev => ({ ...prev, showExpiryDate: e.target.checked }))}
                           className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
                         />
-                        <span className="text-xs font-bold text-emerald-950">Show Expiry Date</span>
+                        <div className="text-xs font-bold text-emerald-950">Show Expiry Date</div>
                       </label>
 
                       <label className="flex items-center gap-2 cursor-pointer bg-amber-50/60 hover:bg-amber-100/60 p-2 rounded-xl border border-amber-200 select-none">
@@ -1905,7 +1900,7 @@ export default function SettingsPage() {
                           onChange={(e) => setReceiptSettings(prev => ({ ...prev, showShelfLocation: e.target.checked }))}
                           className="w-4 h-4 text-amber-600 rounded cursor-pointer"
                         />
-                        <span className="text-xs font-bold text-amber-950">Show Shelf / Rack</span>
+                        <div className="text-xs font-bold text-amber-950">Show Shelf / Rack</div>
                       </label>
 
                       <label className="flex items-center gap-2 cursor-pointer bg-red-50/60 hover:bg-red-100/60 p-2 rounded-xl border border-red-200 select-none">
@@ -1915,7 +1910,7 @@ export default function SettingsPage() {
                           onChange={(e) => setReceiptSettings(prev => ({ ...prev, mandatoryControlledDrugForm: e.target.checked }))}
                           className="w-4 h-4 text-red-600 rounded cursor-pointer"
                         />
-                        <span className="text-xs font-bold text-red-950">Controlled Drug Rx Form (Schedule G)</span>
+                        <div className="text-xs font-bold text-red-950">Controlled Drug Rx Form (Schedule G)</div>
                       </label>
                     </>
                   )}
@@ -1930,7 +1925,7 @@ export default function SettingsPage() {
                       }}
                       className="w-4 h-4 text-emerald-600 rounded cursor-pointer accent-emerald-600"
                     />
-                    <span className="text-xs font-bold text-emerald-950">🇵🇰 FBR Tax Badge &amp; QR</span>
+                    <div className="text-xs font-bold text-emerald-950">🇵🇰 FBR Tax Badge &amp; QR</div>
                   </label>
                 </div>
 
@@ -2019,7 +2014,7 @@ export default function SettingsPage() {
               {/* Direct Silent Thermal Printing Guide Card */}
               <div className="bg-gradient-to-br from-indigo-950 to-slate-900 text-white p-4 rounded-3xl border border-indigo-800/40 shadow-lg space-y-2.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-base">⚡</span>
+                  <div className="text-base">⚡</div>
                   <div>
                     <h4 className="text-xs font-black text-white">Direct Silent Printing (Zero-Dialog)</h4>
                     <p className="text-[10px] text-indigo-300">براؤزر کا پرنٹ ڈائیلاگ کھولے بغیر ڈائریکٹ پرنٹر سے پرچی نکالیں</p>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Check, ChevronDown, LogOut, Plus } from "lucide-react";
+import { Building2, Check, ChevronDown, LogOut, Pin, Plus } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { useShop } from "@/context/ShopContext";
 import { UserProfileModal } from "@/components/dashboard/UserProfileModal";
@@ -12,6 +12,8 @@ import { isFlame9Brand } from "@/lib/deployment/flame9-brand";
 
 type SidebarFooterProps = {
   showCollapsed: boolean;
+  isPinned: boolean;
+  onTogglePin: () => void;
 };
 
 type UserShop = {
@@ -20,7 +22,7 @@ type UserShop = {
   industryType: string;
 };
 
-export function SidebarFooter({ showCollapsed }: SidebarFooterProps) {
+export function SidebarFooter({ showCollapsed, isPinned, onTogglePin }: SidebarFooterProps) {
   const { t } = useLanguage();
   const { shopId, userName, shopName, userRole, loading } = useShop();
   const supabase = createClient();
@@ -108,44 +110,44 @@ export function SidebarFooter({ showCollapsed }: SidebarFooterProps) {
 
   return (
     <>
-      <div className={`sb-footer p-3.5 shrink-0 ${showCollapsed ? "flex justify-center" : ""}`}>
-        <div className={`flex items-center justify-between gap-3 ${showCollapsed ? "flex-col py-1" : ""}`}>
-          <div className="flex items-center gap-3 min-w-0">
+      <div className={`sb-footer p-3 shrink-0 border-t border-slate-200/80 bg-slate-50/70 ${showCollapsed ? "flex flex-col items-center gap-2" : ""}`}>
+        <div className={`flex items-center justify-between gap-2.5 ${showCollapsed ? "flex-col py-1" : ""}`}>
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div
               onClick={() => setIsProfileModalOpen(true)}
-              className="sb-avatar h-9 w-9 rounded-full flex items-center justify-center border-2 shrink-0 cursor-pointer hover:scale-105 transition-transform"
+              className="h-8 w-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-xs shrink-0 cursor-pointer hover:bg-slate-800 transition-colors shadow-2xs"
               title="View Executive Profile"
             >
-              <span className="text-white font-bold text-sm">{userName?.charAt(0)?.toUpperCase() || "U"}</span>
+              <p className="font-extrabold text-xs">{userName?.charAt(0)?.toUpperCase() || "U"}</p>
             </div>
             {!showCollapsed && (
               <div className="flex-1 min-w-0">
                 {loading ? (
                   <div className="space-y-1.5">
-                    <div className="h-3 w-16 sb-skeleton rounded animate-pulse" />
-                    <div className="h-2 w-20 sb-skeleton rounded animate-pulse" />
+                    <div className="h-3 w-16 bg-slate-200/70 rounded animate-pulse" />
+                    <div className="h-2 w-20 bg-slate-200/50 rounded animate-pulse" />
                   </div>
                 ) : (
                   <>
                     <div className="relative">
                       <button
                         onClick={() => setIsSwitcherOpen((open) => !open)}
-                        className="sb-shop-name flex items-center gap-1 text-[13px] font-bold transition-colors w-full text-left truncate justify-between group cursor-pointer"
+                        className="flex items-center gap-1 text-[13px] font-bold text-slate-800 hover:text-slate-900 transition-colors w-full text-left truncate justify-between group cursor-pointer"
                       >
-                        <span className="truncate">{shopName || "My Shop"}</span>
+                        <p className="truncate font-bold text-xs text-slate-900">{shopName || "My Store"}</p>
                         <ChevronDown
-                          size={11}
-                          className="sb-meta shrink-0 transition-transform duration-200"
+                          size={12}
+                          className="text-slate-400 shrink-0 transition-transform duration-200 group-hover:text-slate-600"
                           style={{ transform: isSwitcherOpen ? "rotate(180deg)" : "none" }}
                         />
                       </button>
 
                       {isSwitcherOpen && (
-                        <div className="sb-panel absolute bottom-full left-0 mb-3 w-56 rounded-2xl shadow-2xl p-1.5 space-y-1 z-[9999] border">
-                          <p className="sb-menu-heading text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 select-none border-b">
+                        <div className="sb-panel absolute bottom-full left-0 mb-3 w-56 rounded-2xl shadow-2xl p-1.5 space-y-1 z-[9999] border bg-white border-slate-200">
+                          <p className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 select-none border-b border-slate-100 text-slate-400">
                             Switch Business
                           </p>
-                          <div className="max-h-40 overflow-y-auto custom-scrollbar p-0.5 space-y-0.5">
+                          <div className="max-h-40 overflow-y-auto no-scrollbar p-0.5 space-y-0.5">
                             {myShops.map((shop) => {
                               const isCurrent = shop.id === shopId;
                               return (
@@ -156,15 +158,15 @@ export function SidebarFooter({ showCollapsed }: SidebarFooterProps) {
                                     setIsSwitcherOpen(false);
                                   }}
                                   disabled={isCurrent}
-                                  className={`sb-menu-item w-full text-left px-2.5 py-2 rounded-xl text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                                    isCurrent ? "is-current-shop" : ""
+                                  className={`w-full text-left px-2.5 py-2 rounded-xl text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                                    isCurrent ? "bg-slate-900 text-white font-bold" : "hover:bg-slate-100 text-slate-700"
                                   }`}
                                 >
                                   <div className="truncate pr-2">
                                     <p className="truncate font-extrabold leading-tight">{shop.name}</p>
                                     <p
                                       className={`text-[8px] uppercase tracking-wider font-semibold mt-0.5 ${
-                                        isCurrent ? "text-white/80" : "sb-meta"
+                                        isCurrent ? "text-slate-300" : "text-slate-400"
                                       }`}
                                     >
                                       {shop.industryType}
@@ -175,11 +177,11 @@ export function SidebarFooter({ showCollapsed }: SidebarFooterProps) {
                               );
                             })}
                           </div>
-                          <div className="sb-divider border-t my-1" />
+                          <div className="border-t border-slate-100 my-1" />
                           <Link
                             href="/register?new=true"
                             onClick={() => setIsSwitcherOpen(false)}
-                            className="sb-accent-link flex items-center gap-1.5 w-full text-left px-2.5 py-2 rounded-xl text-[10px] font-black transition-colors uppercase tracking-wider"
+                            className="flex items-center gap-1.5 w-full text-left px-2.5 py-2 rounded-xl text-[10px] font-black transition-colors uppercase tracking-wider text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                           >
                             <Plus size={12} className="stroke-[3]" /> Register New Business
                           </Link>
@@ -187,14 +189,14 @@ export function SidebarFooter({ showCollapsed }: SidebarFooterProps) {
                             <Link
                               href="/dashboard/my-businesses"
                               onClick={() => setIsSwitcherOpen(false)}
-                              className="sb-accent-link flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-[10px] font-black transition-colors uppercase tracking-wider"
+                              className="flex items-center justify-between w-full px-2.5 py-2 rounded-xl text-[10px] font-black transition-colors uppercase tracking-wider text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                             >
                               <div className="flex items-center gap-1.5">
                                 <Building2 size={12} className="stroke-[3]" /> My Businesses
                               </div>
-                              <span className="sb-badge px-1.5 py-0.5 rounded-full text-[8px] font-black border">
+                              <div className="px-1.5 py-0.5 rounded-full text-[8px] font-black border bg-slate-100 text-slate-700 border-slate-200">
                                 {myShops.length}
-                              </span>
+                              </div>
                             </Link>
                           )}
                         </div>
@@ -202,7 +204,7 @@ export function SidebarFooter({ showCollapsed }: SidebarFooterProps) {
                     </div>
                     <button
                       onClick={() => setIsProfileModalOpen(true)}
-                      className="sb-meta text-[10px] truncate capitalize leading-tight mt-0.5 text-left w-full cursor-pointer transition-colors"
+                      className="text-[10px] font-medium text-slate-500 truncate capitalize leading-tight mt-0.5 text-left w-full cursor-pointer hover:text-slate-900 transition-colors"
                     >
                       {userRole} • {userName}
                     </button>
@@ -211,13 +213,50 @@ export function SidebarFooter({ showCollapsed }: SidebarFooterProps) {
               </div>
             )}
           </div>
+
           {!showCollapsed && !loading && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={onTogglePin}
+                className={`p-1.5 rounded-lg transition-all duration-150 cursor-pointer ${
+                  isPinned
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-400 hover:text-slate-900 hover:bg-slate-100"
+                }`}
+                title={isPinned ? "Unpin Sidebar (Collapse on leave)" : "Pin Sidebar (Keep expanded)"}
+              >
+                <Pin
+                  size={15}
+                  className={`transition-transform duration-150 ${isPinned ? "rotate-45 fill-current" : ""}`}
+                />
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0 cursor-pointer"
+                title={t("logout")}
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          )}
+
+          {showCollapsed && (
             <button
-              onClick={handleLogout}
-              className="sb-icon-btn p-1.5 rounded-lg transition-all duration-200 shrink-0 cursor-pointer"
-              title={t("logout")}
+              type="button"
+              onClick={onTogglePin}
+              className={`p-2 rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center ${
+                isPinned
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "text-slate-400 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+              title={isPinned ? "Unpin Sidebar (Collapse on leave)" : "Pin Sidebar (Keep expanded)"}
             >
-              <LogOut size={14} />
+              <Pin
+                size={15}
+                className={`transition-transform duration-150 ${isPinned ? "rotate-45 fill-current" : ""}`}
+              />
             </button>
           )}
         </div>

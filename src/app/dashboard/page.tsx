@@ -5,8 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   Activity, CreditCard, DollarSign, Users, Loader2, 
   TrendingUp, AlertTriangle, ArrowUpRight, ShoppingBag, 
-  PlusCircle, FileText, ArrowRightLeft, UserPlus, Wallet
+  PlusCircle, FileText, ArrowRightLeft, UserPlus, Wallet,
+  ChevronDown, Truck, Scale, TrendingDown, Percent, Boxes, Coins, ShieldAlert,
+  Bike, PieChart, CalendarCheck, CheckCircle2, Clock, UtensilsCrossed, UserCheck, Sparkles
 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useShop } from "@/context/ShopContext";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -17,6 +20,7 @@ import { isBrowserOffline } from "@/lib/sync/offlineData";
 import { loadShopSnapshot } from "@/utils/syncQueue";
 import { toast } from "sonner";
 import { MobileQuickActionsStrip } from "@/components/mobile/MobileQuickActionsStrip";
+import { DashboardFloatingQuickActions } from "@/components/dashboard/DashboardFloatingQuickActions";
 import { formatDateTime } from "@/lib/timezone";
 
 type RecentTxItem = {
@@ -53,6 +57,29 @@ type CategorySaleItem = {
   value: number;
 };
 
+type TopSellingItem = {
+  name: string;
+  quantity: number;
+  revenue: number;
+  category: string;
+};
+
+type RiderFleetItem = {
+  id: string;
+  name: string;
+  role: string;
+  isOnRide: boolean;
+  activeOrder?: any;
+};
+
+type StaffAttendanceItem = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+};
+
 export default function DashboardPage() {
   const { shopId, industryType, timezone } = useShop();
   const supabase = createClient();
@@ -79,6 +106,34 @@ export default function DashboardPage() {
   const [rawShowroomInstallments, setRawShowroomInstallments] = useState<any[]>([]);
   const [rawShowroomParties, setRawShowroomParties] = useState<any[]>([]);
 
+  const [showAuditCards, setShowAuditCards] = useState(false);
+  const [rawExpenses, setRawExpenses] = useState<any[]>([]);
+  const [rawCashAccounts, setRawCashAccounts] = useState<any[]>([]);
+  const [rawAllParties, setRawAllParties] = useState<any[]>([]);
+
+  const [auditStats, setAuditStats] = useState({
+    accountsPayable: 0,
+    accountsPayableCount: 0,
+    netWorkingCapital: 0,
+    totalExpenses: 0,
+    grossProfit: 0,
+    grossMarginPercent: 35,
+    cashInHand: 0,
+    digitalRevenue: 0,
+    inventoryCostValue: 0,
+    lowStockCount: 0,
+    averageOrderValue: 0,
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("dashboard_show_audit_cards");
+      if (saved === "true") {
+        setShowAuditCards(true);
+      }
+    }
+  }, []);
+
   // Calculated UI States
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -95,6 +150,12 @@ export default function DashboardPage() {
   const [nearExpiryAlerts, setNearExpiryAlerts] = useState<ExpiryAlertItem[]>([]);
   const [salesTrend, setSalesTrend] = useState<ChartPoint[]>([]);
   const [categorySales, setCategorySales] = useState<CategorySaleItem[]>([]);
+  const [topSellingItems, setTopSellingItems] = useState<TopSellingItem[]>([]);
+  const [pieChartTab, setPieChartTab] = useState<"profit" | "category" | "products">("profit");
+  const [rawStaffList, setRawStaffList] = useState<any[]>([]);
+  const [rawActiveDeliveries, setRawActiveDeliveries] = useState<any[]>([]);
+  const [ridersFleet, setRidersFleet] = useState<RiderFleetItem[]>([]);
+  const [staffAttendance, setStaffAttendance] = useState<StaffAttendanceItem[]>([]);
 
   useEffect(() => {
     if (!shopId) return;
@@ -143,7 +204,7 @@ export default function DashboardPage() {
             } catch {}
           });
 
-          toast.message("Offline mode — dashboard using cached data", {
+          toast.message("Offline mode - dashboard using cached data", {
             description: cached.savedAt
               ? `Last synced ${new Date(cached.savedAt).toLocaleString()}`
               : undefined,
@@ -158,7 +219,7 @@ export default function DashboardPage() {
       // Fetch all independent queries in parallel to drastically improve loading speeds (AUTH-03)
       const [
         invoicesRes,
-        customersRes,
+        partiesRes,
         recentRes,
         productsRes,
         expiryRes,
@@ -166,6 +227,10 @@ export default function DashboardPage() {
         showroomVehiclesRes,
         showroomInstallmentsRes,
         showroomPartiesRes,
+        expensesRes,
+        cashAccountsRes,
+        staffRes,
+        activeDeliveriesRes,
       ] = await Promise.all([
         supabase
           .from("invoices")
@@ -175,9 +240,8 @@ export default function DashboardPage() {
           .neq("status", "draft"),
         supabase
           .from("parties")
-          .select("type, current_balance, created_at")
-          .eq("shop_id", shopId)
-          .eq("type", "customer"),
+          .select("id, name, type, current_balance, created_at")
+          .eq("shop_id", shopId),
         supabase
           .from("invoices")
           .select(`
@@ -192,10 +256,10 @@ export default function DashboardPage() {
           .eq("is_voided", false)
           .neq("status", "draft")
           .order("created_at", { ascending: false })
-          .limit(5),
+          .limit(8),
         supabase
           .from("products")
-          .select("id, name, current_stock, min_stock_level, unit")
+          .select("id, name, current_stock, min_stock_level, unit, purchase_price_single, sale_price_single")
           .eq("shop_id", shopId),
         industryType === "pharmacy"
           ? supabase
@@ -231,14 +295,41 @@ export default function DashboardPage() {
           .from("showroom_parties")
           .select("id, name, phone, party_type, current_balance, created_at")
           .eq("shop_id", shopId),
+        supabase
+          .from("expenses")
+          .select("id, amount, created_at")
+          .eq("shop_id", shopId)
+          .then((r: any) => r, () => ({ data: [], error: null })),
+        supabase
+          .from("cash_accounts")
+          .select("id, name, current_balance, type")
+          .eq("shop_id", shopId)
+          .then((r: any) => r, () => ({ data: [], error: null })),
+        supabase
+          .from("user_profiles")
+          .select("id, name, email, role, permissions, is_offline")
+          .eq("shop_id", shopId)
+          .order("name")
+          .then((r: any) => r, () => ({ data: [], error: null })),
+        supabase
+          .from("invoices")
+          .select("id, invoice_number, status, payment_mode, service_type, rider_id, total_amount, created_at")
+          .eq("shop_id", shopId)
+          .eq("is_voided", false)
+          .not("rider_id", "is", null)
+          .in("status", ["pending", "preparing", "ready", "delivered", "out_for_delivery"])
+          .then((r: any) => r, () => ({ data: [], error: null })),
       ]);
 
       if (invoicesRes.error) throw invoicesRes.error;
-      if (customersRes.error) throw customersRes.error;
+      if (partiesRes.error) throw partiesRes.error;
       if (recentRes.error) throw recentRes.error;
 
+      const allParties = partiesRes.data || [];
+      const customersOnly = allParties.filter((p: any) => p.type === "customer" || !p.type);
       setRawInvoices(invoicesRes.data || []);
-      setRawCustomers(customersRes.data || []);
+      setRawCustomers(customersOnly);
+      setRawAllParties(allParties);
       setRawRecent(recentRes.data || []);
       setRawProducts(productsRes.data || []);
       setRawExpiry(expiryRes.data || []);
@@ -246,6 +337,10 @@ export default function DashboardPage() {
       setRawShowroomVehicles(showroomVehiclesRes.data || []);
       setRawShowroomInstallments(showroomInstallmentsRes.data || []);
       setRawShowroomParties(showroomPartiesRes.data || []);
+      setRawExpenses(expensesRes?.data || []);
+      setRawCashAccounts(cashAccountsRes?.data || []);
+      setRawStaffList(staffRes?.data || []);
+      setRawActiveDeliveries(activeDeliveriesRes?.data || []);
 
     } catch (err: any) {
       console.error("Dashboard statistics loading failed:", err.message);
@@ -418,6 +513,80 @@ export default function DashboardPage() {
       (rawShowroomParties || []).filter((p: any) => isInTimeframe(p.created_at, timeFilter)).length +
       (rawShowroomInstallments || []).filter((i: any) => isInTimeframe(i.created_at, timeFilter)).length;
 
+    // ── CA Audit & Executive Controls Calculations ───────────────────────
+    // 1. Accounts Payable (money owed to suppliers/vendors)
+    const suppliers = (rawAllParties || []).filter((p: any) => p.type === "supplier");
+    const accountsPayable = suppliers
+      .filter((s: any) => safeNum(s.current_balance) > 0)
+      .reduce((sum: number, s: any) => sum + safeNum(s.current_balance), 0);
+    const accountsPayableCount = suppliers.filter((s: any) => safeNum(s.current_balance) > 0).length;
+
+    // 2. Net Working Capital (Accounts Receivable - Accounts Payable)
+    const netWorkingCapital = activeUdhaar - accountsPayable;
+
+    // 3. Operating Expenses logged in selected timeframe
+    const totalExpenses = (rawExpenses || [])
+      .filter((e: any) => isInTimeframe(e.created_at, timeFilter))
+      .reduce((sum: number, e: any) => sum + safeNum(e.amount), 0);
+
+    // 4. Total Inventory Asset Valuation at Cost (stock * purchase_cost)
+    const inventoryCostValue = (rawProducts || []).reduce(
+      (sum: number, p: any) =>
+        sum +
+        Math.max(0, safeNum(p.current_stock)) *
+          safeNum(p.purchase_price_single || (p.sale_price_single ? p.sale_price_single * 0.7 : 0)),
+      0
+    );
+
+    // 5. Critical Stockout / Low stock deficit count
+    const lowStockCount = (rawProducts || []).filter(
+      (p: any) => safeNum(p.current_stock) <= safeNum(p.min_stock_level)
+    ).length;
+
+    // 6. Digital & Card Volume (non-cash, non-credit)
+    const digitalRevenue = realInvoices
+      .filter((inv: any) => {
+        const mode = (inv.payment_mode || "").toLowerCase();
+        return (
+          mode === "card" ||
+          mode === "bank" ||
+          mode === "online" ||
+          mode === "digital" ||
+          mode === "pos" ||
+          mode === "qr"
+        );
+      })
+      .reduce((sum: number, inv: any) => sum + safeNum(inv.total_amount), 0);
+
+    // 7. Liquid Cash in Hand (till drawer cash)
+    const cashInAccounts = (rawCashAccounts || [])
+      .filter((a: any) => !a.type || a.type.toLowerCase() === "cash")
+      .reduce((sum: number, a: any) => sum + safeNum(a.current_balance), 0);
+    const cashCollected = realInvoices
+      .filter((inv: any) => (inv.payment_mode || "").toLowerCase() === "cash")
+      .reduce((sum: number, inv: any) => sum + safeNum(inv.total_amount), 0);
+    const cashInHand = cashInAccounts > 0 ? cashInAccounts : Math.max(0, cashCollected - totalExpenses);
+
+    // 8. Estimated Gross Profit & Margin %
+    const estimatedCogs = totalRevenue * 0.65;
+    const grossProfit = Math.max(0, totalRevenue - estimatedCogs);
+    const grossMarginPercent = totalRevenue > 0 ? Math.round((grossProfit / totalRevenue) * 100) : 35;
+    const averageOrderValue = totalInvoicesCount > 0 ? Math.round(totalRevenue / totalInvoicesCount) : 0;
+
+    setAuditStats({
+      accountsPayable,
+      accountsPayableCount,
+      netWorkingCapital,
+      totalExpenses,
+      grossProfit,
+      grossMarginPercent,
+      cashInHand,
+      digitalRevenue,
+      inventoryCostValue,
+      lowStockCount,
+      averageOrderValue,
+    });
+
     setStats({
       totalRevenue,
       activeUdhaar,
@@ -459,11 +628,70 @@ export default function DashboardPage() {
 
     const combinedRecent = [...retailRecent, ...showroomRecent]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5);
+      .slice(0, 8);
 
     setRecentTx(combinedRecent);
 
-    // 7. Calculate 7-day sales trend (combines retail invoices + showroom vehicle sales)
+    // 7. Top Selling Products, Deals & Packages
+    const productMap: Record<string, TopSellingItem> = {};
+    (filteredRecentItems || []).forEach((item: any) => {
+      const prodName = item.products?.name || "Standard Item";
+      const catName = item.products?.categories?.name || item.products?.category?.name || "General";
+      if (!productMap[prodName]) {
+        productMap[prodName] = { name: prodName, quantity: 0, revenue: 0, category: catName };
+      }
+      productMap[prodName].quantity += safeNum(item.quantity) || 1;
+      productMap[prodName].revenue += safeNum(item.subtotal);
+    });
+
+    const sortedTopItems = Object.values(productMap)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+    setTopSellingItems(sortedTopItems);
+
+    // 8. Staff Attendance Roster for Today
+    const todayDateStr = new Date().toISOString().split("T")[0];
+    const staffAtt = (rawStaffList || []).map((s: any) => {
+      const perms = (s.permissions || {}) as any;
+      const attMap = perms.attendance || {};
+      const status = attMap[todayDateStr] || "present";
+      return {
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        role: s.role || "salesman",
+        status,
+      };
+    });
+    setStaffAttendance(staffAtt);
+
+    // 9. Delivery Fleet & Rider Status
+    const activeRiderOrderMap: Record<string, any> = {};
+    (rawActiveDeliveries || []).forEach((inv: any) => {
+      if (inv.rider_id) {
+        activeRiderOrderMap[inv.rider_id] = inv;
+      }
+    });
+
+    const candidateRiders = (rawStaffList || []).filter((s: any) => {
+      const r = (s.role || "").toLowerCase();
+      const n = (s.name || "").toLowerCase();
+      return r.includes("rider") || r.includes("delivery") || n.includes("rider") || !!activeRiderOrderMap[s.id];
+    });
+
+    const finalRiders = (candidateRiders.length > 0 ? candidateRiders : (rawStaffList || []).slice(0, 4)).map((s: any) => {
+      const activeOrder = activeRiderOrderMap[s.id];
+      return {
+        id: s.id,
+        name: s.name,
+        role: s.role || "Rider",
+        isOnRide: !!activeOrder,
+        activeOrder: activeOrder || null,
+      };
+    });
+    setRidersFleet(finalRiders);
+
+    // 10. Calculate 7-day sales trend (combines retail invoices + showroom vehicle sales)
     const trendData: ChartPoint[] = [];
     const trendInvoices = rawInvoices.filter((inv: any) => inv.status !== "quotation" && inv.payment_mode !== "quotation");
     const trendVehicles = (rawShowroomVehicles || []).filter((v: any) => v.status === "sold" || v.status === "installment_active");
@@ -496,7 +724,7 @@ export default function DashboardPage() {
     }
     setSalesTrend(trendData);
 
-  }, [rawInvoices, rawCustomers, rawRecent, rawProducts, rawExpiry, rawRecentItems, rawShowroomVehicles, rawShowroomInstallments, rawShowroomParties, timeFilter, industryType, shopId]);
+  }, [rawInvoices, rawCustomers, rawRecent, rawProducts, rawExpiry, rawRecentItems, rawShowroomVehicles, rawShowroomInstallments, rawShowroomParties, rawStaffList, rawActiveDeliveries, timeFilter, industryType, shopId]);
 
   // Rendering SVG line chart coordinates helper
   const maxTrendAmount = Math.max(...salesTrend.map(t => t.amount), 1000);
@@ -517,14 +745,8 @@ export default function DashboardPage() {
     <div className="space-y-3.5 md:space-y-4 animate-in fade-in duration-300 font-sans text-slate-800">
       <MobileQuickActionsStrip />
       
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5 border-b border-slate-200/80 pb-2.5">
-        <div>
-          <h2 className="text-lg md:text-xl font-black tracking-tight text-slate-900">
-            {t("executive_command_center")}
-          </h2>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto w-full sm:w-auto">
+      <div className="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-2.5 border-b border-slate-200/80 pb-2.5">
+        <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto w-full sm:w-auto justify-end">
           {/* Time Filter Segmented Control */}
           <div className="bg-slate-100 p-0.5 rounded-lg flex items-center border border-slate-200 overflow-x-auto max-w-full scrollbar-none shadow-2xs">
             {(["today", "yesterday", "week", "month", "all"] as const).map((filter) => (
@@ -568,156 +790,348 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             
             {/* Card 1: Revenue */}
-            <div className="bg-gradient-to-br from-indigo-600 to-blue-700 p-3.5 rounded-2xl text-white shadow-md shadow-blue-500/10 relative overflow-hidden transition-all hover:shadow-lg">
-              <div className="absolute right-0 top-0 translate-x-2 -translate-y-2 opacity-15">
-                <DollarSign size={58} />
-              </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-100">{t("net_gross_revenue")}</span>
-                <span className="bg-white/20 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">Live</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <DollarSign size={14} className="text-blue-600 shrink-0" />
+                  <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                    {t("net_gross_revenue")}
+                  </p>
+                </div>
+                <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 shrink-0">
+                  Live
+                </div>
               </div>
-              <div className="text-xl md:text-2xl font-black mt-1.5">
+              <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
                 Rs {stats.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
-              <p className="text-[11px] text-blue-100/90 font-medium mt-2 flex items-center gap-1">
-                <TrendingUp size={12} /> {stats.totalInvoicesCount} {t("invoices_recorded_ledger")}
+              <p className="text-[11px] text-slate-500 font-medium mt-1 truncate flex items-center gap-1">
+                <TrendingUp size={12} className="text-blue-600 shrink-0" /> {stats.totalInvoicesCount} {t("invoices_recorded_ledger")}
               </p>
             </div>
 
             {/* Card 2: Active Udhaar */}
-            <div className="bg-gradient-to-br from-rose-500 to-red-600 p-3.5 rounded-2xl text-white shadow-md shadow-rose-500/10 relative overflow-hidden transition-all hover:shadow-lg">
-              <div className="absolute right-0 top-0 translate-x-2 -translate-y-2 opacity-15">
-                <CreditCard size={58} />
-              </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-100">{t("outstanding_udhaar")}</span>
-                <span className="bg-white/20 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">Khata</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <CreditCard size={14} className="text-rose-600 shrink-0" />
+                  <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                    {t("outstanding_udhaar")}
+                  </p>
+                </div>
+                <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100 shrink-0">
+                  Khata
+                </div>
               </div>
-              <div className="text-xl md:text-2xl font-black mt-1.5">
+              <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
                 Rs {stats.activeUdhaar.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
-              <p className="text-[11px] text-rose-100/90 font-medium mt-2 flex items-center gap-1">
-                <AlertTriangle size={12} className="animate-pulse" /> {stats.outstandingAccountsCount} {t("customer_accounts_pending")}
+              <p className="text-[11px] text-slate-500 font-medium mt-1 truncate flex items-center gap-1">
+                <AlertTriangle size={12} className="text-rose-600 shrink-0" /> {stats.outstandingAccountsCount} {t("customer_accounts_pending")}
               </p>
             </div>
 
             {/* Card 3: Total Customers */}
-            <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-3.5 rounded-2xl text-white shadow-md shadow-emerald-500/10 relative overflow-hidden transition-all hover:shadow-lg">
-              <div className="absolute right-0 top-0 translate-x-2 -translate-y-2 opacity-15">
-                <Users size={58} />
-              </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">{t("registered_parties")}</span>
-                <span className="bg-white/20 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">Profiles</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Users size={14} className="text-emerald-600 shrink-0" />
+                  <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                    {t("registered_parties")}
+                  </p>
+                </div>
+                <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 shrink-0">
+                  Profiles
+                </div>
               </div>
-              <div className="text-xl md:text-2xl font-black mt-1.5">
+              <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
                 {stats.totalCustomers}
               </div>
-              <p className="text-[11px] text-emerald-100/90 font-medium mt-2 flex items-center gap-1">
-                <PlusCircle size={12} /> +{stats.newCustomersToday} {t("newly_registered_today")}
+              <p className="text-[11px] text-slate-500 font-medium mt-1 truncate flex items-center gap-1">
+                <PlusCircle size={12} className="text-emerald-600 shrink-0" /> +{stats.newCustomersToday} {t("newly_registered_today")}
               </p>
             </div>
 
             {/* Card 4: Daily Invoices */}
-            <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-3.5 rounded-2xl text-white shadow-md shadow-amber-500/10 relative overflow-hidden transition-all hover:shadow-lg">
-              <div className="absolute right-0 top-0 translate-x-2 -translate-y-2 opacity-15">
-                <Activity size={58} />
-              </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-100">{t("sales_transactions")}</span>
-                <span className="bg-white/20 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">Today</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Activity size={14} className="text-amber-600 shrink-0" />
+                  <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                    {t("sales_transactions")}
+                  </p>
+                </div>
+                <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 shrink-0">
+                  Today
+                </div>
               </div>
-              <div className="text-xl md:text-2xl font-black mt-1.5">
+              <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
                 +{stats.dailyInvoices}
               </div>
-              <p className="text-[11px] text-amber-100/90 font-medium mt-2 flex items-center gap-1">
-                <TrendingUp size={12} /> {t("daily_invoice_traffic")}
+              <p className="text-[11px] text-slate-500 font-medium mt-1 truncate flex items-center gap-1">
+                <TrendingUp size={12} className="text-amber-600 shrink-0" /> {t("daily_invoice_traffic")}
               </p>
             </div>
           </div>
 
-          {/* Quick Actions Hub — desktop; mobile uses strip above */}
-          <div className="hidden md:block bg-white p-3 rounded-2xl border border-slate-200/80 shadow-2xs">
-            {industryType === "showroom" ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <Link href="/dashboard/showroom/sales" className="flex items-center gap-2.5 p-2 bg-emerald-50/60 hover:bg-emerald-50 border border-emerald-100/80 rounded-xl transition-colors">
-                  <span className="p-1.5 bg-emerald-600 text-white rounded-lg"><DollarSign size={13} /></span>
-                  <div className="text-left min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">Vehicle Sales Desk</p>
-                    <p className="text-[10px] text-slate-400 truncate">نقد و بیع نامہ فروخت</p>
-                  </div>
-                </Link>
-                <Link href="/dashboard/showroom/installments" className="flex items-center gap-2.5 p-2 bg-purple-50/60 hover:bg-purple-50 border border-purple-100/80 rounded-xl transition-colors">
-                  <span className="p-1.5 bg-purple-600 text-white rounded-lg"><CreditCard size={13} /></span>
-                  <div className="text-left min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">Installments & EMI</p>
-                    <p className="text-[10px] text-slate-400 truncate">اقساط و معاہدات پلان</p>
-                  </div>
-                </Link>
-                <Link href="/dashboard/showroom/vehicles" className="flex items-center gap-2.5 p-2 bg-indigo-50/60 hover:bg-indigo-50 border border-indigo-100/80 rounded-xl transition-colors">
-                  <span className="p-1.5 bg-indigo-600 text-white rounded-lg"><PlusCircle size={13} /></span>
-                  <div className="text-left min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">Vehicle Inventory</p>
-                    <p className="text-[10px] text-slate-400 truncate">گاڑی و موٹر سائیکل اسٹاک</p>
-                  </div>
-                </Link>
-                <Link href="/dashboard/showroom/reports" className="flex items-center gap-2.5 p-2 bg-blue-50/60 hover:bg-blue-50 border border-blue-100/80 rounded-xl transition-colors">
-                  <span className="p-1.5 bg-blue-600 text-white rounded-lg"><FileText size={13} /></span>
-                  <div className="text-left min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">Showroom Reports</p>
-                    <p className="text-[10px] text-slate-400 truncate">مالیت، سیلز و نفع/نقصان</p>
-                  </div>
-                </Link>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <Link href="/dashboard/pos" className="flex items-center gap-2.5 p-2 bg-blue-50/50 hover:bg-blue-50 border border-blue-100/80 rounded-xl transition-colors">
-                  <span className="p-1.5 bg-blue-600 text-white rounded-lg"><ShoppingBag size={13} /></span>
-                  <div className="text-left min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{t("pos_billing")}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{t("launch_register_terminal")}</p>
-                  </div>
-                </Link>
-                <Link href="/dashboard/products" className="flex items-center gap-2.5 p-2 bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-100/80 rounded-xl transition-colors">
-                  <span className="p-1.5 bg-indigo-600 text-white rounded-lg"><PlusCircle size={13} /></span>
-                  <div className="text-left min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{t("add_inventory")}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{t("manage_catalog_stocks")}</p>
-                  </div>
-                </Link>
-                <Link href="/dashboard/expenses" className="flex items-center gap-2.5 p-2 bg-amber-50/50 hover:bg-amber-50 border border-amber-100/80 rounded-xl transition-colors">
-                  <span className="p-1.5 bg-amber-600 text-white rounded-lg"><ArrowRightLeft size={13} /></span>
-                  <div className="text-left min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{t("log_expense")}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{t("record_operations_outflow")}</p>
-                  </div>
-                </Link>
-                <Link href="/dashboard/reports" className="flex items-center gap-2.5 p-2 bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100/80 rounded-xl transition-colors">
-                  <span className="p-1.5 bg-emerald-600 text-white rounded-lg"><FileText size={13} /></span>
-                  <div className="text-left min-w-0">
-                    <p className="text-xs font-bold text-slate-800 truncate">{t("reports_center")}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{t("print_pdf_statements")}</p>
-                  </div>
-                </Link>
-              </div>
-            )}
+          {/* Section Dropdown Bar: Expand / Collapse 8 Professional Audit Cards */}
+          <div className="flex items-center justify-between px-1 py-1">
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+              <p className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">
+                Executive Audit & Financial Controls
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowAuditCards((prev) => {
+                  const next = !prev;
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("dashboard_show_audit_cards", String(next));
+                  }
+                  return next;
+                });
+              }}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200/90 shadow-2xs transition-all active:scale-95 cursor-pointer"
+              aria-expanded={showAuditCards}
+            >
+              <p>{showAuditCards ? "Collapse Audit Cards" : "Expand 8 Audit Cards (CA Deck)"}</p>
+              <ChevronDown
+                size={14}
+                className={`text-slate-500 transition-transform duration-200 ${
+                  showAuditCards ? "rotate-180 text-sky-600" : ""
+                }`}
+              />
+            </button>
           </div>
 
-          {/* Main Visual Panels */}
+          {/* 8 Expanded Professional CA Financial & Audit Cards */}
+          <AnimatePresence>
+            {showAuditCards && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 md:gap-3.5 pt-0.5">
+                  {/* Audit Card 1: Accounts Payable */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Truck size={14} className="text-slate-500 shrink-0" />
+                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                          Accounts Payable (AP)
+                        </p>
+                      </div>
+                      <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100 shrink-0">
+                        Liabilities
+                      </div>
+                    </div>
+                    <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
+                      Rs {auditStats.accountsPayable.toLocaleString()}
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                      {auditStats.accountsPayableCount} vendor balances pending
+                    </p>
+                  </div>
+
+                  {/* Audit Card 2: Net Working Capital */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Scale size={14} className="text-slate-500 shrink-0" />
+                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                          Net Working Capital
+                        </p>
+                      </div>
+                      <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
+                        Solvency
+                      </div>
+                    </div>
+                    <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
+                      Rs {auditStats.netWorkingCapital.toLocaleString()}
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                      Receivables vs Vendor Payables
+                    </p>
+                  </div>
+
+                  {/* Audit Card 3: Operating Expenses */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <TrendingDown size={14} className="text-slate-500 shrink-0" />
+                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                          Operating Expenses
+                        </p>
+                      </div>
+                      <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-100 shrink-0">
+                        Opex
+                      </div>
+                    </div>
+                    <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
+                      Rs {auditStats.totalExpenses.toLocaleString()}
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                      Logged operational costs & overheads
+                    </p>
+                  </div>
+
+                  {/* Audit Card 4: Estimated Gross Profit */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Percent size={14} className="text-slate-500 shrink-0" />
+                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                          Est. Gross Profit
+                        </p>
+                      </div>
+                      <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 shrink-0">
+                        {auditStats.grossMarginPercent}% Margin
+                      </div>
+                    </div>
+                    <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
+                      Rs {auditStats.grossProfit.toLocaleString()}
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                      Turnover net of estimated goods cost
+                    </p>
+                  </div>
+
+                  {/* Audit Card 5: Liquid Cash in Hand */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Coins size={14} className="text-slate-500 shrink-0" />
+                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                          Cash in Hand & Till
+                        </p>
+                      </div>
+                      <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 shrink-0">
+                        Liquidity
+                      </div>
+                    </div>
+                    <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
+                      Rs {auditStats.cashInHand.toLocaleString()}
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                      Physical liquid cash in till/registers
+                    </p>
+                  </div>
+
+                  {/* Audit Card 6: Digital & Card Volume */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <CreditCard size={14} className="text-slate-500 shrink-0" />
+                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                          Digital & Card Volume
+                        </p>
+                      </div>
+                      <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100 shrink-0">
+                        Bank / POS
+                      </div>
+                    </div>
+                    <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
+                      Rs {auditStats.digitalRevenue.toLocaleString()}
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                      Card, Online & QR collections
+                    </p>
+                  </div>
+
+                  {/* Audit Card 7: Total Inventory Valuation at Cost */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Boxes size={14} className="text-slate-500 shrink-0" />
+                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                          Inventory Asset Value
+                        </p>
+                      </div>
+                      <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-100 shrink-0">
+                        Asset
+                      </div>
+                    </div>
+                    <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
+                      Rs {auditStats.inventoryCostValue.toLocaleString()}
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                      Current warehouse stock worth at cost
+                    </p>
+                  </div>
+
+                  {/* Audit Card 8: Critical Stock Deficit */}
+                  <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <ShieldAlert size={14} className="text-slate-500 shrink-0" />
+                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider truncate">
+                          Critical Stock Alerts
+                        </p>
+                      </div>
+                      <div className={`text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 ${
+                        auditStats.lowStockCount > 0
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      }`}>
+                        {auditStats.lowStockCount > 0 ? "Reorder Needed" : "Optimal"}
+                      </div>
+                    </div>
+                    <div className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1.5 truncate">
+                      {auditStats.lowStockCount} Products
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                      Items below minimum safety threshold
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+                    {/* Row 1: Sales Trend Analysis + Animated Donut Chart (CA P&L, Categories, Top Deals) & Delivery Fleet (Riders) */}
           <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
             
-            {/* Sales Trend SVG Area Chart */}
-            <Card className="w-full min-w-0 lg:col-span-8 shadow-2xs border-slate-200 rounded-2xl bg-white overflow-hidden flex flex-col justify-between">
-              <CardHeader className="pb-1 pt-3.5 px-4">
-                <div className="flex justify-between items-center">
+            {/* Left: Sales Trend SVG Area Chart & CA Executive Financial Strip */}
+            <Card className="w-full min-w-0 lg:col-span-7 shadow-2xs border-slate-200 rounded-2xl bg-white overflow-hidden flex flex-col justify-between">
+              <CardHeader className="pb-2 pt-3.5 px-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <CardTitle className="text-sm font-black text-slate-800 flex items-center gap-2">
-                    <TrendingUp className="text-blue-500" size={16} /> {t("sales_trend_analysis")}
+                    <TrendingUp className="text-blue-600" size={16} /> {t("sales_trend_analysis")}
                   </CardTitle>
-                  <span className="text-[9px] text-slate-400 font-bold bg-slate-100 px-2 py-0.5 rounded-md uppercase">{t("last_7_days")}</span>
+                  <div className="text-[9px] text-slate-400 font-bold bg-slate-100 px-2 py-0.5 rounded-md uppercase self-start sm:self-auto">
+                    {t("last_7_days")}
+                  </div>
+                </div>
+
+                {/* CA Executive P&L Financial Strip */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 mt-2">
+                  <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Gross Sales</p>
+                    <p className="text-xs font-black text-slate-900 mt-0.5">Rs {stats.totalRevenue.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Est. COGS</p>
+                    <p className="text-xs font-black text-amber-700 mt-0.5">Rs {Math.round(stats.totalRevenue * 0.65).toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Gross Profit</p>
+                    <p className="text-xs font-black text-emerald-700 mt-0.5">Rs {auditStats.grossProfit.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Net Margin</p>
+                    <p className="text-xs font-black text-indigo-700 mt-0.5">{auditStats.grossMarginPercent}%</p>
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent className="flex-1 flex flex-col justify-end pt-2 pb-2 px-4">
-                <div className="w-full relative h-[140px]">
+
+              <CardContent className="flex-1 flex flex-col justify-end pt-1 pb-3 px-4">
+                <div className="w-full relative h-[145px]">
                   {salesTrend.length === 0 ? (
                     <div className="absolute inset-0 flex justify-center items-center text-xs text-slate-400">No chart data</div>
                   ) : (
@@ -751,11 +1165,9 @@ export default function DashboardPage() {
                       {chartPoints.map((p, idx) => (
                         <g key={idx} className="group cursor-pointer">
                           <circle cx={p.x} cy={p.y} r="4" fill="#ffffff" stroke="#2563eb" strokeWidth="2" />
-                          {/* Value display on top of point */}
                           <text x={p.x} y={p.y - 7} textAnchor="middle" className="text-[8px] font-black fill-slate-700 bg-white opacity-0 group-hover:opacity-100 transition-opacity">
                             Rs {Math.round(p.amount).toLocaleString()}
                           </text>
-                          {/* Bottom X Axis Labels */}
                           <text x={p.x} y={svgHeight - 3} textAnchor="middle" className="text-[8.5px] font-bold fill-slate-500">
                             {p.label}
                           </text>
@@ -767,67 +1179,339 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Top Category Breakouts Bar Chart */}
-            <Card className="w-full min-w-0 lg:col-span-4 shadow-2xs border-slate-200 rounded-2xl bg-white flex flex-col justify-between">
-              <CardHeader className="pb-1 pt-3.5 px-4">
-                <CardTitle className="text-sm font-black text-slate-800">{t("category_breakdown")}</CardTitle>
+            {/* Right: Modern Animated Donut / Pie Chart + Delivery Fleet (Riders) */}
+            <Card className="w-full min-w-0 lg:col-span-5 shadow-2xs border-slate-200 rounded-2xl bg-white flex flex-col justify-between">
+              <CardHeader className="pb-2 pt-3.5 px-4 border-b border-slate-100">
+                <div className="flex items-center justify-between gap-1.5">
+                  <CardTitle className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                    <PieChart className="text-purple-600" size={16} /> Financial & Sales Distribution
+                  </CardTitle>
+                </div>
+
+                {/* Tab Switcher: P&L vs Category vs Top Products */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setPieChartTab("profit")}
+                    className={`flex-1 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                      pieChartTab === "profit"
+                        ? "bg-white text-slate-900 shadow-2xs font-black"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    CA P&L Split
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPieChartTab("category")}
+                    className={`flex-1 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                      pieChartTab === "category"
+                        ? "bg-white text-slate-900 shadow-2xs font-black"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    Categories
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPieChartTab("products")}
+                    className={`flex-1 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                      pieChartTab === "products"
+                        ? "bg-white text-slate-900 shadow-2xs font-black"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    Top Deals
+                  </button>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-2.5 pt-2 pb-3 px-4 flex-1 flex flex-col justify-center">
-                {categorySales.length === 0 ? (
-                  <p className="text-xs text-slate-400 font-semibold py-6 text-center">{t("no_category_sales")}</p>
-                ) : (
-                  categorySales.map((cat, idx) => {
-                    const maxVal = categorySales[0].value || 1;
-                    const pct = (cat.value / maxVal) * 100;
-                    const colors = [
-                      "bg-blue-600",
-                      "bg-indigo-600",
-                      "bg-emerald-600",
-                      "bg-amber-600"
-                    ];
-                    return (
-                      <div key={cat.name} className="space-y-1">
-                        <div className="flex justify-between text-xs font-bold text-slate-700">
-                          <span className="truncate pr-2">{cat.name}</span>
-                          <span>Rs {Math.round(cat.value).toLocaleString()}</span>
+
+              <CardContent className="pt-3 pb-3 px-4 flex-1 flex flex-col justify-between space-y-3">
+                {/* SVG Donut Chart + Legend */}
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  {/* Modern Donut SVG */}
+                  <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
+                    <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                      {/* Background circle track */}
+                      <circle cx="50" cy="50" r="38" fill="transparent" stroke="#f1f5f9" strokeWidth="12" />
+
+                      {/* Donut Segments */}
+                      {pieChartTab === "profit" && (() => {
+                        const total = Math.max(stats.totalRevenue, 1);
+                        const cogsVal = Math.round(stats.totalRevenue * 0.65);
+                        const profitVal = auditStats.grossProfit;
+                        const expVal = Math.min(auditStats.totalExpenses, stats.totalRevenue);
+                        const circ = 2 * Math.PI * 38; // ~238.76
+
+                        const pProfit = profitVal / total;
+                        const pCogs = cogsVal / total;
+                        const pExp = expVal / total;
+
+                        const offProfit = 0;
+                        const offCogs = -(pProfit * circ);
+                        const offExp = -((pProfit + pCogs) * circ);
+
+                        return (
+                          <>
+                            {/* Profit Segment */}
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="38"
+                              fill="transparent"
+                              stroke="#10b981"
+                              strokeWidth="12"
+                              strokeDasharray={`${pProfit * circ} ${circ}`}
+                              strokeDashoffset={offProfit}
+                              className="transition-all duration-500"
+                            />
+                            {/* COGS Segment */}
+                            <circle
+                              cx="50"
+                              cy="50"
+                              r="38"
+                              fill="transparent"
+                              stroke="#f59e0b"
+                              strokeWidth="12"
+                              strokeDasharray={`${pCogs * circ} ${circ}`}
+                              strokeDashoffset={offCogs}
+                              className="transition-all duration-500"
+                            />
+                            {/* Expenses Segment */}
+                            {pExp > 0 && (
+                              <circle
+                                cx="50"
+                                cy="50"
+                                r="38"
+                                fill="transparent"
+                                stroke="#f43f5e"
+                                strokeWidth="12"
+                                strokeDasharray={`${pExp * circ} ${circ}`}
+                                strokeDashoffset={offExp}
+                                className="transition-all duration-500"
+                              />
+                            )}
+                          </>
+                        );
+                      })()}
+
+                      {pieChartTab === "category" && (() => {
+                        const total = categorySales.reduce((sum, c) => sum + c.value, 0) || 1;
+                        const circ = 2 * Math.PI * 38;
+                        const colors = ["#3b82f6", "#8b5cf6", "#ec4899", "#10b981", "#f59e0b"];
+                        let cumm = 0;
+
+                        return categorySales.map((cat, idx) => {
+                          const pct = cat.value / total;
+                          const offset = -(cumm * circ);
+                          cumm += pct;
+                          return (
+                            <circle
+                              key={cat.name}
+                              cx="50"
+                              cy="50"
+                              r="38"
+                              fill="transparent"
+                              stroke={colors[idx % colors.length]}
+                              strokeWidth="12"
+                              strokeDasharray={`${pct * circ} ${circ}`}
+                              strokeDashoffset={offset}
+                              className="transition-all duration-500"
+                            />
+                          );
+                        });
+                      })()}
+
+                      {pieChartTab === "products" && (() => {
+                        const total = topSellingItems.reduce((sum, p) => sum + p.revenue, 0) || 1;
+                        const circ = 2 * Math.PI * 38;
+                        const colors = ["#6366f1", "#06b6d4", "#10b981", "#f59e0b", "#ec4899"];
+                        let cumm = 0;
+
+                        return topSellingItems.map((prod, idx) => {
+                          const pct = prod.revenue / total;
+                          const offset = -(cumm * circ);
+                          cumm += pct;
+                          return (
+                            <circle
+                              key={prod.name}
+                              cx="50"
+                              cy="50"
+                              r="38"
+                              fill="transparent"
+                              stroke={colors[idx % colors.length]}
+                              strokeWidth="12"
+                              strokeDasharray={`${pct * circ} ${circ}`}
+                              strokeDashoffset={offset}
+                              className="transition-all duration-500"
+                            />
+                          );
+                        });
+                      })()}
+                    </svg>
+
+                    {/* Donut Center Display */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <p className="text-[11px] font-black text-slate-900 leading-none">
+                        {pieChartTab === "profit" 
+                          ? `${auditStats.grossMarginPercent}%` 
+                          : pieChartTab === "category" 
+                            ? `${categorySales.length}` 
+                            : `${topSellingItems.length}`}
+                      </p>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5 leading-none">
+                        {pieChartTab === "profit" ? "Margin" : pieChartTab === "category" ? "Categories" : "Deals"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Donut Slices Breakdown Details */}
+                  <div className="flex-1 w-full space-y-1.5 min-w-0">
+                    {pieChartTab === "profit" && (
+                      <>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                            <p className="font-bold text-slate-700 truncate">Est. Gross Profit</p>
+                          </div>
+                          <p className="font-black text-emerald-700 shrink-0">Rs {auditStats.grossProfit.toLocaleString()}</p>
                         </div>
-                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full ${colors[idx % colors.length]}`} 
-                            style={{ width: `${pct}%` }}
-                          />
+                        <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                            <p className="font-bold text-slate-700 truncate">Cost of Goods (COGS)</p>
+                          </div>
+                          <p className="font-black text-amber-700 shrink-0">Rs {Math.round(stats.totalRevenue * 0.65).toLocaleString()}</p>
                         </div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
+                            <p className="font-bold text-slate-700 truncate">Operating Expenses</p>
+                          </div>
+                          <p className="font-black text-rose-700 shrink-0">Rs {auditStats.totalExpenses.toLocaleString()}</p>
+                        </div>
+                      </>
+                    )}
+
+                    {pieChartTab === "category" && (
+                      categorySales.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 font-medium py-2 text-center">No category sales recorded yet</p>
+                      ) : (
+                        categorySales.slice(0, 3).map((cat, idx) => {
+                          const colors = ["bg-blue-500", "bg-purple-500", "bg-pink-500", "bg-emerald-500"];
+                          return (
+                            <div key={cat.name} className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <div className={`h-2 w-2 rounded-full ${colors[idx % colors.length]} shrink-0`} />
+                                <p className="font-bold text-slate-700 truncate">{cat.name}</p>
+                              </div>
+                              <p className="font-black text-slate-900 shrink-0">Rs {Math.round(cat.value).toLocaleString()}</p>
+                            </div>
+                          );
+                        })
+                      )
+                    )}
+
+                    {pieChartTab === "products" && (
+                      topSellingItems.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 font-medium py-2 text-center">No product orders recorded yet</p>
+                      ) : (
+                        topSellingItems.slice(0, 3).map((prod, idx) => {
+                          const colors = ["bg-indigo-500", "bg-cyan-500", "bg-emerald-500"];
+                          return (
+                            <div key={prod.name} className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <div className={`h-2 w-2 rounded-full ${colors[idx % colors.length]} shrink-0`} />
+                                <p className="font-bold text-slate-700 truncate">{prod.name}</p>
+                              </div>
+                              <p className="font-black text-slate-900 shrink-0">
+                                {prod.quantity} sold (Rs {Math.round(prod.revenue).toLocaleString()})
+                              </p>
+                            </div>
+                          );
+                        })
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* Delivery Fleet / Rider Live Status Monitor */}
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between pb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Bike size={14} className="text-sky-600" />
+                      <p className="text-[11px] font-black text-slate-800">Delivery Fleet (Riders)</p>
+                    </div>
+                    <div className="text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-100">
+                      {ridersFleet.filter(r => r.isOnRide).length} Delivering • {ridersFleet.filter(r => !r.isOnRide).length} Free
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 max-h-[85px] overflow-y-auto scrollbar-none">
+                    {ridersFleet.length === 0 ? (
+                      <div className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 text-center">
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          No delivery riders configured yet. Staff can be assigned as riders in POS delivery mode.
+                        </p>
                       </div>
-                    );
-                  })
-                )}
+                    ) : (
+                      ridersFleet.map((rider) => (
+                        <div key={rider.id} className="flex items-center justify-between p-1.5 rounded-lg bg-slate-50/80 hover:bg-slate-100/80 transition-colors">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="h-5 w-5 rounded-md bg-slate-200 flex items-center justify-center text-[9px] font-black text-slate-700 shrink-0">
+                              {rider.name.charAt(0).toUpperCase()}
+                            </div>
+                            <p className="text-xs font-bold text-slate-800 truncate">{rider.name}</p>
+                          </div>
+
+                          <div>
+                            {rider.isOnRide ? (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200">
+                                <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                On Delivery
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                Available
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
               </CardContent>
             </Card>
           </div>
 
-          {/* Bottom Operational Panels */}
+          {/* Row 2: Recent Transactions + Staff Attendance in One Row */}
           <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
             
-            {/* Left Box: Recent Transactions */}
-            <Card className="w-full min-w-0 lg:col-span-7 shadow-2xs border-slate-200 rounded-2xl bg-white">
-              <CardHeader className="pb-1.5 pt-3.5 px-4 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm font-black text-slate-800">{t("recent_transactions")}</CardTitle>
+            {/* Left: Recent Invoices & Transactions */}
+            <Card className="w-full min-w-0 lg:col-span-7 shadow-2xs border-slate-200 rounded-2xl bg-white flex flex-col justify-between">
+              <CardHeader className="pb-1.5 pt-3.5 px-4 flex flex-row items-center justify-between border-b border-slate-100">
+                <CardTitle className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                  <FileText className="text-blue-600" size={15} /> {t("recent_transactions")}
+                </CardTitle>
                 <Link href="/dashboard/sales" className="text-blue-600 hover:text-blue-700 text-xs font-bold flex items-center gap-0.5">
                   {t("view_ledger")} <ArrowUpRight size={13} />
                 </Link>
               </CardHeader>
-              <CardContent className="pt-1 pb-3 px-3">
+              <CardContent className="pt-2 pb-3 px-3 flex-1 flex flex-col justify-between">
                 <div className="divide-y divide-slate-100">
                   {recentTx.length === 0 ? (
-                    <p className="text-xs text-slate-400 font-semibold py-6 text-center">
+                    <p className="text-xs text-slate-400 font-semibold py-8 text-center">
                       {t("no_invoices_recorded")}
                     </p>
                   ) : (
-                    recentTx.map((tx) => (
+                    recentTx.slice(0, 7).map((tx) => (
                       <div key={tx.id} className="flex items-center justify-between py-2 hover:bg-slate-50/80 rounded-lg px-2 transition-colors">
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="h-7 w-7 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200 shrink-0">
-                            <span className="text-[9px] font-black text-slate-600 uppercase">INV</span>
+                            <div className="text-[9px] font-black text-slate-600 uppercase">INV</div>
                           </div>
                           <div className="min-w-0">
                             <h4 className="text-xs font-extrabold text-slate-800 capitalize truncate max-w-[120px] sm:max-w-[200px]">
@@ -840,7 +1524,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="flex items-center gap-2.5 shrink-0">
-                          <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                          <div className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
                             tx.paymentMode === "credit" 
                               ? "bg-rose-50 text-rose-700 border border-rose-100" 
                               : tx.paymentMode === "card" 
@@ -848,10 +1532,10 @@ export default function DashboardPage() {
                                 : "bg-emerald-50 text-emerald-700 border border-emerald-100"
                           }`}>
                             {tx.paymentMode === "credit" ? t("udhaar_label") : tx.paymentMode}
-                          </span>
-                          <span className="text-xs font-black text-slate-800 text-right min-w-[65px]">
+                          </div>
+                          <div className="text-xs font-black text-slate-800 text-right min-w-[65px]">
                             Rs {Math.round(tx.amount).toLocaleString()}
-                          </span>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -860,55 +1544,132 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Right Box: Low Stock Warnings & System Status */}
+            {/* Right: Staff Attendance & Shift Roster */}
             <Card className="w-full min-w-0 lg:col-span-5 shadow-2xs border-slate-200 rounded-2xl bg-white flex flex-col justify-between">
-              <CardHeader className="pb-1.5 pt-3.5 px-4">
-                <CardTitle className="text-sm font-black text-slate-800 flex items-center gap-1.5">
-                  <AlertTriangle className="text-amber-500" size={16} /> {t("critical_stock_alerts")}
-                </CardTitle>
+              <CardHeader className="pb-2 pt-3.5 px-4 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                    <CalendarCheck className="text-emerald-600" size={16} /> Staff Attendance & Shift Roster
+                  </CardTitle>
+                  <Link href="/dashboard/staff?tab=attendance" className="text-blue-600 hover:text-blue-700 text-[11px] font-bold flex items-center gap-0.5">
+                    Manage <ArrowUpRight size={12} />
+                  </Link>
+                </div>
+
+                {/* Quick Attendance Counters */}
+                <div className="flex items-center gap-1.5 mt-2">
+                  <div className="text-[9px] font-black px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                    Present: {staffAttendance.filter(s => s.status === "present" || s.status === "late").length}
+                  </div>
+                  <div className="text-[9px] font-black px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100">
+                    Absent: {staffAttendance.filter(s => s.status === "absent").length}
+                  </div>
+                  <div className="text-[9px] font-black px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100">
+                    Leave: {staffAttendance.filter(s => s.status === "leave" || s.status === "halfday").length}
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent className="flex-1 flex flex-col justify-between gap-3 pt-1 pb-3 px-3">
-                
-                {/* Warnings List */}
+
+              <CardContent className="pt-2 pb-3 px-3 flex-1 flex flex-col justify-between">
                 <div className="space-y-1.5">
-                  {lowStockAlerts.length === 0 ? (
-                    <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-100 flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                      {t("all_stock_healthy")}
+                  {staffAttendance.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <p className="text-xs text-slate-400 font-semibold">No staff profiles registered yet.</p>
+                      <Link href="/dashboard/staff" className="inline-block mt-2 text-xs font-bold text-blue-600 hover:underline">
+                        + Add Staff Members
+                      </Link>
                     </div>
                   ) : (
-                    lowStockAlerts.slice(0, 4).map(prod => (
-                      <div key={prod.id} className="flex justify-between items-center p-2 bg-slate-50 border border-slate-200/60 rounded-lg">
-                        <div className="min-w-0 pr-2">
-                          <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
-                          <p className="text-[9px] text-slate-400 font-bold">{t("min_level")}: {prod.min_stock_level} {prod.unit || "units"}</p>
+                    staffAttendance.slice(0, 6).map((staff) => (
+                      <div key={staff.id} className="flex items-center justify-between p-2 rounded-xl bg-slate-50/70 hover:bg-slate-100/70 transition-colors">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="h-7 w-7 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center font-black text-xs shrink-0">
+                            {staff.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-extrabold text-slate-800 truncate">{staff.name}</p>
+                            <p className="text-[9px] text-slate-400 capitalize font-medium">{staff.role}</p>
+                          </div>
                         </div>
-                        <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
-                          prod.current_stock <= 0
-                            ? "bg-red-100 text-red-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}>
-                          {prod.current_stock} {prod.unit || t("left_units")}
-                        </span>
+
+                        <div>
+                          {staff.status === "present" && (
+                            <div className="text-[9px] font-black px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                              Present
+                            </div>
+                          )}
+                          {staff.status === "late" && (
+                            <div className="text-[9px] font-black px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                              Late
+                            </div>
+                          )}
+                          {staff.status === "halfday" && (
+                            <div className="text-[9px] font-black px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                              Half Day
+                            </div>
+                          )}
+                          {staff.status === "absent" && (
+                            <div className="text-[9px] font-black px-2 py-0.5 rounded bg-rose-100 text-rose-800">
+                              Absent
+                            </div>
+                          )}
+                          {staff.status === "leave" && (
+                            <div className="text-[9px] font-black px-2 py-0.5 rounded bg-purple-100 text-purple-800">
+                              On Leave
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))
                   )}
                 </div>
 
-                {/* Database cloud status */}
-                <div className="p-2.5 bg-slate-900 text-white rounded-xl flex items-center justify-between">
-                  <div>
-                    <h4 className="text-[11px] font-bold flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                      {t("supabase_cloud_sync")}
-                    </h4>
-                    <p className="text-[9px] text-slate-400">{t("data_syncing_secure")}</p>
-                  </div>
-                  <Link href="/dashboard/backup" className="text-[9px] text-blue-400 hover:text-blue-300 font-black uppercase">
-                    {t("backups_btn")}
-                  </Link>
+                <div className="pt-2 border-t border-slate-100 mt-2 flex items-center justify-between text-[10px] text-slate-400 font-medium px-1">
+                  <p>Daily Roster Active</p>
+                  <p>Auto Sync Enabled</p>
                 </div>
+              </CardContent>
+            </Card>
 
+          </div>
+
+          {/* Row 3: Critical Stock Deficit Alarms & Cloud Backup Status */}
+          <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
+            <Card className="w-full min-w-0 lg:col-span-12 shadow-2xs border-slate-200 rounded-2xl bg-white">
+              <CardHeader className="pb-1.5 pt-3 px-4 flex flex-row items-center justify-between border-b border-slate-100">
+                <CardTitle className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <AlertTriangle className="text-amber-500" size={14} /> {t("critical_stock_alerts")}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></div>
+                  <p className="text-[10px] text-slate-400 font-bold">{t("supabase_cloud_sync")}</p>
+                </div>
+              </CardHeader>
+              <CardContent className="p-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                  {lowStockAlerts.length === 0 ? (
+                    <div className="col-span-full p-2.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-semibold border border-emerald-100 flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0"></div>
+                      <p>{t("all_stock_healthy")}</p>
+                    </div>
+                  ) : (
+                    lowStockAlerts.slice(0, 4).map(prod => (
+                      <div key={prod.id} className="flex justify-between items-center p-2.5 bg-slate-50 border border-slate-200/60 rounded-xl">
+                        <div className="min-w-0 pr-2">
+                          <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
+                          <p className="text-[9px] text-slate-400 font-bold">{t("min_level")}: {prod.min_stock_level} {prod.unit || "units"}</p>
+                        </div>
+                        <div className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                          prod.current_stock <= 0
+                            ? "bg-red-100 text-red-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}>
+                          {prod.current_stock} {prod.unit || t("left_units")}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -951,16 +1712,16 @@ export default function DashboardPage() {
                               <div>
                                 <h4 className="text-xs font-bold text-slate-800 line-clamp-1">{alert.product_name}</h4>
                                 <div className="flex gap-2 text-[9px] text-slate-500 font-medium">
-                                  <span>Batch: <span className="text-slate-700">{alert.batch_number}</span></span>
-                                  <span>•</span>
-                                  <span>Stock: <span className="text-slate-700">{alert.stock_quantity}</span></span>
+                                  <div>Batch: <div className="text-slate-700">{alert.batch_number}</div></div>
+                                  <div>•</div>
+                                  <div>Stock: <div className="text-slate-700">{alert.stock_quantity}</div></div>
                                 </div>
                               </div>
                             </div>
                             <div className="text-right flex flex-col items-end">
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isExpired ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
+                              <div className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isExpired ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
                                 {formatDateTime(alert.expiry_date, timezone)}
-                              </span>
+                              </div>
                             </div>
                           </div>
                         );
@@ -970,11 +1731,11 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             )}
-
           </div>
         </>
       )}
 
+      <DashboardFloatingQuickActions />
     </div>
   );
 }

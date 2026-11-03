@@ -206,7 +206,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     const skipCacheOuter = isFlame9Brand() || isLocalSqliteEnabled();
     if (typeof window !== "undefined" && !skipCacheOuter) {
       try {
-        const isImpersonating = localStorage.getItem("is_impersonating") === "true";
+        const isImpersonating = localStorage.getItem("is_impersonating") === "true" && Boolean(localStorage.getItem("impersonated_shop_name"));
         const impersonatedShopId = localStorage.getItem("impersonated_shop_id");
         const cached = localStorage.getItem("hisabx_shop_context");
         if (cached) {
@@ -263,15 +263,57 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         }
 
         const isUserSuperAdmin = isSuperAdmin({ role: profile?.role, email: user.email });
-        const isImpersonating = typeof window !== "undefined" && localStorage.getItem("is_impersonating") === "true";
+        const isImpersonating = typeof window !== "undefined" && localStorage.getItem("is_impersonating") === "true" && Boolean(localStorage.getItem("impersonated_shop_name"));
         const impersonatedShopId = typeof window !== "undefined" ? localStorage.getItem("impersonated_shop_id") : null;
         const impersonatedShopName = typeof window !== "undefined" ? localStorage.getItem("impersonated_shop_name") : null;
+        const activeShopPref = typeof window !== "undefined" ? (localStorage.getItem("current_shop_id") || localStorage.getItem("active_shop_id")) : null;
 
-        const effectiveShopId = (isUserSuperAdmin && isImpersonating && impersonatedShopId)
+        let effectiveShopId = (isUserSuperAdmin && isImpersonating && impersonatedShopId)
           ? impersonatedShopId
           : isFlame9Brand() || isLocalSqliteEnabled()
             ? FLAME9_LOCAL_SHOP_ID
-            : profile?.shop_id;
+            : profile?.shop_id || activeShopPref || impersonatedShopId;
+
+        if (!effectiveShopId) {
+          const { data: uShop } = await supabase
+            .from('user_shops')
+            .select('shop_id')
+            .eq('user_id', user.id)
+            .limit(1)
+            .maybeSingle();
+
+          if (uShop?.shop_id) {
+            effectiveShopId = uShop.shop_id;
+          } else {
+            const { data: ownedShop } = await supabase
+              .from('shops')
+              .select('id')
+              .eq('owner_id', user.id)
+              .limit(1)
+              .maybeSingle();
+
+            if (ownedShop?.id) {
+              effectiveShopId = ownedShop.id;
+            } else if (isUserSuperAdmin) {
+              const { data: restShop } = await supabase
+                .from('shops')
+                .select('id')
+                .eq('industry_type', 'restaurant')
+                .limit(1)
+                .maybeSingle();
+
+              effectiveShopId = restShop?.id;
+              if (!effectiveShopId) {
+                const { data: anyShop } = await supabase
+                  .from('shops')
+                  .select('id')
+                  .limit(1)
+                  .maybeSingle();
+                effectiveShopId = anyShop?.id;
+              }
+            }
+          }
+        }
 
         if (effectiveShopId) {
           // Fetch Shop Details, Print Settings, and SaaS configurations in parallel to optimize latency (AUTH-03)
@@ -439,7 +481,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
               (typeof window !== "undefined" ? localStorage.getItem(`theaccounts_show_cost_price_on_pos_${effectiveShopId}`) === "true" : false)
             ),
             canAccessDashboardPath,
-            isImpersonating: Boolean(isUserSuperAdmin && isImpersonating && impersonatedShopId),
+            isImpersonating: Boolean(isUserSuperAdmin && isImpersonating && impersonatedShopId && impersonatedShopName),
             saasPlans,
             planName,
             effectiveTier,

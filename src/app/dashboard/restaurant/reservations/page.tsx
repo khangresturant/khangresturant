@@ -90,11 +90,8 @@ export default function RestaurantReservationsPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 py-4 font-sans">
-      <div>
-        <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-          <CalendarDays className="text-blue-600" /> Reservations
-        </h2>
-        <p className="text-sm text-slate-500 mt-1">Book tables for cafes and fine dining.</p>
+      <div className="text-xs text-slate-500">
+        <p>Book dining tables in advance for guest reservations.</p>
       </div>
 
       <div className="rounded-2xl border bg-white p-4 grid sm:grid-cols-2 gap-2">

@@ -235,13 +235,9 @@ export default function RestaurantTablesPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 font-sans">
       
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-black tracking-tight text-slate-900">Table Management</h2>
-          
-        </div>
-        <div className="flex items-center gap-3">
+      {/* Action Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <select
             value={floorFilter}
             onChange={(e) => setFloorFilter(e.target.value)}
@@ -326,12 +322,12 @@ export default function RestaurantTablesPage() {
 
                 {item.status === "occupied" && item.invoices?.total_amount ? (
                   <div className="p-2.5 bg-blue-50/50 border border-blue-100 rounded-lg flex items-center justify-between text-xs font-semibold mb-4">
-                    <span className="flex items-center gap-1 text-blue-700"><Receipt size={13} /> Active Bill:</span>
-                    <span className="font-bold text-blue-800 font-mono">Rs {Number(item.invoices.total_amount).toLocaleString()}</span>
+                    <div className="flex items-center gap-1 text-blue-700"><Receipt size={13} /> Active Bill:</div>
+                    <div className="font-bold text-blue-800 font-mono">Rs {Number(item.invoices.total_amount).toLocaleString()}</div>
                   </div>
                 ) : item.status === "occupied" ? (
                   <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between text-xs font-semibold mb-4 text-slate-500">
-                    <span className="flex items-center gap-1"><Receipt size={13} /> Taking Order...</span>
+                    <div className="flex items-center gap-1"><Receipt size={13} /> Taking Order...</div>
                   </div>
                 ) : null}
               </div>
@@ -449,7 +445,7 @@ export default function RestaurantTablesPage() {
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-11"
                 >
                   {isSubmitting ? (
-                    <span className="flex items-center gap-1"><Loader2 className="animate-spin h-4 w-4" /> Saving...</span>
+                    <div className="flex items-center gap-1"><Loader2 className="animate-spin h-4 w-4" /> Saving...</div>
                   ) : "Save Dining Layout"}
                 </Button>
               </div>

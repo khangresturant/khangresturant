@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Check, ChevronDown, Lock, Search, X } from "lucide-react";
@@ -51,36 +51,40 @@ function SidebarNavLink({
       title={showCollapsed ? label : undefined}
       onClick={handleClick}
       aria-current={active ? "page" : undefined}
-      className={`sb-nav-link group relative flex items-center rounded-lg transition-all duration-100 select-none ${
-        showCollapsed ? "justify-center p-2" : "gap-2.5 px-2.5 py-1.5"
-      } ${active ? "is-active" : "active:scale-[0.98]"}`}
+      className={`group relative flex items-center rounded-xl transition-all duration-150 select-none ${
+        showCollapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2"
+      } ${
+        active
+          ? "bg-slate-900 text-white font-bold shadow-xs shadow-slate-900/10"
+          : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/90 active:scale-[0.99] font-medium"
+      }`}
     >
       <Icon
-        size={16}
-        className={`sb-nav-icon shrink-0 transition-all duration-100 ${
+        size={17}
+        className={`shrink-0 transition-transform duration-150 ${
           active
-            ? "text-white scale-105"
-            : "sb-section-icon group-hover:scale-105 group-hover:drop-shadow-[0_0_4px_currentColor]"
+            ? "text-white"
+            : "text-slate-500 group-hover:text-slate-900 group-hover:scale-105"
         }`}
       />
       {!showCollapsed && (
-        <span
-          className={`text-xs font-semibold tracking-wide truncate flex-1 ${
-            active ? "text-white font-bold" : "sb-text-primary"
+        <div
+          className={`text-xs tracking-tight truncate flex-1 leading-tight ${
+            active ? "text-white font-bold" : "text-slate-700 group-hover:text-slate-900 font-semibold"
           }`}
         >
           {label}
-        </span>
+        </div>
       )}
       {!showCollapsed && isNavigating && (
-        <span className="h-1.5 w-1.5 rounded-full bg-white animate-ping ml-auto shrink-0" />
+        <div className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-ping ml-auto shrink-0" />
       )}
       {!showCollapsed && !isNavigating && locked && (
-        <Lock size={11} className="sb-lock-icon ml-auto transition-colors shrink-0" />
+        <Lock size={12} className="text-slate-400 group-hover:text-slate-600 ml-auto transition-colors shrink-0" />
       )}
       {showCollapsed && (
-        <div className="absolute left-[calc(100%+14px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-950 text-white text-[11px] font-extrabold rounded-xl shadow-[0_10px_35px_rgba(0,0,0,0.85)] border border-slate-700 opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap pointer-events-none z-[999999] flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+        <div className="absolute left-[calc(100%+14px)] top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 text-white text-[11px] font-bold rounded-xl shadow-xl border border-slate-800 opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap pointer-events-none z-[999999] flex items-center gap-1.5">
+          <div className="h-1.5 w-1.5 rounded-full bg-sky-400" />
           {label}
         </div>
       )}
@@ -88,6 +92,7 @@ function SidebarNavLink({
   );
 }
 
+{/* Fiscal Period component definition preserved for future toggle */}
 function SidebarFiscalStrip({ showCollapsed }: { showCollapsed: boolean }) {
   const { t } = useLanguage();
   const { loading, activeClosingBook, closingBooks, switchClosingBook } = useShop();
@@ -98,21 +103,21 @@ function SidebarFiscalStrip({ showCollapsed }: { showCollapsed: boolean }) {
   return (
     <div className="sb-fiscal-strip px-3 py-2 shrink-0">
       <div className="relative">
-        <span className="sb-label text-[8.5px] font-black uppercase tracking-[0.18em] block mb-1">
+        <p className="sb-label text-[8.5px] font-black uppercase tracking-[0.18em] block mb-1">
           {t("fiscal_period")}
-        </span>
+        </p>
         <button
           onClick={() => setIsBookDropdownOpen((open) => !open)}
           className={`sb-fiscal-btn w-full flex items-center justify-between text-left px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all border cursor-pointer ${
             activeClosingBook ? "is-closed" : "is-open"
           }`}
         >
-          <span className="truncate flex items-center gap-1.5">
-            <span
+          <div className="truncate flex items-center gap-1.5">
+            <div
               className={`sb-fiscal-dot h-1.5 w-1.5 rounded-full ${activeClosingBook ? "is-closed" : "is-open"}`}
             />
             {activeClosingBook ? activeClosingBook.name : t("active_period")}
-          </span>
+          </div>
           <ChevronDown
             size={11}
             className="sb-meta shrink-0"
@@ -133,7 +138,7 @@ function SidebarFiscalStrip({ showCollapsed }: { showCollapsed: boolean }) {
                   !activeClosingBook ? "is-fiscal-open" : ""
                 }`}
               >
-                <span className="flex items-center gap-1.5">🟢 Active Book (Current)</span>
+                <div className="flex items-center gap-1.5">Active Book (Current)</div>
                 {!activeClosingBook && <Check size={10} className="stroke-[3]" />}
               </button>
               {closingBooks.map((book) => {
@@ -149,7 +154,7 @@ function SidebarFiscalStrip({ showCollapsed }: { showCollapsed: boolean }) {
                       isSelected ? "is-fiscal-closed" : ""
                     }`}
                   >
-                    <span className="truncate pr-1">📖 {book.name}</span>
+                    <div className="truncate pr-1">{book.name}</div>
                     {isSelected && <Check size={10} className="stroke-[3]" />}
                   </button>
                 );
@@ -162,6 +167,7 @@ function SidebarFiscalStrip({ showCollapsed }: { showCollapsed: boolean }) {
   );
 }
 
+{/* Menu searchbar component definition preserved for future toggle */}
 function SidebarNavSearch({
   query,
   onChange,
@@ -199,7 +205,7 @@ function SidebarNavSearch({
   return (
     <div className="px-2.5 pt-1 pb-1 shrink-0">
       <div className="relative">
-        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--sb-text-muted)]" />
+        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           ref={inputRef}
           type="search"
@@ -215,13 +221,13 @@ function SidebarNavSearch({
           data-1p-ignore="true"
           data-form-type="other"
           suppressHydrationWarning
-          className="sb-nav-search w-full rounded-lg border py-1.5 pl-8 pr-7 text-xs font-semibold outline-none transition-all"
+          className="sb-nav-search w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-7 text-xs font-semibold outline-none transition-all focus:bg-white focus:border-slate-400"
         />
         {query ? (
           <button
             type="button"
             onClick={onClear}
-            className="sb-icon-btn absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-md"
+            className="sb-icon-btn absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600"
             aria-label="Clear search"
           >
             <X size={11} />
@@ -290,25 +296,27 @@ function SidebarNavSections({
       <div
         ref={scrollRef}
         onScroll={updateScrollState}
-        className={`flex-1 min-h-0 h-full py-2 px-2 space-y-3 touch-pan-y overscroll-contain ${
-          showCollapsed ? "overflow-visible" : "overflow-y-auto overflow-x-hidden custom-scrollbar"
+        className={`flex-1 min-h-0 h-full py-3 px-2.5 space-y-3 touch-pan-y overscroll-contain no-scrollbar ${
+          showCollapsed ? "overflow-visible" : "overflow-y-auto overflow-x-hidden"
         }`}
         style={{
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-y",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
         }}
       >
         {visibleSections.length === 0 && emptyLabel ? (
-          <p className="px-2 text-center text-[11px] font-semibold sb-meta">{emptyLabel}</p>
+          <p className="px-2 text-center text-[11px] font-semibold text-slate-400">{emptyLabel}</p>
         ) : (
           visibleSections.map((section) => (
-            <div key={section.titleKey} className={`space-y-0.5 sb-sec-${section.colorKey}`}>
+            <div key={section.titleKey} className="space-y-0.5">
               {showCollapsed ? (
-                <div className="sb-divider border-t my-1 mx-1" />
+                <div className="border-t border-slate-200/80 my-1.5 mx-1" />
               ) : (
-                <div className="flex items-center gap-1.5 px-1.5 mb-1">
-                  <span className="sb-section-dot h-1 w-1 rounded-full" />
-                  <p className="sb-section-label text-[9px] font-black uppercase tracking-[0.16em]">
+                <div className="flex items-center gap-1.5 px-2 mb-1.5 mt-2">
+                  <div className="h-1 w-1 rounded-full bg-slate-300" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     {t(section.titleKey)}
                   </p>
                 </div>
@@ -459,7 +467,6 @@ export function SidebarNav({ showCollapsed, isMobile, onClose }: SidebarNavProps
     }
 
     // 2. Target has NO query parameters:
-    // If current URL has a tab param, check if there's any other link specifically registered for that tab
     const currentTab = currentParams.get("tab");
     if (currentTab) {
       const isHandledByAnotherLink = allLinkPaths.some((p) => {
@@ -481,7 +488,6 @@ export function SidebarNav({ showCollapsed, isMobile, onClose }: SidebarNavProps
     }
 
     // 4. Subroute matching (e.g. /dashboard/products/something)
-    // Only match if not dashboard root AND there is no other link specifically matching this subroute
     if (targetPathname !== "/dashboard" && currentPathname.startsWith(targetPathname + "/")) {
       const hasMoreSpecificLink = allLinkPaths.some((p) => {
         const [pName] = p.split("?");
@@ -514,15 +520,19 @@ export function SidebarNav({ showCollapsed, isMobile, onClose }: SidebarNavProps
 
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-      <SidebarFiscalStrip showCollapsed={showCollapsed} />
-      {!showCollapsed ? (
+      {/* Fiscal Period commented out as requested by user */}
+      {/* <SidebarFiscalStrip showCollapsed={showCollapsed} /> */}
+
+      {/* Menu searchbar commented out as requested by user */}
+      {/* {!showCollapsed ? (
         <SidebarNavSearch
           query={searchQuery}
           onChange={setSearchQuery}
           onClear={() => setSearchQuery("")}
           placeholder={t("sidebar_nav_search")}
         />
-      ) : null}
+      ) : null} */}
+
       <SidebarNavSections
         sections={filteredSections}
         showCollapsed={showCollapsed}

@@ -314,7 +314,7 @@ export default function SalesHistoryPage() {
         },
         offline: (snap) => mapInvoices(snap.invoices),
         onOfflineUsed: (savedAt) => {
-          toast.message("Offline mode — showing cached sales", {
+          toast.message("Offline mode - showing cached sales", {
             description: savedAt ? `Last synced ${new Date(savedAt).toLocaleString()}` : undefined,
           });
         },
@@ -948,14 +948,8 @@ export default function SalesHistoryPage() {
 
   return (
     <div className="space-y-3 font-sans">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 border-b border-slate-200/80 pb-2.5">
-        <div>
-          <h1 className="text-lg md:text-xl font-black tracking-tight text-slate-800 flex items-center gap-2">
-            <Receipt className="text-indigo-600 h-5 w-5" />
-            Sales Ledger & Invoices
-          </h1>
-        </div>
-        <div className="flex items-center gap-2 mobile-hide-actions-bar">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-2.5 border-b border-slate-200/80 pb-2.5">
+        <div className="flex items-center gap-2 mobile-hide-actions-bar justify-end flex-wrap">
           {filteredInvoices.length > 0 && (
             <Button
               variant="outline"
@@ -1119,11 +1113,11 @@ export default function SalesHistoryPage() {
             }`}
           >
             Active Bills
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+            <div className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
               activeSubTab === "active" ? "bg-indigo-50 text-indigo-700 shadow-sm" : "bg-slate-100 text-slate-500"
             }`}>
               {invoices.filter(i => !i.is_voided && i.status !== "quotation").length}
-            </span>
+            </div>
           </button>
           {industryType === "hardware" && (
             <button
@@ -1135,11 +1129,11 @@ export default function SalesHistoryPage() {
               }`}
             >
               📄 Quotations / Estimates
-              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+              <div className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
                 activeSubTab === "quotation" ? "bg-purple-50 text-purple-700 shadow-sm" : "bg-slate-100 text-slate-500"
               }`}>
                 {invoices.filter(i => i.status === "quotation" && !i.is_voided).length}
-              </span>
+              </div>
             </button>
           )}
           <button
@@ -1151,11 +1145,11 @@ export default function SalesHistoryPage() {
             }`}
           >
             🗑 Trash / Voided Bills
-            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+            <div className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
               activeSubTab === "trash" ? "bg-red-50 text-red-700 shadow-sm" : "bg-slate-100 text-slate-500"
             }`}>
               {invoices.filter(i => i.is_voided).length}
-            </span>
+            </div>
           </button>
         </div>
 
@@ -1163,7 +1157,7 @@ export default function SalesHistoryPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <Loader2 className="h-8 w-8 animate-spin mb-2 text-indigo-500" />
-              <span className="text-xs font-semibold">Loading ledger transactions...</span>
+              <div className="text-xs font-semibold">Loading ledger transactions...</div>
             </div>
           ) : filteredInvoices.length === 0 ? (
             <div className="text-center py-20 text-slate-400 text-xs font-medium">
@@ -1214,16 +1208,16 @@ export default function SalesHistoryPage() {
                               title="بیع نامہ اور اقساط معاہدہ پرنٹ کریں"
                             >
                               <FileText size={15} />
-                              <span>بیع نامہ</span>
+                              <div>بیع نامہ</div>
                             </button>
                             {inv.showroom_data?.id && (
                               <Link
                                 href={`/dashboard/showroom/installments/agreement/${inv.showroom_data.id}`}
                                 target="_blank"
                               >
-                                <span className="h-10 w-10 flex items-center justify-center bg-slate-100 text-slate-700 rounded-xl border border-slate-200">
+                                <div className="h-10 w-10 flex items-center justify-center bg-slate-100 text-slate-700 rounded-xl border border-slate-200">
                                   <ExternalLink size={15} />
-                                </span>
+                                </div>
                               </Link>
                             )}
                           </>
@@ -1234,7 +1228,7 @@ export default function SalesHistoryPage() {
                             title="گاڑی کی فروخت کا بیع نامہ پرنٹ کریں"
                           >
                             <FileText size={15} />
-                            <span>بیع نامہ</span>
+                            <div>بیع نامہ</div>
                           </button>
                         ) : (
                           <button
@@ -1254,9 +1248,9 @@ export default function SalesHistoryPage() {
                         </button>
                         {activeSubTab === "active" && !inv.is_showroom_inst && !inv.is_showroom_veh && permissions?.actions?.edit_bill !== false && (
                           <Link href={`/dashboard/pos?edit=${inv.id}`}>
-                            <span className="h-10 w-10 flex items-center justify-center bg-sky-50 text-sky-600 rounded-xl border border-sky-100">
+                            <div className="h-10 w-10 flex items-center justify-center bg-sky-50 text-sky-600 rounded-xl border border-sky-100">
                               <Edit size={16} />
-                            </span>
+                            </div>
                           </Link>
                         )}
                       </div>
@@ -1288,14 +1282,14 @@ export default function SalesHistoryPage() {
                         <td className="py-2 px-3.5 font-mono font-bold text-slate-900 flex items-center gap-1.5">
                           #{inv.id.slice(0, 8).toUpperCase()}
                           {inv.is_showroom_inst && (
-                            <span className="bg-violet-50 text-violet-700 border border-violet-200 text-[8px] font-black px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
+                            <div className="bg-violet-50 text-violet-700 border border-violet-200 text-[8px] font-black px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
                               🚗 اقساط
-                            </span>
+                            </div>
                           )}
                           {inv.is_showroom_veh && (
-                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8px] font-black px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
+                            <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8px] font-black px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
                               🚗 گاڑی نقد
-                            </span>
+                            </div>
                           )}
                           {inv.is_edited && (
                             <button
@@ -1313,24 +1307,24 @@ export default function SalesHistoryPage() {
                         <td className="py-2 px-3.5">
                           {inv.parties ? (
                             <div>
-                              <span className="font-extrabold text-slate-800 text-xs">{inv.parties.name}</span>
+                              <div className="font-extrabold text-slate-800 text-xs">{inv.parties.name}</div>
                               {inv.parties.phone && (
                                 <p className="text-[8.5px] text-slate-400 font-mono leading-none mt-0.5">{inv.parties.phone}</p>
                               )}
                             </div>
                           ) : (
-                            <span className="text-slate-400 text-xs font-semibold">Walk-in Customer</span>
+                            <div className="text-slate-400 text-xs font-semibold">Walk-in Customer</div>
                           )}
 
                           {inv.items_summary && (
                             <div className="mt-1 flex items-center gap-1 max-w-[240px]">
                               <Package size={10} className="text-indigo-500 shrink-0" />
-                              <span 
+                              <div 
                                 className="text-[10px] text-slate-500 truncate font-normal bg-slate-50 px-1 py-0.5 rounded border border-slate-200/60"
                                 title={inv.items_summary}
                               >
                                 {inv.items_summary}
-                              </span>
+                              </div>
                             </div>
                           )}
                         </td>
@@ -1344,7 +1338,7 @@ export default function SalesHistoryPage() {
                           Rs {Math.round(outstanding).toLocaleString()}
                         </td>
                         <td className="py-2 px-3.5 text-center">
-                          <span className={`px-2 py-0.5 rounded text-[9.5px] font-extrabold border ${
+                          <div className={`px-2 py-0.5 rounded text-[9.5px] font-extrabold border ${
                             inv.status === "quotation"
                               ? "bg-purple-50 text-purple-700 border-purple-100"
                               : inv.status === "paid" 
@@ -1354,7 +1348,7 @@ export default function SalesHistoryPage() {
                                   : "bg-red-50 text-red-700 border-red-100"
                           }`}>
                             {inv.status === "quotation" ? "Quotation" : inv.status}
-                          </span>
+                          </div>
                         </td>
                         <td className="py-2 px-3.5 text-center">
                           <div className="flex items-center justify-center gap-1">
@@ -1366,7 +1360,7 @@ export default function SalesHistoryPage() {
                                   title="بیع نامہ اور اقساط معاہدہ پرنٹ کریں"
                                 >
                                   <FileText size={12} />
-                                  <span>بیع نامہ / رسید</span>
+                                  <div>بیع نامہ / رسید</div>
                                 </button>
                                 {inv.showroom_data?.id && (
                                   <Link
@@ -1389,7 +1383,7 @@ export default function SalesHistoryPage() {
                                 title="گاڑی کی فروخت کا بیع نامہ پرنٹ کریں"
                               >
                                 <FileText size={12} />
-                                <span>بیع نامہ</span>
+                                <div>بیع نامہ</div>
                               </button>
                             ) : (
                               <button
@@ -1496,7 +1490,7 @@ export default function SalesHistoryPage() {
               {loadingItems ? (
                 <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                   <Loader2 size={24} className="animate-spin text-indigo-600 mb-2" />
-                  <span className="text-xs font-semibold">Loading receipt details...</span>
+                  <div className="text-xs font-semibold">Loading receipt details...</div>
                 </div>
               ) : (
                 <div id="sales-thermal-receipt" className="w-full flex justify-center py-2 overflow-y-auto custom-scrollbar max-h-[70vh]">
@@ -1607,7 +1601,7 @@ export default function SalesHistoryPage() {
                 {loadingItems ? (
                   <div className="flex justify-center items-center py-20">
                     <Loader2 className="h-6 w-6 animate-spin text-slate-500 mr-2" />
-                    <span className="text-xs text-slate-450">Loading current items...</span>
+                    <div className="text-xs text-slate-450">Loading current items...</div>
                   </div>
                 ) : historyItems.length === 0 ? (
                   <p className="text-center text-slate-400 py-10 text-xs">No edit history logged for this invoice.</p>
@@ -1615,40 +1609,40 @@ export default function SalesHistoryPage() {
                   historyItems.map((hist, idx) => (
                     <div key={idx} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl shadow-xs space-y-3.5">
                       <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200/50 pb-1.5">
-                        <span>Version #{historyItems.length - idx} (Previous State)</span>
-                        <span className="text-slate-500 font-bold bg-slate-200/50 px-2 py-0.5 rounded-lg flex items-center gap-1 normal-case font-sans">
+                        <div>Version #{historyItems.length - idx} (Previous State)</div>
+                        <div className="text-slate-500 font-bold bg-slate-200/50 px-2 py-0.5 rounded-lg flex items-center gap-1 normal-case font-sans">
                           🕒 Edited on: {new Date(hist.edited_at).toLocaleString()} {hist.edited_by ? `by ${hist.edited_by}` : ""}
-                        </span>
+                        </div>
                       </div>
 
                       {/* Side-by-Side Comparison */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Old Bill Version Column */}
                         <div className="bg-amber-50/40 p-3.5 rounded-2xl border border-amber-100/70">
-                          <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest block mb-2">⏮ OLD BILL (Before Edit)</span>
+                          <div className="text-[9px] font-black text-amber-700 uppercase tracking-widest block mb-2">⏮ OLD BILL (Before Edit)</div>
                           <div className="space-y-1.5 text-xs">
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Invoice Total:</span>
-                              <span className="font-extrabold text-slate-800">Rs {Math.round(hist.total_amount)}</span>
+                              <div className="text-slate-400">Invoice Total:</div>
+                              <div className="font-extrabold text-slate-800">Rs {Math.round(hist.total_amount)}</div>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Discount:</span>
-                              <span className="font-bold text-slate-700">Rs {Math.round(hist.discount || 0)}</span>
+                              <div className="text-slate-400">Discount:</div>
+                              <div className="font-bold text-slate-700">Rs {Math.round(hist.discount || 0)}</div>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Cash Paid:</span>
-                              <span className="font-bold text-slate-700">Rs {Math.round(hist.paid_amount || 0)}</span>
+                              <div className="text-slate-400">Cash Paid:</div>
+                              <div className="font-bold text-slate-700">Rs {Math.round(hist.paid_amount || 0)}</div>
                             </div>
 
                             {/* Items list before edit */}
                             {hist.items && hist.items.length > 0 && (
                               <div className="pt-2 border-t border-slate-250/50 mt-2">
-                                <span className="text-[8px] font-black text-slate-400 block mb-1">ITEMS BEFORE EDIT:</span>
+                                <div className="text-[8px] font-black text-slate-400 block mb-1">ITEMS BEFORE EDIT:</div>
                                 <div className="space-y-1 max-h-24 overflow-y-auto">
                                   {hist.items.map((item: any, i: number) => (
                                     <div key={i} className="flex justify-between text-[10px] text-slate-600 font-semibold">
-                                      <span className="truncate max-w-[130px]">{item.product_name || "Product"}</span>
-                                      <span className="font-mono">{item.quantity} x Rs {Math.round(item.unit_price)}</span>
+                                      <div className="truncate max-w-[130px]">{item.product_name || "Product"}</div>
+                                      <div className="font-mono">{item.quantity} x Rs {Math.round(item.unit_price)}</div>
                                     </div>
                                   ))}
                                 </div>
@@ -1659,30 +1653,30 @@ export default function SalesHistoryPage() {
 
                         {/* Current Bill Version Column */}
                         <div className="bg-emerald-50/40 p-3.5 rounded-2xl border border-emerald-100/70">
-                          <span className="text-[9px] font-black text-emerald-700 uppercase tracking-widest block mb-2">⏭ CURRENT BILL (Latest)</span>
+                          <div className="text-[9px] font-black text-emerald-700 uppercase tracking-widest block mb-2">⏭ CURRENT BILL (Latest)</div>
                           <div className="space-y-1.5 text-xs">
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Invoice Total:</span>
-                              <span className="font-extrabold text-slate-800">Rs {Math.round(selectedInvoice.total_amount)}</span>
+                              <div className="text-slate-400">Invoice Total:</div>
+                              <div className="font-extrabold text-slate-800">Rs {Math.round(selectedInvoice.total_amount)}</div>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Discount:</span>
-                              <span className="font-bold text-slate-700">Rs {Math.round(selectedInvoice.discount || 0)}</span>
+                              <div className="text-slate-400">Discount:</div>
+                              <div className="font-bold text-slate-700">Rs {Math.round(selectedInvoice.discount || 0)}</div>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400">Cash Paid:</span>
-                              <span className="font-bold text-slate-700">Rs {Math.round(selectedInvoice.paid_amount || 0)}</span>
+                              <div className="text-slate-400">Cash Paid:</div>
+                              <div className="font-bold text-slate-700">Rs {Math.round(selectedInvoice.paid_amount || 0)}</div>
                             </div>
 
                             {/* Current invoice items */}
                             {selectedInvoiceItems && selectedInvoiceItems.length > 0 && (
                               <div className="pt-2 border-t border-slate-250/50 mt-2">
-                                <span className="text-[8px] font-black text-slate-400 block mb-1">ITEMS AFTER EDIT:</span>
+                                <div className="text-[8px] font-black text-slate-400 block mb-1">ITEMS AFTER EDIT:</div>
                                 <div className="space-y-1 max-h-24 overflow-y-auto">
                                   {selectedInvoiceItems.map((item: any, i: number) => (
                                     <div key={i} className="flex justify-between text-[10px] text-slate-600 font-semibold">
-                                      <span className="truncate max-w-[130px]">{item.products?.name || "Product"}</span>
-                                      <span className="font-mono">{item.quantity} x Rs {Math.round(item.unit_price)}</span>
+                                      <div className="truncate max-w-[130px]">{item.products?.name || "Product"}</div>
+                                      <div className="font-mono">{item.quantity} x Rs {Math.round(item.unit_price)}</div>
                                     </div>
                                   ))}
                                 </div>

@@ -854,24 +854,7 @@ export default function BackupPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white border border-zinc-200 p-5 rounded-3xl shadow-sm">
-        <div>
-          <h1 className="text-lg font-black text-zinc-900 flex items-center gap-2">
-            {activeSubTab === "backups" ? (
-              <>
-                <Database className="text-blue-600 animate-pulse" />
-                Database Backups
-              </>
-            ) : (
-              <>
-                <History className="text-violet-600" />
-                Audit Logs & History
-              </>
-            )}
-          </h1>
-          
-        </div>
-
+      <div className="flex flex-col sm:flex-row justify-end sm:items-center gap-4 bg-white border border-zinc-200 p-3 rounded-2xl shadow-sm">
         {/* Tab Switcher */}
         <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit shrink-0">
           <button
@@ -1055,10 +1038,10 @@ export default function BackupPage() {
                     <div key={file.id} className="flex items-center justify-between py-3">
                       <div>
                         <h4 className="text-xs font-bold text-zinc-950 truncate max-w-md">{file.name}</h4>
-                        <span className="text-[10px] text-zinc-400 mt-0.5 block">
+                        <div className="text-[10px] text-zinc-400 mt-0.5 block">
                           Uploaded on: {new Date(file.createdTime).toLocaleString()}
                           {file.size && ` • ${Math.round(parseInt(file.size) / 1024)} KB`}
-                        </span>
+                        </div>
                       </div>
                       <button
                         onClick={() => handleGDriveRestore(file.id)}
@@ -1093,7 +1076,7 @@ export default function BackupPage() {
                 <div className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-200">
                   <div>
                     <label className="text-xs font-bold text-zinc-800 block">Enable Automatic Backup</label>
-                    <span className="text-[10px] text-zinc-500">Backups will run automatically daily even if you are logged out.</span>
+                    <div className="text-[10px] text-zinc-500">Backups will run automatically daily even if you are logged out.</div>
                   </div>
                   <input
                     type="checkbox"
@@ -1117,7 +1100,7 @@ export default function BackupPage() {
                 {!gdriveLinked && (
                   <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-semibold">
                     <AlertTriangle size={14} className="shrink-0" />
-                    Google Drive connect karein — automatic backup Drive par jaaye ga.
+                    Google Drive connect karein - automatic backup Drive par jaaye ga.
                   </div>
                 )}
 
@@ -1228,14 +1211,14 @@ export default function BackupPage() {
                         </td>
                         <td className="py-3 px-5 text-slate-800 font-bold">{log.user_name}</td>
                         <td className="py-3 px-5">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black tracking-wide bg-violet-50 text-violet-750 uppercase">
+                          <div className="px-2 py-0.5 rounded-full text-[10px] font-black tracking-wide bg-violet-50 text-violet-750 uppercase">
                             {log.action}
-                          </span>
+                          </div>
                         </td>
                         <td className="py-3 px-5 font-mono text-[10px] text-slate-500">
-                          {log.table_name || "—"}
+                          {log.table_name || "-"}
                         </td>
-                        <td className="py-3 px-5 text-slate-500">{log.ip_address || "—"}</td>
+                        <td className="py-3 px-5 text-slate-500">{log.ip_address || "-"}</td>
                         <td className="py-3 px-5 text-center">
                           <button
                             type="button"
@@ -1270,15 +1253,15 @@ export default function BackupPage() {
                 <div>
                   <div className="flex items-center gap-3">
                     <h3 className="text-sm font-bold text-slate-800">Audit Trail Log Details</h3>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wide uppercase ${selectedLog.action === "INSERT" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                    <div className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wide uppercase ${selectedLog.action === "INSERT" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
                       selectedLog.action === "UPDATE" ? "bg-amber-50 text-amber-700 border border-amber-100" :
                         "bg-rose-50 text-rose-700 border border-rose-100"
                       }`}>
                       {selectedLog.action}
-                    </span>
+                    </div>
                   </div>
                   <p className="text-[11px] text-slate-450 mt-1 font-semibold">
-                    Table: <span className="font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">{selectedLog.table_name || "—"}</span>
+                    Table: <div className="font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">{selectedLog.table_name || "-"}</div>
                   </p>
                 </div>
                 <button
@@ -1329,12 +1312,12 @@ export default function BackupPage() {
                           ];
 
                           const formatVal = (val: any) => {
-                            if (val === null || val === undefined) return <span className="text-slate-400">—</span>;
+                            if (val === null || val === undefined) return <div className="text-slate-400">-</div>;
                             if (typeof val === "boolean") {
                               return val ? (
-                                <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[10px] border border-emerald-100 font-bold">Yes</span>
+                                <div className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[10px] border border-emerald-100 font-bold">Yes</div>
                               ) : (
-                                <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] border border-slate-200 font-bold">No</span>
+                                <div className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] border border-slate-200 font-bold">No</div>
                               );
                             }
                             if (typeof val === "object") return JSON.stringify(val);
@@ -1407,14 +1390,14 @@ export default function BackupPage() {
                 {/* Technical / System Info Accordion */}
                 <details className="group border border-slate-100 rounded-2xl overflow-hidden bg-slate-50/20">
                   <summary className="p-4 flex items-center justify-between font-bold text-[10px] uppercase text-slate-450 tracking-wider cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors select-none list-none">
-                    <span>Technical / System Info</span>
-                    <span className="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                    <div>Technical / System Info</div>
+                    <div className="text-slate-400 group-open:rotate-180 transition-transform">▼</div>
                   </summary>
                   <div className="p-4 border-t border-slate-100 bg-white font-mono text-[10px] text-slate-600 space-y-2">
                     <p><strong>Log ID:</strong> {selectedLog.id}</p>
                     <p><strong>User ID:</strong> {selectedLog.user_id || "N/A"}</p>
                     <p><strong>Record UUID:</strong> {selectedLog.record_id || "N/A"}</p>
-                    <p><strong>IP Address:</strong> {selectedLog.ip_address || "—"}</p>
+                    <p><strong>IP Address:</strong> {selectedLog.ip_address || "-"}</p>
                     <div className="mt-3 pt-3 border-t border-slate-100">
                       <p className="font-bold mb-1">Raw JSON Payload:</p>
                       <pre className="p-3 bg-slate-50 border border-slate-150 rounded-xl overflow-x-auto text-[9px] max-h-40 overflow-y-auto">

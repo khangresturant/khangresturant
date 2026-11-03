@@ -1561,16 +1561,8 @@ export default function ReportsPage() {
   return (
     <div className="space-y-3 font-sans text-slate-800">
       {/* ── Page Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-200/80">
-        <div>
-          <h2 className="text-lg md:text-xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-            <span>Auditing &amp; Reports Center</span>
-          </h2>
-          <p className="text-slate-500 text-[11px] mt-0.5">
-            Real-time financial analytics, statutory registers, and sales intelligence
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-2.5 pb-2.5 border-b border-slate-200/80">
+        <div className="flex items-center gap-1.5 self-start sm:self-auto flex-wrap justify-end">
           <Button
             onClick={generateCSV}
             disabled={loading || downloading}
@@ -1595,11 +1587,11 @@ export default function ReportsPage() {
       <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider">From</span>
+            <div className="text-[10px] text-slate-400 font-black uppercase tracking-wider">From</div>
             <Input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} className="h-8 text-xs w-32 font-bold shadow-2xs rounded-xl"/>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider">To</span>
+            <div className="text-[10px] text-slate-400 font-black uppercase tracking-wider">To</div>
             <Input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} className="h-8 text-xs w-32 font-bold shadow-2xs rounded-xl"/>
           </div>
           <div className="flex items-center gap-1 border-l border-slate-200 pl-3">
@@ -1638,7 +1630,7 @@ export default function ReportsPage() {
 
         {["sales", "pl"].includes(activeTab) && (
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-500 font-bold">Compare:</span>
+            <div className="text-[10px] text-slate-500 font-bold">Compare:</div>
             <select
               value={comparePeriod}
               onChange={(e: any) => setComparePeriod(e.target.value)}
@@ -1662,7 +1654,7 @@ export default function ReportsPage() {
             return (
               <div key={gKey} className="space-y-1">
                 <div className="px-2.5 py-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between border-b border-slate-100/80 mb-1">
-                  <span>{titles.en}</span>
+                  <div>{titles.en}</div>
                 </div>
                 {gTabs.map(tab => {
                   const isActive = activeTab === tab.id;
@@ -1677,7 +1669,7 @@ export default function ReportsPage() {
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className={isActive ? "text-white" : "text-slate-400"}>{tab.icon}</span>
+                        <div className={isActive ? "text-white" : "text-slate-400"}>{tab.icon}</div>
                         <div className="text-left truncate">
                           <p className="truncate text-xs leading-tight font-bold">{tab.labelEn}</p>
                         </div>
@@ -1736,11 +1728,11 @@ export default function ReportsPage() {
                 <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <h3 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                     <FileText size={14} className="text-blue-600" />
-                    <span>Statement Table &amp; Audit Log</span>
+                    <div>Statement Table &amp; Audit Log</div>
                   </h3>
-                  <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-full shadow-2xs">
+                  <div className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-full shadow-2xs">
                     {startDate} → {endDate}
-                  </span>
+                  </div>
                 </div>
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="w-full text-xs text-left text-slate-600">
@@ -1868,10 +1860,10 @@ function KpiCard({
   return (
     <div className={`p-4 rounded-3xl border shadow-2xs transition-all space-y-1.5 ${scheme.bg} ${scheme.border}`}>
       <div className="flex items-center justify-between">
-        <span className={`text-[10px] font-black uppercase tracking-wider ${scheme.label}`}>
+        <div className={`text-[10px] font-black uppercase tracking-wider ${scheme.label}`}>
           {label}
-        </span>
-        {icon && <span className={`p-1.5 rounded-xl text-xs ${scheme.iconBg}`}>{icon}</span>}
+        </div>
+        {icon && <div className={`p-1.5 rounded-xl text-xs ${scheme.iconBg}`}>{icon}</div>}
       </div>
       <p className={`text-xl md:text-2xl font-black tracking-tight ${scheme.text}`}>
         {value}
@@ -2235,7 +2227,7 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     <td className={`py-2 px-3.5 text-xs ${right ? "text-right" : ""} ${bold ? "font-bold" : ""} ${cls}`}>{v}</td>
   );
   const badge = (text: string, color: string) => (
-    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${color}`}>{text}</span>
+    <div className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${color}`}>{text}</div>
   );
   const empty = (cols: number, msg: string) => (
     <tr><td colSpan={cols} className="py-8 text-center text-slate-400 text-xs font-semibold">{msg}</td></tr>
@@ -2246,12 +2238,12 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     return <>{salesData.map((s: any) => (
       <tr key={s.id} className="hover:bg-slate-50/70 transition-colors">
         {td(new Date(s.created_at).toLocaleDateString(), false, false, "text-slate-500")}
-        {td(<span className="font-mono text-[10px] text-slate-600 font-bold">{s.id.substring(0,8).toUpperCase()}</span>)}
+        {td(<div className="font-mono text-[10px] text-slate-600 font-bold">{s.id.substring(0,8).toUpperCase()}</div>)}
         {td(s.parties?.name || "Walk-in", false, true)}
         {td(badge(s.payment_mode || "cash", s.payment_mode === "credit" ? "bg-rose-50 text-rose-700" : s.payment_mode === "card" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"))}
         {td(`Rs ${Math.round(s.paid_amount || 0).toLocaleString()}`, true)}
         {td(`Rs ${Math.round(s.total_amount || 0).toLocaleString()}`, true, true)}
-        {td(<span className="font-bold text-emerald-600">Rs {Math.round(s.profit || 0).toLocaleString()}</span>, true)}
+        {td(<div className="font-bold text-emerald-600">Rs {Math.round(s.profit || 0).toLocaleString()}</div>, true)}
       </tr>
     ))}</>;
   }
@@ -2261,15 +2253,15 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     return <>{controlledLogs.map((c: any) => (
       <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
         {td(c.prescription_date, false, false, "text-slate-500 font-mono text-[11px]")}
-        {td(<span className="font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">{c.prescription_ref || "Direct"}</span>)}
+        {td(<div className="font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">{c.prescription_ref || "Direct"}</div>)}
         {td(
           <div className="space-y-0.5">
-            <span className="font-black text-slate-800 flex items-center gap-1">
+            <div className="font-black text-slate-800 flex items-center gap-1">
               🚨 {c.product_name}
-            </span>
+            </div>
           </div>
         )}
-        {td(<span className="font-black text-red-700 bg-red-50 border border-red-100 px-2 py-0.5 rounded">{c.quantity} {c.unit || "tab"}</span>)}
+        {td(<div className="font-black text-red-700 bg-red-50 border border-red-100 px-2 py-0.5 rounded">{c.quantity} {c.unit || "tab"}</div>)}
         {td(
           <div>
             <p className="font-bold text-slate-800">{c.doctor_name || "N/A"}</p>
@@ -2313,12 +2305,12 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
               {b.products?.shelf_location && <p className="text-[10px] text-slate-400">Shelf: {b.products.shelf_location}</p>}
             </div>
           )}
-          {td(<span className="font-mono text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{b.batch_number || "BATCH"}</span>)}
+          {td(<div className="font-mono text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{b.batch_number || "BATCH"}</div>)}
           {td(b.expiry_date, false, false, "font-mono font-bold text-[11px]")}
-          {td(<span className={`font-mono font-black ${days < 0 ? "text-rose-600" : days <= 30 ? "text-amber-600" : "text-slate-600"}`}>{days < 0 ? `${Math.abs(days)}d Overdue` : `${days}d`}</span>, true)}
+          {td(<div className={`font-mono font-black ${days < 0 ? "text-rose-600" : days <= 30 ? "text-amber-600" : "text-slate-600"}`}>{days < 0 ? `${Math.abs(days)}d Overdue` : `${days}d`}</div>, true)}
           {td(`${b.quantity} ${b.products?.unit || "pcs"}`)}
           {td(`Rs ${Math.round(b.purchase_price || 0).toLocaleString()}`, true)}
-          {td(<span className="font-black text-slate-800">Rs {Math.round(val).toLocaleString()}</span>, true)}
+          {td(<div className="font-black text-slate-800">Rs {Math.round(val).toLocaleString()}</div>, true)}
           {td(statusBadge)}
         </tr>
       );
@@ -2333,8 +2325,8 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
         <tr key={t.id} className={`hover:bg-slate-50/70 transition-colors ${isWarn ? "bg-rose-50/30" : ""}`}>
           {td(t.date, false, false, "font-mono text-[11px] text-slate-500")}
           {td(t.fridge_name || "Vaccine Main Fridge", false, true)}
-          {td(<span className={`font-mono font-black ${Number(t.morning_temp) < 2 || Number(t.morning_temp) > 8 ? "text-rose-600 font-bold" : "text-emerald-700"}`}>{t.morning_temp || "-"} °C</span>)}
-          {td(<span className={`font-mono font-black ${Number(t.evening_temp) < 2 || Number(t.evening_temp) > 8 ? "text-rose-600 font-bold" : "text-emerald-700"}`}>{t.evening_temp || "-"} °C</span>)}
+          {td(<div className={`font-mono font-black ${Number(t.morning_temp) < 2 || Number(t.morning_temp) > 8 ? "text-rose-600 font-bold" : "text-emerald-700"}`}>{t.morning_temp || "-"} °C</div>)}
+          {td(<div className={`font-mono font-black ${Number(t.evening_temp) < 2 || Number(t.evening_temp) > 8 ? "text-rose-600 font-bold" : "text-emerald-700"}`}>{t.evening_temp || "-"} °C</div>)}
           {td(isWarn ? badge("⚠️ Alert (Out of 2-8°C)", "bg-rose-100 text-rose-800 border border-rose-200") : badge("✅ Safe (2°C - 8°C)", "bg-emerald-50 text-emerald-700 border border-emerald-200"))}
           {td(`${t.power_outage_hours || 0} Hours`)}
           {td(t.verified_by || "Pharmacist Incharge", false, false, "text-slate-500 font-semibold")}
@@ -2347,9 +2339,9 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     if (!shortBookItems.length) return empty(6, "Short Book is clear! No missing demands logged.");
     return <>{shortBookItems.map((s: any) => (
       <tr key={s.id} className="hover:bg-slate-50/70 transition-colors">
-        {td(<span className="font-black text-slate-800">{s.medicine_name}</span>)}
+        {td(<div className="font-black text-slate-800">{s.medicine_name}</div>)}
         {td(s.formula || "-", false, false, "italic text-slate-500")}
-        {td(<span className="font-mono font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded">{s.request_count || 1}x Requests</span>, true)}
+        {td(<div className="font-mono font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded">{s.request_count || 1}x Requests</div>, true)}
         {td(s.urgency === "urgent" ? badge("🚨 Urgent Need", "bg-rose-100 text-rose-800 border border-rose-200 font-black") : badge("Routine Order", "bg-slate-100 text-slate-700"))}
         {td(
           <div>
@@ -2372,12 +2364,12 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
             <p className="text-[10px] text-slate-400">{d.specialization || "General Physician"}</p>
           </div>
         )}
-        {td(<span className="font-mono text-[10px] text-slate-500">{d.pmdc_no || "-"}</span>)}
+        {td(<div className="font-mono text-[10px] text-slate-500">{d.pmdc_no || "-"}</div>)}
         {td(d.hospital_clinic || "-", false, false, "text-slate-600")}
         {td(`${d.total_prescriptions || 0} Rx`, true, false, "font-mono font-bold")}
         {td(`Rs ${Math.round(d.total_bill_amount || 0).toLocaleString()}`, true)}
         {td(`Rs ${Math.round(d.commission_earned || 0).toLocaleString()}`, true, false, "text-emerald-700 font-bold")}
-        {td(<span className="font-black text-purple-700">Rs {Math.round(d.balance_due || 0).toLocaleString()}</span>, true)}
+        {td(<div className="font-black text-purple-700">Rs {Math.round(d.balance_due || 0).toLocaleString()}</div>, true)}
       </tr>
     ))}</>;
   }
@@ -2386,12 +2378,12 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     if (!pharmaCompanyMarginData.length) return empty(6, "No pharmaceutical manufacturer sales data in range.");
     return <>{pharmaCompanyMarginData.map((c: any) => (
       <tr key={c.name} className="hover:bg-slate-50/70 transition-colors">
-        {td(<span className="font-black text-slate-800">{c.name}</span>)}
+        {td(<div className="font-black text-slate-800">{c.name}</div>)}
         {td(`${c.units.toLocaleString()} units`, true, false, "font-mono text-slate-500")}
         {td(`Rs ${Math.round(c.revenue).toLocaleString()}`, true, true)}
         {td(`Rs ${Math.round(c.cost).toLocaleString()}`, true, false, "text-slate-400")}
-        {td(<span className="font-black text-emerald-600">Rs {Math.round(c.profit).toLocaleString()}</span>, true)}
-        {td(<span className="font-bold text-slate-600">{(c.revenue > 0 ? (c.profit / c.revenue) * 100 : 0).toFixed(1)}%</span>, true)}
+        {td(<div className="font-black text-emerald-600">Rs {Math.round(c.profit).toLocaleString()}</div>, true)}
+        {td(<div className="font-bold text-slate-600">{(c.revenue > 0 ? (c.profit / c.revenue) * 100 : 0).toFixed(1)}%</div>, true)}
       </tr>
     ))}</>;
   }
@@ -2406,12 +2398,12 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
       return (
         <tr key={a.id} className={`hover:bg-slate-50/70 transition-colors ${a.classification === "C" ? "bg-rose-50/20" : ""}`}>
           {td(classBadge)}
-          {td(<span className="font-black text-slate-800">{a.name}</span>)}
+          {td(<div className="font-black text-slate-800">{a.name}</div>)}
           {td(`${a.unitsSold.toLocaleString()} ${a.unit}`, true, false, "font-mono font-bold")}
           {td(`${a.currentStock.toLocaleString()} ${a.unit}`)}
           {td(`Rs ${Math.round(a.cost).toLocaleString()}`, true)}
-          {td(<span className={`font-black ${a.classification === "C" ? "text-rose-700 font-extrabold" : "text-slate-800"}`}>Rs {Math.round(a.trappedCapital).toLocaleString()}</span>, true)}
-          {td(a.classification === "C" ? <span className="text-[10px] text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-100">Clearance / Return</span> : <span className="text-[10px] text-emerald-600 font-bold">Keep Stocked</span>)}
+          {td(<div className={`font-black ${a.classification === "C" ? "text-rose-700 font-extrabold" : "text-slate-800"}`}>Rs {Math.round(a.trappedCapital).toLocaleString()}</div>, true)}
+          {td(a.classification === "C" ? <div className="text-[10px] text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-100">Clearance / Return</div> : <div className="text-[10px] text-emerald-600 font-bold">Keep Stocked</div>)}
         </tr>
       );
     })}</>;
@@ -2421,10 +2413,10 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     if (!hourlyRushData.length) return empty(4, "No sales traffic in range.");
     return <>{hourlyRushData.map((h: any) => (
       <tr key={h.hour} className="hover:bg-slate-50/70 transition-colors">
-        {td(<span className="font-black text-slate-800">{h.label}</span>)}
+        {td(<div className="font-black text-slate-800">{h.label}</div>)}
         {td(`${h.count} invoices`, true, false, "font-mono font-bold text-slate-600")}
         {td(`Rs ${Math.round(h.total).toLocaleString()}`, true, true)}
-        {td(<span className="font-bold text-amber-700">Rs {Math.round(h.total / (h.count || 1)).toLocaleString()}</span>, true)}
+        {td(<div className="font-bold text-amber-700">Rs {Math.round(h.total / (h.count || 1)).toLocaleString()}</div>, true)}
       </tr>
     ))}</>;
   }
@@ -2433,11 +2425,11 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     if (!inactiveKhataData.length) return empty(7, "No outstanding inactive khata debtors.");
     return <>{inactiveKhataData.map((k: any) => (
       <tr key={k.id} className="hover:bg-slate-50/70 transition-colors">
-        {td(<span className="font-black text-slate-800">{k.name}</span>)}
+        {td(<div className="font-black text-slate-800">{k.name}</div>)}
         {td(k.phone || "-", false, false, "font-mono text-slate-500")}
-        {td(<span className="font-black text-rose-600">Rs {Math.round(k.balance).toLocaleString()}</span>, true)}
+        {td(<div className="font-black text-rose-600">Rs {Math.round(k.balance).toLocaleString()}</div>, true)}
         {td(k.lastVisit, false, false, "text-slate-500 text-[11px]")}
-        {td(<span className="font-mono font-bold text-slate-600">{k.daysInactive} days</span>, true)}
+        {td(<div className="font-mono font-bold text-slate-600">{k.daysInactive} days</div>, true)}
         {td(k.daysInactive > 60 ? badge("🚨 Severe Delay (>60d)", "bg-rose-100 text-rose-800 border border-rose-200") : badge("⚠️ Overdue (>30d)", "bg-amber-100 text-amber-800 border border-amber-200"))}
         {td(
           k.phone ? (
@@ -2468,9 +2460,9 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
           {td(`Rs ${Math.round(s.opening_cash || s.opening_balance || 0).toLocaleString()}`, true)}
           {td(`Rs ${Math.round(s.closing_cash || s.closing_balance || s.expected_cash || 0).toLocaleString()}`, true, true)}
           {td(
-            <span className={`font-mono font-black ${diff < 0 ? "text-rose-600" : diff > 0 ? "text-emerald-600" : "text-slate-600"}`}>
+            <div className={`font-mono font-black ${diff < 0 ? "text-rose-600" : diff > 0 ? "text-emerald-600" : "text-slate-600"}`}>
               {diff === 0 ? "Balanced (0)" : diff < 0 ? `-Rs ${Math.abs(Math.round(diff)).toLocaleString()} (Short)` : `+Rs ${Math.round(diff).toLocaleString()} (Surplus)`}
-            </span>,
+            </div>,
             true
           )}
           {td(badge(s.status || "closed", s.status === "open" ? "bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse" : "bg-slate-100 text-slate-600"))}
@@ -2484,10 +2476,10 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     return <>{returnsDamageData.map((r: any) => (
       <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
         {td(new Date(r.created_at).toLocaleDateString(), false, false, "text-slate-500")}
-        {td(<span className="font-mono text-[10px] text-slate-500 font-bold">{r.id.substring(0, 8).toUpperCase()}</span>)}
+        {td(<div className="font-mono text-[10px] text-slate-500 font-bold">{r.id.substring(0, 8).toUpperCase()}</div>)}
         {td(r.parties?.name || "Walk-in", false, true)}
         {td(badge(r.is_voided ? "VOIDED INVOICE" : (r.status || "Returned"), "bg-rose-50 text-rose-700 border border-rose-100 font-bold"))}
-        {td(<span className="font-black text-rose-600">Rs {Math.round(Math.abs(r.total_amount || 0)).toLocaleString()}</span>, true)}
+        {td(<div className="font-black text-rose-600">Rs {Math.round(Math.abs(r.total_amount || 0)).toLocaleString()}</div>, true)}
       </tr>
     ))}</>;
   }
@@ -2501,7 +2493,7 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
         {td(`Rs ${Math.round(p.revenue / (p.qty || 1)).toLocaleString()}`, true)}
         {td(`Rs ${Math.round(p.revenue).toLocaleString()}`, true, true)}
         {td(`Rs ${Math.round(p.cost).toLocaleString()}`, true, false, "text-slate-400")}
-        {td(<span className="font-black text-emerald-600">Rs {Math.round(p.profit).toLocaleString()}</span>, true)}
+        {td(<div className="font-black text-emerald-600">Rs {Math.round(p.profit).toLocaleString()}</div>, true)}
         {td(`${(p.revenue > 0 ? (p.profit / p.revenue) * 100 : 0).toFixed(1)}%`, true, false, "text-slate-500 font-bold")}
       </tr>
     ))}</>;
@@ -2515,7 +2507,7 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
         {td(`${c.count} bills`, true, false, "text-slate-500 font-mono text-[10px]")}
         {td(`Rs ${Math.round(c.total).toLocaleString()}`, true, true)}
         {td(`Rs ${Math.round(c.paid).toLocaleString()}`, true, false, "text-emerald-600")}
-        {td(<span className={`font-black ${c.balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>Rs {Math.round(c.balance).toLocaleString()}</span>, true)}
+        {td(<div className={`font-black ${c.balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>Rs {Math.round(c.balance).toLocaleString()}</div>, true)}
       </tr>
     ))}</>;
   }
@@ -2525,7 +2517,7 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     const tot = salesByPayment.reduce((s: number, p: any) => s + p.total, 0);
     return <>{salesByPayment.map((p: any) => (
       <tr key={p.mode} className="hover:bg-slate-50/70 transition-colors">
-        {td(<span className="font-black uppercase">{p.mode}</span>)}
+        {td(<div className="font-black uppercase">{p.mode}</div>)}
         {td(`${p.count} invoices`, true, false, "text-slate-500 font-mono text-[10px]")}
         {td(`Rs ${Math.round(p.total).toLocaleString()}`, true, true)}
         {td(`${tot > 0 ? ((p.total / tot) * 100).toFixed(1) : 0}%`, true, false, "text-slate-500 font-bold")}
@@ -2538,7 +2530,7 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     return <>{purchasesData.map((p: any) => (
       <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
         {td(new Date(p.created_at).toLocaleDateString(), false, false, "text-slate-500")}
-        {td(<span className="font-mono text-[10px] text-slate-400">{p.id.substring(0,8).toUpperCase()}</span>)}
+        {td(<div className="font-mono text-[10px] text-slate-400">{p.id.substring(0,8).toUpperCase()}</div>)}
         {td(p.parties?.name || "Generic Supplier", false, true)}
         {td(badge(p.status || "completed", "bg-emerald-50 text-emerald-700"))}
         {td(`Rs ${Math.round(p.total_amount || 0).toLocaleString()}`, true, true)}
@@ -2563,9 +2555,9 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
       <tr key={e.id} className="hover:bg-slate-50/70 transition-colors">
         {td(new Date(e.created_at).toLocaleDateString(), false, false, "text-slate-500")}
         {td(e.name, false, true)}
-        {td(<span className="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{e.expense_type || "general"}</span>)}
+        {td(<div className="text-[9px] font-black uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{e.expense_type || "general"}</div>)}
         {td(e.remarks || "-", false, false, "truncate max-w-[120px] text-slate-400")}
-        {td(<span className="font-bold text-rose-600">Rs {Math.round(e.amount || 0).toLocaleString()}</span>, true)}
+        {td(<div className="font-bold text-rose-600">Rs {Math.round(e.amount || 0).toLocaleString()}</div>, true)}
       </tr>
     ))}</>;
   }
@@ -2575,9 +2567,9 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     const tot = expenseByCategory.reduce((s: number, c: any) => s + c.total, 0);
     return <>{expenseByCategory.map((c: any) => (
       <tr key={c.category} className="hover:bg-slate-50/70 transition-colors">
-        {td(<span className="font-black uppercase">{c.category}</span>)}
+        {td(<div className="font-black uppercase">{c.category}</div>)}
         {td(`${c.count} logs`, true, false, "text-slate-500 font-mono text-[10px]")}
-        {td(<span className="font-bold text-rose-600">Rs {Math.round(c.total).toLocaleString()}</span>, true)}
+        {td(<div className="font-bold text-rose-600">Rs {Math.round(c.total).toLocaleString()}</div>, true)}
         {td(`${tot > 0 ? ((c.total / tot) * 100).toFixed(1) : 0}%`, true, false, "text-slate-500 font-bold")}
       </tr>
     ))}</>;
@@ -2614,7 +2606,7 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
 
       return (
         <tr key={p.id} className={`hover:bg-slate-50/70 transition-colors ${alert ? "bg-amber-50/30" : ""}`}>
-          {td(<span className="font-mono text-[10px] text-slate-400">{p.id.substring(0, 8).toUpperCase()}</span>)}
+          {td(<div className="font-mono text-[10px] text-slate-400">{p.id.substring(0, 8).toUpperCase()}</div>)}
           {td(
             <div>
               <p className="font-bold text-slate-800">{p.name}</p>
@@ -2622,9 +2614,9 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
             </div>
           )}
           {td(
-            <span className={`font-bold px-2 py-0.5 rounded ${alert ? "bg-amber-100 text-amber-800 font-black" : "text-slate-700"}`}>
+            <div className={`font-bold px-2 py-0.5 rounded ${alert ? "bg-amber-100 text-amber-800 font-black" : "text-slate-700"}`}>
               {stock} {p.unit || "pcs"}
-            </span>
+            </div>
           )}
           {td(`${p.min_stock_level || 0} ${p.unit || "pcs"}`, false, false, "text-slate-400")}
           {td(`Rs ${Math.round(cost * stock).toLocaleString()}`, true)}
@@ -2643,7 +2635,7 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
           {td(p.name, false, true)}
           {td(p.phone || "-", false, false, "font-mono text-slate-500")}
           {td(badge(p.type === "customer" ? "Customer" : "Supplier", p.type === "customer" ? "bg-blue-50 text-blue-700 border border-blue-100" : "bg-orange-50 text-orange-700 border border-orange-100"))}
-          {td(<span className={`font-black ${bal > 0 ? (p.type === "customer" ? "text-rose-600" : "text-slate-700") : "text-emerald-600"}`}>Rs {Math.round(bal).toLocaleString()}</span>, true)}
+          {td(<div className={`font-black ${bal > 0 ? (p.type === "customer" ? "text-rose-600" : "text-slate-700") : "text-emerald-600"}`}>Rs {Math.round(bal).toLocaleString()}</div>, true)}
         </tr>
       );
     })}</>;
@@ -2662,8 +2654,8 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
             {td(`Rs ${Math.round(r.b0_30).toLocaleString()}`, true)}
             {td(`Rs ${Math.round(r.b31_60).toLocaleString()}`, true)}
             {td(`Rs ${Math.round(r.b61_90).toLocaleString()}`, true)}
-            {td(<span className={r.b90_plus > 0 ? "text-rose-600 font-bold" : ""}>Rs {Math.round(r.b90_plus).toLocaleString()}</span>, true)}
-            {td(<span className="font-black text-emerald-600">Rs {Math.round(r.total).toLocaleString()}</span>, true)}
+            {td(<div className={r.b90_plus > 0 ? "text-rose-600 font-bold" : ""}>Rs {Math.round(r.b90_plus).toLocaleString()}</div>, true)}
+            {td(<div className="font-black text-emerald-600">Rs {Math.round(r.total).toLocaleString()}</div>, true)}
           </tr>
         ))}
         {agingReport.payables.length > 0 && (
@@ -2675,8 +2667,8 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
             {td(`Rs ${Math.round(p.b0_30).toLocaleString()}`, true)}
             {td(`Rs ${Math.round(p.b31_60).toLocaleString()}`, true)}
             {td(`Rs ${Math.round(p.b61_90).toLocaleString()}`, true)}
-            {td(<span className={p.b90_plus > 0 ? "text-amber-600 font-bold" : ""}>Rs {Math.round(p.b90_plus).toLocaleString()}</span>, true)}
-            {td(<span className="font-black text-slate-800">Rs {Math.round(p.total).toLocaleString()}</span>, true)}
+            {td(<div className={p.b90_plus > 0 ? "text-amber-600 font-bold" : ""}>Rs {Math.round(p.b90_plus).toLocaleString()}</div>, true)}
+            {td(<div className="font-black text-slate-800">Rs {Math.round(p.total).toLocaleString()}</div>, true)}
           </tr>
         ))}
       </>
@@ -2732,10 +2724,10 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
     return <>{taxReportData.map((inv: any) => (
       <tr key={inv.id} className="hover:bg-slate-50/70 transition-colors">
         {td(new Date(inv.created_at).toLocaleDateString(), false, false, "text-slate-500")}
-        {td(<span className="font-mono text-[10px] text-slate-500">{inv.id.substring(0,8).toUpperCase()}</span>)}
+        {td(<div className="font-mono text-[10px] text-slate-500">{inv.id.substring(0,8).toUpperCase()}</div>)}
         {td(inv.parties?.name || "Walk-in Customer", false, true)}
         {td(`Rs ${Math.round(Number(inv.total_amount || 0) - Number(inv.tax_amount || 0)).toLocaleString()}`, true)}
-        {td(<span className="text-amber-700 font-bold">Rs {Math.round(Number(inv.tax_amount || 0)).toLocaleString()}</span>, true)}
+        {td(<div className="text-amber-700 font-bold">Rs {Math.round(Number(inv.tax_amount || 0)).toLocaleString()}</div>, true)}
         {td(`Rs ${Math.round(Number(inv.total_amount || 0)).toLocaleString()}`, true, true)}
       </tr>
     ))}</>;
@@ -2748,7 +2740,7 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
         {td(row.name, false, true)}
         {td(`${row.count} invoices`, true, false, "text-slate-500 font-mono text-[10px]")}
         {td(`Rs ${Math.round(row.total).toLocaleString()}`, true, true)}
-        {td(<span className="text-blue-700 font-bold">Rs {Math.round(row.average).toLocaleString()}</span>, true)}
+        {td(<div className="text-blue-700 font-bold">Rs {Math.round(row.average).toLocaleString()}</div>, true)}
       </tr>
     ))}</>;
   }

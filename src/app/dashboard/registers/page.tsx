@@ -1007,19 +1007,8 @@ export default function RegisterLedgerPage() {
   return (
     <div className="space-y-3 font-sans text-slate-800">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-200/80">
-        <div>
-          <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span className="p-1.5 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl text-white shadow-2xs">
-              <Calculator className="h-4 w-4" />
-            </span>
-            Daily Register (Rojnamcha / Daybook)
-          </h1>
-          <p className="text-slate-500 text-[11px] mt-0.5">
-            Complete real-time cash drawer tracking, vehicle sales, installment qists, and daybook reconciliation
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-2.5 pb-2.5 border-b border-slate-200/80">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <Button
             onClick={fetchData}
             variant="outline"
@@ -1263,7 +1252,7 @@ export default function RegisterLedgerPage() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 text-slate-400">
             <Loader2 className="h-6 w-6 animate-spin mb-1.5 text-indigo-500" />
-            <span className="text-xs font-semibold">Loading unified daybook ledger...</span>
+            <div className="text-xs font-semibold">Loading unified daybook ledger...</div>
           </div>
         ) : daybookData.transactions.length === 0 ? (
           <div className="text-center py-12 text-slate-400 text-xs font-medium space-y-2">
@@ -1300,9 +1289,9 @@ export default function RegisterLedgerPage() {
                     {activeTimeWindow?.isAllTime ? "START" : "OPENING"}
                   </td>
                   <td className="py-1.5 px-3">
-                    <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                    <div className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-slate-100 text-slate-700 border border-slate-200">
                       FLOAT
-                    </span>
+                    </div>
                   </td>
                   <td className="py-1.5 px-3 font-semibold text-slate-600">Starting Cash Balance Brought Forward</td>
                   <td className="py-1.5 px-3 text-right text-emerald-600 font-mono">Rs {daybookData.openingFloat.toLocaleString()}</td>
@@ -1318,7 +1307,7 @@ export default function RegisterLedgerPage() {
                         {formatDateTime(tx.time, timezone)}
                       </td>
                       <td className="py-1.5 px-3 whitespace-nowrap">
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase border ${
+                        <div className={`inline-block px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase border ${
                           tx.type === "Sale" || tx.type === "Installment Advance"
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                             : tx.type === "Installment Qist" || tx.type === "Khata In"
@@ -1330,7 +1319,7 @@ export default function RegisterLedgerPage() {
                                   : "bg-rose-50 text-rose-700 border-rose-200"
                         }`}>
                           {tx.categoryBadge}
-                        </span>
+                        </div>
                       </td>
                       <td className="py-1.5 px-3 text-slate-700 font-semibold max-w-[320px] truncate text-xs" title={tx.description}>
                         {tx.description}
@@ -1378,9 +1367,9 @@ export default function RegisterLedgerPage() {
               </button>
 
               <div className="flex items-center gap-2 mb-1">
-                <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
                   <FileText size={16} />
-                </span>
+                </div>
                 <div>
                   <h3 className="font-black text-slate-900 text-sm">Transaction Breakdown</h3>
                   <p className="text-[10px] text-slate-400">
@@ -1394,12 +1383,12 @@ export default function RegisterLedgerPage() {
                 <div className="mt-4 space-y-3 font-sans text-xs">
                   <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-2">
                     <div>
-                      <span className="text-slate-400 font-bold text-[9px] uppercase">Details</span>
+                      <div className="text-slate-400 font-bold text-[9px] uppercase">Details</div>
                       <p className="font-bold text-slate-800 text-sm mt-0.5">{selectedTxDetail.description}</p>
                     </div>
                     {selectedTxDetail.partyName && (
                       <div>
-                        <span className="text-slate-400 font-bold text-[9px] uppercase">Customer / Party</span>
+                        <div className="text-slate-400 font-bold text-[9px] uppercase">Customer / Party</div>
                         <p className="font-bold text-slate-700">{selectedTxDetail.partyName}</p>
                       </div>
                     )}
@@ -1407,13 +1396,13 @@ export default function RegisterLedgerPage() {
 
                   <div className="grid grid-cols-2 gap-2 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
                     <div>
-                      <span className="text-indigo-600 font-bold text-[9px] uppercase">Cash Flow</span>
+                      <div className="text-indigo-600 font-bold text-[9px] uppercase">Cash Flow</div>
                       <p className="font-black text-sm text-indigo-900">
                         {selectedTxDetail.cashIn > 0 ? `+ Rs ${selectedTxDetail.cashIn.toLocaleString()} (IN)` : `- Rs ${selectedTxDetail.cashOut.toLocaleString()} (OUT)`}
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="text-slate-500 font-bold text-[9px] uppercase">Drawer Running Balance</span>
+                      <div className="text-slate-500 font-bold text-[9px] uppercase">Drawer Running Balance</div>
                       <p className="font-black text-sm text-slate-900">Rs {selectedTxDetail.runningBalance.toLocaleString()}</p>
                     </div>
                   </div>
@@ -1434,30 +1423,30 @@ export default function RegisterLedgerPage() {
                 loadingInvoiceDetails ? (
                   <div className="flex flex-col items-center justify-center py-10 text-slate-400">
                     <Loader2 className="h-6 w-6 animate-spin mb-2 text-indigo-500" />
-                    <span className="text-xs font-semibold font-sans">Loading receipt items...</span>
+                    <div className="text-xs font-semibold font-sans">Loading receipt items...</div>
                   </div>
                 ) : selectedInvoice ? (
                   <div className="space-y-4 font-sans text-xs mt-3">
                     <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex flex-wrap gap-x-6 gap-y-1 justify-between">
                       <div>
-                        <span className="text-slate-400 font-bold text-[9px] uppercase">Customer Account</span>
+                        <div className="text-slate-400 font-bold text-[9px] uppercase">Customer Account</div>
                         <p className="font-bold text-slate-800 capitalize mt-0.5">{selectedInvoice.parties?.name || "Walk-in Customer"}</p>
                       </div>
                       <div>
-                        <span className="text-slate-400 font-bold text-[9px] uppercase">Payment Mode</span>
+                        <div className="text-slate-400 font-bold text-[9px] uppercase">Payment Mode</div>
                         <p className="font-bold text-slate-800 uppercase mt-0.5">{selectedInvoice.payment_mode}</p>
                       </div>
                       <div>
-                        <span className="text-slate-400 font-bold text-[9px] uppercase">Payment Status</span>
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase mt-0.5 ${
+                        <div className="text-slate-400 font-bold text-[9px] uppercase">Payment Status</div>
+                        <div className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase mt-0.5 ${
                           selectedInvoice.status === "paid" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-                        }`}>{selectedInvoice.status}</span>
+                        }`}>{selectedInvoice.status}</div>
                       </div>
                     </div>
 
                     {/* Items list */}
                     <div>
-                      <span className="text-slate-400 font-bold text-[9px] uppercase block mb-1.5">Items Purchased</span>
+                      <div className="text-slate-400 font-bold text-[9px] uppercase block mb-1.5">Items Purchased</div>
                       <div className="max-h-[180px] overflow-y-auto border border-slate-100 rounded-xl">
                         <table className="w-full text-left border-collapse text-[11px]">
                           <thead>
@@ -1473,7 +1462,7 @@ export default function RegisterLedgerPage() {
                               <tr key={item.id}>
                                 <td className="py-2 px-3">
                                   <p className="font-bold">{item.productName}</p>
-                                  {item.variantName && <span className="text-[9px] text-indigo-600">Packing: {item.variantName}</span>}
+                                  {item.variantName && <div className="text-[9px] text-indigo-600">Packing: {item.variantName}</div>}
                                 </td>
                                 <td className="py-2 px-2 text-center font-mono">{item.quantity}</td>
                                 <td className="py-2 px-3 text-right font-mono">Rs {Math.round(item.unit_price)}</td>

@@ -607,19 +607,7 @@ export default function ReturnsPage() {
     <div className="space-y-3 font-sans text-slate-800">
       
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-200/80">
-        <div>
-          <h1 className="text-lg md:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <span className="p-1.5 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl text-white shadow-2xs">
-              <RotateCcw className="h-4 w-4" />
-            </span>
-            Returns & Stock Adjustments
-          </h1>
-          <p className="text-slate-500 text-[11px] mt-0.5">
-            Manage Credit Notes (customer returns & batch restock), Debit Notes (supplier returns) and stock damages
-          </p>
-        </div>
-
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-2.5 pb-2.5 border-b border-slate-200/80">
         {/* Tab switch */}
         <div className="flex border border-slate-200 bg-white rounded-lg p-0.5 shadow-2xs gap-0.5 select-none shrink-0">
           {(["sale", "purchase", "adjust"] as const).map(tab => (
@@ -980,11 +968,11 @@ export default function ReturnsPage() {
             <>
               <div>
                 <h3 className="font-black text-slate-800 text-sm mb-4 pb-3 border-b border-slate-100 flex items-center justify-between">
-                  <span>Returned Items Cart</span>
+                  <div>Returned Items Cart</div>
                   {returnItems.length > 0 && (
-                    <span className="text-[9px] text-slate-400 font-bold uppercase font-mono bg-slate-50 border px-2 py-0.5 rounded-md">
+                    <div className="text-[9px] text-slate-400 font-bold uppercase font-mono bg-slate-50 border px-2 py-0.5 rounded-md">
                       {returnItems.length} {returnItems.length === 1 ? "Item" : "Items"} in cart
-                    </span>
+                    </div>
                   )}
                 </h3>
 
@@ -1003,11 +991,11 @@ export default function ReturnsPage() {
                             {/* Batch & Expiry Badge */}
                             {(item.batchNumber || item.expiryDate) && (
                               <div className="flex items-center gap-1.5 mt-1">
-                                <span className="inline-flex items-center gap-1 text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
+                                <div className="inline-flex items-center gap-1 text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
                                   <Layers size={10} className="text-emerald-600" />
                                   Batch: {item.batchNumber || "FEFO"}
-                                  {item.expiryDate && <span>· Exp: {item.expiryDate}</span>}
-                                </span>
+                                  {item.expiryDate && <div>· Exp: {item.expiryDate}</div>}
+                                </div>
                               </div>
                             )}
 
@@ -1016,7 +1004,7 @@ export default function ReturnsPage() {
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-black text-slate-400 uppercase font-sans">Return Qty:</span>
+                            <div className="text-[9px] font-black text-slate-400 uppercase font-sans">Return Qty:</div>
                             <input 
                               type="number" 
                               value={item.quantity || ""}
@@ -1049,10 +1037,10 @@ export default function ReturnsPage() {
 
               {returnItems.length > 0 && (
                 <div className="border-t border-slate-100 pt-4 mt-4 flex items-baseline justify-between">
-                  <span className="text-slate-450 font-bold text-xs">Total Refund/Credit:</span>
-                  <span className="text-lg font-black text-violet-600">
+                  <div className="text-slate-450 font-bold text-xs">Total Refund/Credit:</div>
+                  <div className="text-lg font-black text-violet-600">
                     Rs {returnItems.reduce((sum, i) => sum + (i.price * i.quantity), 0).toLocaleString()}
-                  </span>
+                  </div>
                 </div>
               )}
             </>

@@ -41,7 +41,7 @@ export default function RestaurantModifiersPage() {
 
       if (error) {
         if (error.message?.includes("does not exist")) {
-          toast.error("Run Restaurant DB Setup — modifiers table missing");
+          toast.error("Run Restaurant DB Setup - modifiers table missing");
           setRows([]);
         } else {
           throw error;
@@ -113,7 +113,7 @@ export default function RestaurantModifiersPage() {
       toast.success(n ? `Seeded ${n} default add-ons` : "Defaults already present");
       load();
     } catch (e: any) {
-      toast.error(e.message || "Seed failed — run DB migration first");
+      toast.error(e.message || "Seed failed - run DB migration first");
     } finally {
       setSaving(false);
     }
@@ -121,15 +121,7 @@ export default function RestaurantModifiersPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 py-4 font-sans">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-            <UtensilsCrossed className="text-amber-600" /> Menu Add-ons / Modifiers
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Dhaba toppings, cafe extras, pizza add-ons — shown on Restaurant POS customize dialog.
-          </p>
-        </div>
+      <div className="flex items-center justify-end gap-3">
         <Button variant="outline" onClick={seedDefaults} disabled={saving}>
           Seed defaults ({DEFAULT_RESTAURANT_MODIFIERS.length})
         </Button>

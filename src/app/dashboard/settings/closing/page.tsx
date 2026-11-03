@@ -117,15 +117,7 @@ export default function FiscalClosingPage() {
   return (
     <div className="p-3.5 sm:p-4 md:p-5 space-y-4 max-w-[1600px] mx-auto font-sans max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
-        <div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-            <BookOpen className="text-indigo-600" />
-            Fiscal Period Closings
-          </h1>
-          
-        </div>
-
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4 border-b pb-5">
         <Button
           onClick={() => {
             loadPreviewStats();
@@ -190,7 +182,7 @@ export default function FiscalClosingPage() {
 
             <div className="border-t border-slate-100 pt-4 flex items-center gap-2.5 text-slate-500 text-xs font-semibold bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
               <HelpCircle className="text-slate-400" size={16} />
-              <span>Have questions about tax closings? Please refer to the manual or consult your auditor.</span>
+              <div>Have questions about tax closings? Please refer to the manual or consult your auditor.</div>
             </div>
           </div>
 
@@ -230,13 +222,13 @@ export default function FiscalClosingPage() {
                             {new Date(book.closed_at).toLocaleDateString()}
                           </td>
                           <td className="py-2.5 px-3.5 text-xs text-slate-500 max-w-[150px] truncate" title={book.remarks}>
-                            {book.remarks || "—"}
+                            {book.remarks || "-"}
                           </td>
                           <td className="py-2.5 px-3.5 text-xs text-center">
                             {isActiveView ? (
-                              <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[9px] font-extrabold border border-amber-200">
+                              <div className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[9px] font-extrabold border border-amber-200">
                                 Viewing Current
-                              </span>
+                              </div>
                             ) : (
                               <button
                                 onClick={() => switchClosingBook(book)}
@@ -263,33 +255,33 @@ export default function FiscalClosingPage() {
 
             <div className="space-y-3.5">
               <div className="flex items-center justify-between text-xs border-b pb-2">
-                <span className="text-slate-400 font-semibold">Active Period:</span>
-                <span className="font-extrabold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <div className="text-slate-400 font-semibold">Active Period:</div>
+                <div className="font-extrabold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
                   OPEN
-                </span>
+                </div>
               </div>
 
               <div className="space-y-2">
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold block">TOTAL OUTSTANDING UDHAAR:</span>
-                  <span className="text-lg font-black text-rose-600 font-mono">Rs {previewStats.netOutstanding.toLocaleString()}</span>
+                  <div className="text-[10px] text-slate-400 font-bold block">TOTAL OUTSTANDING UDHAAR:</div>
+                  <div className="text-lg font-black text-rose-600 font-mono">Rs {previewStats.netOutstanding.toLocaleString()}</div>
                 </div>
 
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold block">STOCK VALUATION AT COST:</span>
-                  <span className="text-lg font-black text-indigo-600 font-mono">Rs {previewStats.totalStockValuation.toLocaleString()}</span>
+                  <div className="text-[10px] text-slate-400 font-bold block">STOCK VALUATION AT COST:</div>
+                  <div className="text-lg font-black text-indigo-600 font-mono">Rs {previewStats.totalStockValuation.toLocaleString()}</div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
                 <div className="bg-slate-50/70 p-2.5 rounded-xl text-center border border-slate-100">
-                  <span className="text-[9px] text-slate-400 font-bold block">CUSTOMERS</span>
-                  <span className="text-sm font-black text-slate-800">{previewStats.totalCustomers}</span>
+                  <div className="text-[9px] text-slate-400 font-bold block">CUSTOMERS</div>
+                  <div className="text-sm font-black text-slate-800">{previewStats.totalCustomers}</div>
                 </div>
                 <div className="bg-slate-50/70 p-2.5 rounded-xl text-center border border-slate-100">
-                  <span className="text-[9px] text-slate-400 font-bold block">PRODUCTS</span>
-                  <span className="text-sm font-black text-slate-800">{previewStats.totalProducts}</span>
+                  <div className="text-[9px] text-slate-400 font-bold block">PRODUCTS</div>
+                  <div className="text-sm font-black text-slate-800">{previewStats.totalProducts}</div>
                 </div>
               </div>
             </div>
@@ -323,7 +315,7 @@ export default function FiscalClosingPage() {
 
               {/* Warnings and Checklist */}
               <div className="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 text-[10.5px] text-rose-700 font-semibold space-y-1.5">
-                <span className="font-black text-rose-800 block mb-1">⚠️ CRITICAL CAUTION & CONFIRMATION:</span>
+                <div className="font-black text-rose-800 block mb-1">⚠️ CRITICAL CAUTION & CONFIRMATION:</div>
                 <p>1. Performing a closing will archive all current active sales, payments and expenses.</p>
                 <p>2. The closing snapshots CANNOT be edited afterward.</p>
                 <p>3. Active ledgers will start fresh with zero active transaction entries.</p>

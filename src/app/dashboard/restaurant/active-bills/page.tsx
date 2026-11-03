@@ -363,7 +363,7 @@ export default function ActiveBillsPage() {
       const count = await countKitchenTicketsForInvoice(supabase, selectedBill.id);
       setKitchenTicketCount(count);
       toast.success(
-        language === "en" ? "KOT sent — open Kitchen KDS or KOT Queue." : "KOT کچن میں — KDS کھولیں۔"
+        language === "en" ? "KOT sent - open Kitchen KDS or KOT Queue." : "KOT کچن میں - KDS کھولیں۔"
       );
       await loadData();
     } catch (e: any) {
@@ -611,7 +611,7 @@ export default function ActiveBillsPage() {
           .eq("id", selectedBill.tableId);
       }
 
-      toast.success("Bill checked out — printing thermal receipt…");
+      toast.success("Bill checked out - printing thermal receipt…");
       setIsCheckoutOpen(false);
 
       printRestaurantPaidReceipt(
@@ -744,12 +744,12 @@ export default function ActiveBillsPage() {
         
         <div class="border-t border-b border-slate-200 py-2 mb-3 text-xs flex flex-col gap-1 text-slate-600">
           <div class="flex justify-between">
-            <span>Bill No: <strong class="text-slate-800">#${invoiceId.slice(0, 8).toUpperCase()}</strong></span>
-            <span>Date: ${new Date(billObj.created_at).toLocaleDateString()}</span>
+            <div>Bill No: <strong class="text-slate-800">#${invoiceId.slice(0, 8).toUpperCase()}</strong></div>
+            <div>Date: ${new Date(billObj.created_at).toLocaleDateString()}</div>
           </div>
           <div class="flex justify-between">
-            <span>Customer: ${selectedCustomer?.name || "Walk-in Guest"}</span>
-            <span>Source: <strong class="text-blue-600">${billObj.tableName}</strong></span>
+            <div>Customer: ${selectedCustomer?.name || "Walk-in Guest"}</div>
+            <div>Source: <strong class="text-blue-600">${billObj.tableName}</strong></div>
           </div>
         </div>
 
@@ -769,33 +769,33 @@ export default function ActiveBillsPage() {
 
         <div class="flex flex-col gap-1 text-xs border-t border-slate-200 pt-2 mb-4">
           <div class="flex justify-between text-slate-600">
-            <span>Subtotal:</span>
-            <span>${subtotal}</span>
+            <div>Subtotal:</div>
+            <div>${subtotal}</div>
           </div>
           ${billObj.discount > 0 ? `
           <div class="flex justify-between text-red-600 font-medium">
-            <span>Discount:</span>
-            <span>-${billObj.discount}</span>
+            <div>Discount:</div>
+            <div>-${billObj.discount}</div>
           </div>
           ` : ""}
           ${billObj.tax_amount > 0 ? `
           <div class="flex justify-between text-slate-600">
-            <span>Tax (${billObj.tax_rate}%):</span>
-            <span>+${billObj.tax_amount}</span>
+            <div>Tax (${billObj.tax_rate}%):</div>
+            <div>+${billObj.tax_amount}</div>
           </div>
           ` : ""}
           <div class="flex justify-between font-bold text-slate-900 border-t border-slate-100 pt-1 text-sm">
-            <span>Net Total:</span>
-            <span>PKR ${finalNet}</span>
+            <div>Net Total:</div>
+            <div>PKR ${finalNet}</div>
           </div>
           <div class="flex justify-between text-slate-600 pt-1">
-            <span>Paid Amount (${mode}):</span>
-            <span>PKR ${finalPaid}</span>
+            <div>Paid Amount (${mode}):</div>
+            <div>PKR ${finalPaid}</div>
           </div>
           ${finalDue > 0 ? `
           <div class="flex justify-between text-red-600 font-bold">
-            <span>Remaining Due:</span>
-            <span>PKR ${finalDue}</span>
+            <div>Remaining Due:</div>
+            <div>PKR ${finalDue}</div>
           </div>
           ` : ""}
         </div>
@@ -860,16 +860,8 @@ export default function ActiveBillsPage() {
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-5">
-        <div>
-          <h1 className="text-lg font-black tracking-tight text-slate-800 flex items-center gap-2">
-            <Receipt className="text-blue-600 h-6 w-6" /> 
-            {language === "en" ? "Active Bills Desk" : "Active Bills Desk (بلنگ ڈیسک)"}
-          </h1>
-          
-        </div>
-        
+      {/* Top Header Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-3 flex-wrap">
           <Link href="/dashboard/restaurant/pos">
             <Button variant="outline" className="border-slate-200 text-slate-600">
@@ -953,43 +945,43 @@ export default function ActiveBillsPage() {
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                          <div className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
                             isSelected 
                               ? "bg-slate-800 text-blue-400" 
                               : "bg-blue-50 text-blue-600"
                           }`}>
                             {bill.tableName}
-                          </span>
+                          </div>
                           <h4 className="font-extrabold text-sm mt-1.5 flex items-center gap-1.5">
                             Bill ID: #{bill.id.slice(0, 8).toUpperCase()}
                           </h4>
                           {bill.restaurant_order_status && (
-                            <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
+                            <div className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
                               RESTAURANT_ORDER_STATUS_LABELS[bill.restaurant_order_status].color
                             }`}>
                               {language === "en"
                                 ? RESTAURANT_ORDER_STATUS_LABELS[bill.restaurant_order_status].en
                                 : RESTAURANT_ORDER_STATUS_LABELS[bill.restaurant_order_status].ur}
-                            </span>
+                            </div>
                           )}
                         </div>
                         <div className="text-right">
-                          <span className="text-xs font-semibold block">PKR {bill.total_amount}</span>
-                          <span className={`text-[10px] font-medium block mt-1 flex items-center gap-1 justify-end ${
+                          <div className="text-xs font-semibold block">PKR {bill.total_amount}</div>
+                          <div className={`text-[10px] font-medium block mt-1 flex items-center gap-1 justify-end ${
                             isSelected ? "text-slate-400" : "text-slate-500"
                           }`}>
                             <Clock className="h-3 w-3" /> {getMinutesAgo(bill.created_at)}
-                          </span>
+                          </div>
                         </div>
                       </div>
 
                       <div className="flex justify-between items-center mt-3 pt-3 border-t border-dashed border-slate-200/20 text-xs">
-                        <span className={isSelected ? "text-slate-400" : "text-slate-500"}>
+                        <div className={isSelected ? "text-slate-400" : "text-slate-500"}>
                           {totalItems} Item{totalItems > 1 ? "s" : ""}
-                        </span>
-                        <span className={isSelected ? "text-slate-300 font-bold" : "text-slate-700 font-bold"}>
+                        </div>
+                        <div className={isSelected ? "text-slate-300 font-bold" : "text-slate-700 font-bold"}>
                           View Details <ChevronRight className="inline-block h-3.5 w-3.5 align-middle" />
-                        </span>
+                        </div>
                       </div>
                     </motion.div>
                   );
@@ -1006,20 +998,20 @@ export default function ActiveBillsPage() {
                 {/* Bill Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3">
                   <div>
-                    <span className="text-xs font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full uppercase">
+                    <div className="text-xs font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full uppercase">
                       {selectedBill.tableName}
-                    </span>
+                    </div>
                     <h3 className="text-lg font-bold text-slate-800 mt-1">
                       Bill ID: #{selectedBill.id.slice(0, 8).toUpperCase()}
                     </h3>
                     {selectedBill.restaurant_order_status && (
-                      <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                      <div className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
                         RESTAURANT_ORDER_STATUS_LABELS[selectedBill.restaurant_order_status].color
                       }`}>
                         {language === "en"
                           ? RESTAURANT_ORDER_STATUS_LABELS[selectedBill.restaurant_order_status].en
                           : RESTAURANT_ORDER_STATUS_LABELS[selectedBill.restaurant_order_status].ur}
-                      </span>
+                      </div>
                     )}
                     <p className="text-[11px] text-slate-500 mt-1">
                       {language === "en"
@@ -1127,8 +1119,8 @@ export default function ActiveBillsPage() {
                                 onClick={() => addProductToEditBill(prod)}
                                 className="p-2.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors text-sm font-semibold text-slate-700 cursor-pointer flex justify-between items-center border-b border-slate-50"
                               >
-                                <span>{prod.name}</span>
-                                <span className="text-xs text-blue-600 font-bold">PKR {prod.sale_price_single}</span>
+                                <div>{prod.name}</div>
+                                <div className="text-xs text-blue-600 font-bold">PKR {prod.sale_price_single}</div>
                               </div>
                             ))
                           )}
@@ -1167,7 +1159,7 @@ export default function ActiveBillsPage() {
                                   >
                                     <Minus className="h-3 w-3" />
                                   </button>
-                                  <span className="font-extrabold text-sm w-6">{item.quantity}</span>
+                                  <div className="font-extrabold text-sm w-6">{item.quantity}</div>
                                   <button 
                                     onClick={() => adjustEditQty(item.product_id, 1)}
                                     className="p-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600"
@@ -1206,37 +1198,37 @@ export default function ActiveBillsPage() {
                 {/* Bill Totals Card */}
                 <div className="bg-slate-50/60 rounded-xl p-4 border border-slate-100 flex flex-col gap-2.5">
                   <div className="flex justify-between text-xs text-slate-500 font-semibold uppercase">
-                    <span>Subtotal:</span>
-                    <span>PKR {isEditing 
+                    <div>Subtotal:</div>
+                    <div>PKR {isEditing 
                       ? editItems.reduce((sum, item) => sum + item.subtotal, 0)
                       : selectedBill.invoice_items.reduce((sum, item) => sum + item.subtotal, 0)
-                    }</span>
+                    }</div>
                   </div>
                   {selectedBill.discount > 0 && (
                     <div className="flex justify-between text-xs text-red-500 font-semibold uppercase">
-                      <span>Discount:</span>
-                      <span>-PKR {selectedBill.discount}</span>
+                      <div>Discount:</div>
+                      <div>-PKR {selectedBill.discount}</div>
                     </div>
                   )}
                   {selectedBill.tax_amount > 0 && (
                     <div className="flex justify-between text-xs text-slate-500 font-semibold uppercase">
-                      <span>Tax ({selectedBill.tax_rate}%):</span>
-                      <span>+PKR {isEditing
+                      <div>Tax ({selectedBill.tax_rate}%):</div>
+                      <div>+PKR {isEditing
                         ? (editItems.reduce((sum, item) => sum + item.subtotal, 0) * (selectedBill.tax_rate || 0)) / 100
                         : selectedBill.tax_amount
-                      }</span>
+                      }</div>
                     </div>
                   )}
                   <div className="flex justify-between font-extrabold text-slate-800 text-base border-t border-slate-200/50 pt-2.5">
-                    <span>Grand Total:</span>
-                    <span>PKR {isEditing
+                    <div>Grand Total:</div>
+                    <div>PKR {isEditing
                       ? (() => {
                           const sub = editItems.reduce((sum, item) => sum + item.subtotal, 0);
                           const tax = (sub * (selectedBill.tax_rate || 0)) / 100;
                           return Math.max(0, sub + tax - (selectedBill.discount || 0));
                         })()
                       : selectedBill.total_amount
-                    }</span>
+                    }</div>
                   </div>
                 </div>
 
@@ -1412,29 +1404,29 @@ export default function ActiveBillsPage() {
               {/* Totals Summary */}
               <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl flex flex-col gap-2">
                 <div className="flex justify-between text-xs text-slate-500 font-bold">
-                  <span>Subtotal:</span>
-                  <span>PKR {subtotal}</span>
+                  <div>Subtotal:</div>
+                  <div>PKR {subtotal}</div>
                 </div>
                 {discountVal > 0 && (
                   <div className="flex justify-between text-xs text-red-500 font-bold">
-                    <span>Discount:</span>
-                    <span>-PKR {discountVal}</span>
+                    <div>Discount:</div>
+                    <div>-PKR {discountVal}</div>
                   </div>
                 )}
                 {taxAmount > 0 && (
                   <div className="flex justify-between text-xs text-slate-500 font-bold">
-                    <span>Tax:</span>
-                    <span>+PKR {taxAmount}</span>
+                    <div>Tax:</div>
+                    <div>+PKR {taxAmount}</div>
                   </div>
                 )}
                 <div className="flex justify-between font-extrabold text-slate-800 border-t border-slate-200 pt-2 text-sm">
-                  <span>Net Total:</span>
-                  <span>PKR {netTotal}</span>
+                  <div>Net Total:</div>
+                  <div>PKR {netTotal}</div>
                 </div>
                 {paymentMode === "credit" && (
                   <div className="flex justify-between font-bold text-red-600 pt-1 text-xs">
-                    <span>Remaining Due:</span>
-                    <span>PKR {remainingDue}</span>
+                    <div>Remaining Due:</div>
+                    <div>PKR {remainingDue}</div>
                   </div>
                 )}
               </div>

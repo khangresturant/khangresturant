@@ -10,7 +10,7 @@ export type SidebarThemeId =
   | "flame9-ember";
 
 export const SIDEBAR_THEME_STORAGE_KEY = "The Accounts_sidebar_theme";
-export const DEFAULT_SIDEBAR_THEME_ID: SidebarThemeId = "midnight-violet";
+export const DEFAULT_SIDEBAR_THEME_ID: SidebarThemeId = "arctic-light";
 
 /** CSS custom properties consumed by `.dashboard-sidebar` in globals.css */
 export type SidebarThemeTokens = Record<`--sb-${string}`, string>;
@@ -164,7 +164,7 @@ export const SIDEBAR_THEMES: SidebarTheme[] = [
     id: "midnight-violet",
     name: "Midnight Violet",
     nameUr: "مڈنائٹ وائلٹ",
-    description: "Deep purple executive — default premium look",
+    description: "Deep purple executive - default premium look",
     preview: ["#0f0c29", "#8b5cf6"],
     tokens: darkShell("#0f0c29", "rgba(139,92,246,0.18)", "rgba(6,182,212,0.12)", "rgba(139,92,246,0.18)", {
       from: "#2563eb",
@@ -214,7 +214,7 @@ export const SIDEBAR_THEMES: SidebarTheme[] = [
     id: "royal-indigo",
     name: "Royal Indigo",
     nameUr: "رائل انڈigo",
-    description: "Corporate indigo — clean and confident",
+    description: "Corporate indigo - clean and confident",
     preview: ["#0f1029", "#6366f1"],
     tokens: darkShell("#0f1029", "rgba(99,102,241,0.2)", "rgba(129,140,248,0.12)", "rgba(99,102,241,0.22)", {
       from: "#3730a3",
@@ -238,20 +238,20 @@ export const SIDEBAR_THEMES: SidebarTheme[] = [
     id: "arctic-light",
     name: "Arctic Light",
     nameUr: "آرکٹک لائٹ",
-    description: "Bright professional sidebar for daytime use",
-    preview: ["#f8fafc", "#3b82f6"],
+    description: "Crisp white executive restaurant sidebar",
+    preview: ["#ffffff", "#0f172a"],
     isLight: true,
-    tokens: lightShell("#f1f5f9", {
-      from: "#2563eb",
-      via: "#3b82f6",
-      to: "#6366f1",
+    tokens: lightShell("#ffffff", {
+      from: "#0f172a",
+      via: "#1e293b",
+      to: "#0f172a",
     }),
   },
   {
     id: "charcoal-minimal",
     name: "Charcoal Minimal",
     nameUr: "چارکول مینیمل",
-    description: "Neutral gray — minimal distraction",
+    description: "Neutral gray - minimal distraction",
     preview: ["#111827", "#9ca3af"],
     tokens: darkShell("#111827", "rgba(156,163,175,0.12)", "rgba(75,85,99,0.15)", "rgba(148,163,184,0.18)", {
       from: "#374151",
@@ -263,7 +263,7 @@ export const SIDEBAR_THEMES: SidebarTheme[] = [
     id: "flame9-ember",
     name: "Flame 9 Ember",
     nameUr: "فلیم ۹",
-    description: "Pizza House & Café — coal black with flame orange",
+    description: "Pizza House & Café - coal black with flame orange",
     preview: ["#14110f", "#ff4d00"],
     tokens: darkShell("#14110f", "rgba(255,77,0,0.22)", "rgba(255,138,61,0.12)", "rgba(255,77,0,0.28)", {
       from: "#c93400",

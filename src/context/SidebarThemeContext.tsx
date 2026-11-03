@@ -43,6 +43,7 @@ const SidebarThemeContext = createContext<SidebarThemeContextValue | undefined>(
 function readLocalSidebarTheme(): SidebarThemeId | null {
   try {
     const saved = localStorage.getItem(SIDEBAR_THEME_STORAGE_KEY);
+    if (saved === "midnight-violet") return "arctic-light";
     if (saved && isSidebarThemeId(saved)) return saved;
   } catch {
     /* private mode / blocked storage */

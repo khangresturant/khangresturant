@@ -367,13 +367,9 @@ export default function KitchenOrdersPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 font-sans">
       
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-black tracking-tight text-slate-900">Kitchen Display (KOT)</h2>
-          
-        </div>
-        <div className="flex items-center gap-3">
+      {/* Action Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input 
@@ -415,14 +411,14 @@ export default function KitchenOrdersPage() {
               >
                 <div>
                   <div className="flex justify-between items-center mb-3">
-                    <span className="font-black text-slate-800 text-base">{order.table_name}</span>
-                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 ${
+                    <div className="font-black text-slate-800 text-base">{order.table_name}</div>
+                    <div className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase flex items-center gap-1 ${
                       order.status === 'ready' 
                         ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
                         : 'bg-amber-50 border border-amber-200 text-amber-800 animate-pulse'
                     }`}>
                       <ChefHat size={12} /> {order.status === 'ready' ? 'Ready to Serve' : 'Cooking'}
-                    </span>
+                    </div>
                   </div>
 
                   <div className="text-xs text-slate-500 flex items-center gap-1 mb-4 border-b border-slate-100 pb-2">
@@ -434,7 +430,7 @@ export default function KitchenOrdersPage() {
                     {order.items.map((item) => (
                       <div key={item.id} className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 text-xs font-bold text-slate-700 flex flex-col gap-1">
                         <div className="flex justify-between items-center">
-                          <span>{item.quantity}x {item.product_name}</span>
+                          <div>{item.quantity}x {item.product_name}</div>
                         </div>
                         {item.remarks && (
                           <div className="text-[10px] text-amber-600 font-semibold flex items-center gap-1 bg-amber-50/50 p-1 rounded border border-amber-100 mt-1">
@@ -566,13 +562,13 @@ export default function KitchenOrdersPage() {
                     {formData.items.map((item, idx) => (
                       <div key={idx} className="flex flex-col gap-1 text-xs font-semibold text-slate-700 bg-white p-2 rounded-md border border-slate-150 shadow-sm">
                         <div className="flex items-center justify-between">
-                          <span>{item.quantity}x {item.name}</span>
+                          <div>{item.quantity}x {item.name}</div>
                           <button onClick={() => handleRemoveItemFromForm(idx)} className="text-slate-400 hover:text-red-500">
                             <X size={12} />
                           </button>
                         </div>
                         {item.remarks && (
-                          <span className="text-[10px] text-amber-600 font-semibold bg-amber-50/50 p-0.5 rounded px-1">Note: {item.remarks}</span>
+                          <div className="text-[10px] text-amber-600 font-semibold bg-amber-50/50 p-0.5 rounded px-1">Note: {item.remarks}</div>
                         )}
                       </div>
                     ))}
@@ -585,7 +581,7 @@ export default function KitchenOrdersPage() {
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-11"
                 >
                   {isSubmitting ? (
-                    <span className="flex items-center gap-1"><Loader2 className="animate-spin h-4 w-4" /> Placing KOT...</span>
+                    <div className="flex items-center gap-1"><Loader2 className="animate-spin h-4 w-4" /> Placing KOT...</div>
                   ) : "Send KOT to Kitchen"}
                 </Button>
               </div>

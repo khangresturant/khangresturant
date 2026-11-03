@@ -663,6 +663,25 @@ textarea::-moz-selection,
   background: #f8fafc;
 }
 
+/* Complete scrollbar elimination for sidebar */
+.dashboard-sidebar .sb-nav-scroll-wrap::before,
+.dashboard-sidebar .sb-nav-scroll-wrap::after {
+  display: none !important;
+}
+
+.dashboard-sidebar *::-webkit-scrollbar,
+.dashboard-sidebar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.dashboard-sidebar *,
+.dashboard-sidebar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
 /* —— Dashboard sidebar themes (Phase 1 tokens) —— */
 .dashboard-sidebar {
   background-color: var(--sb-bg-base, #0f0c29);
