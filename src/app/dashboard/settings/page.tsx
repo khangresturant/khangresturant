@@ -42,8 +42,12 @@ export default function SettingsPage() {
     address: "",
     phone: "",
     email: "",
-    website: ""
+    website: "",
+    kitchen_printer_name: "",
+    customer_printer_name: "",
   });
+  const [windowsPrinters, setWindowsPrinters] = useState<string[]>([]);
+  const [loadingPrinters, setLoadingPrinters] = useState(false);
 
   // Industry Type State
   const [industryTypeVal, setIndustryTypeVal] = useState("general");
@@ -117,7 +121,7 @@ export default function SettingsPage() {
       // 1. Fetch Company/Shop details
       const { data: company, error: companyError } = await supabase
         .from("company_details")
-        .select("id, name, address, phone, email, website")
+        .select("id, name, address, phone, email, website, kitchen_printer_name, customer_printer_name, printer_name, logo_path")
         .eq("shop_id", shopId)
         .maybeSingle();
 
@@ -128,6 +132,12 @@ export default function SettingsPage() {
           name: company.name || shopRow?.name || shopName || "",
           phone: company.phone || shopRow?.phone || "",
           address: company.address || shopRow?.address || "",
+          kitchen_printer_name:
+            (company as { kitchen_printer_name?: string }).kitchen_printer_name ||
+            (company as { printer_name?: string }).printer_name ||
+            "",
+          customer_printer_name:
+            (company as { customer_printer_name?: string }).customer_printer_name || "",
         });
       } else {
         setShopDetails(prev => ({
@@ -176,6 +186,20 @@ export default function SettingsPage() {
           ...storedCustomSettings
         };
         setReceiptSettings(mergedReceipt);
+        if (
+          storedCustomSettings.kitchenPrinterName ||
+          storedCustomSettings.customerPrinterName
+        ) {
+          setShopDetails((prev) => ({
+            ...prev,
+            kitchen_printer_name:
+              prev.kitchen_printer_name ||
+              String(storedCustomSettings.kitchenPrinterName || ""),
+            customer_printer_name:
+              prev.customer_printer_name ||
+              String(storedCustomSettings.customerPrinterName || ""),
+          }));
+        }
         setActiveLangs(storedCustomSettings.activeLanguages || ["en", "ur"]);
         setBillingLang(storedCustomSettings.billingLanguage || "en");
         setSelectedCurrencyVal(storedCustomSettings.selectedCurrency || "PKR");
@@ -260,6 +284,38 @@ export default function SettingsPage() {
     }
   };
 
+  const refreshWindowsPrinters = async () => {
+    setLoadingPrinters(true);
+    try {
+      const res = await fetch("/api/restaurant/thermal-print");
+      const data = (await res.json()) as {
+        ok?: boolean;
+        printers?: string[];
+        note?: string;
+        error?: string;
+      };
+      if (data.ok && Array.isArray(data.printers)) {
+        setWindowsPrinters(data.printers);
+        toast.success(
+          data.printers.length
+            ? `${data.printers.length} Windows printer(s) loaded`
+            : "No printers found - check Windows Printers & scanners"
+        );
+      } else {
+        toast.message(
+          data.note ||
+            data.error ||
+            "List printers from the local Windows POS machine (npm run dev on shop PC)."
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error("Could not load printers: " + msg);
+    } finally {
+      setLoadingPrinters(false);
+    }
+  };
+
   const handleSaveShopDetails = async () => {
     setIsSubmitting(true);
     try {
@@ -295,7 +351,10 @@ export default function SettingsPage() {
         address: shopDetails.address || null,
         phone: shopDetails.phone || null,
         email: shopDetails.email || null,
-        website: shopDetails.website || null
+        website: shopDetails.website || null,
+        kitchen_printer_name: shopDetails.kitchen_printer_name?.trim() || null,
+        customer_printer_name: shopDetails.customer_printer_name?.trim() || null,
+        printer_name: shopDetails.kitchen_printer_name?.trim() || null,
       };
 
       if (shopDetails.id) {
@@ -333,6 +392,8 @@ export default function SettingsPage() {
       // 3. Save receipt design settings with FBR parameters
       const updatedReceiptSettings: ReceiptSettings = {
         ...receiptSettings,
+        kitchenPrinterName: shopDetails.kitchen_printer_name?.trim() || "",
+        customerPrinterName: shopDetails.customer_printer_name?.trim() || "",
         enableFBR: enableFbrVal,
         showCostPriceOnPos: showCostPriceOnPosVal,
         fbrPosId: fbrPosIdVal,
@@ -544,7 +605,7 @@ export default function SettingsPage() {
         toast.success("Printing sample receipt on default printer...");
       },
       onError: (err) => {
-        toast.error("Printing failed: " + (err?.message || "Check printer connection"));
+        toast.error("Printing failed: " + ((err as any)?.message || "Check printer connection"));
       }
     });
   };
@@ -713,6 +774,69 @@ export default function SettingsPage() {
                     <label htmlFor="has_emi_toggle" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
                       {t("enable_emi_module")}
                     </label>
+                  </div>
+                )}
+
+                {industryTypeVal === "restaurant" && (
+                  <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-200/80 p-4 rounded-2xl space-y-3 mt-2">
+                    <div className="flex items-center justify-between gap-2 border-b border-orange-200/70 pb-2">
+                      <div>
+                        <h4 className="text-sm font-black text-orange-950 flex items-center gap-2">
+                          🍽️ Restaurant thermal printers (POSRESTURANT style)
+                        </h4>
+                        <p className="text-[11px] text-orange-900/90 font-medium leading-relaxed mt-0.5">
+                          KOT → kitchen printer. Guest bill & payment slip → customer printer (blank = Windows default).
+                          Receipt header uses company name / phone / address below.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={refreshWindowsPrinters}
+                        disabled={loadingPrinters}
+                        className="text-[10px] font-black uppercase tracking-wide px-3 py-1.5 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-60"
+                      >
+                        {loadingPrinters ? "…" : "Load printers"}
+                      </button>
+                    </div>
+                    <datalist id="windows-printer-list">
+                      {windowsPrinters.map((p) => (
+                        <option key={p} value={p} />
+                      ))}
+                    </datalist>
+                    <div>
+                      <label className="block text-xs font-semibold text-orange-900 uppercase mb-1.5">
+                        Kitchen / KOT printer name
+                      </label>
+                      <Input
+                        list="windows-printer-list"
+                        value={shopDetails.kitchen_printer_name}
+                        onChange={(e) =>
+                          setShopDetails({
+                            ...shopDetails,
+                            kitchen_printer_name: e.target.value,
+                          })
+                        }
+                        placeholder="e.g. Kitchen 80mm - same as POSRESTURANT Business Details → Printer"
+                        className="h-10 rounded-xl font-mono text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-orange-900 uppercase mb-1.5">
+                        Customer slip printer (guest bill + paid receipt)
+                      </label>
+                      <Input
+                        list="windows-printer-list"
+                        value={shopDetails.customer_printer_name}
+                        onChange={(e) =>
+                          setShopDetails({
+                            ...shopDetails,
+                            customer_printer_name: e.target.value,
+                          })
+                        }
+                        placeholder="Leave empty for Windows default printer"
+                        className="h-10 rounded-xl font-mono text-sm"
+                      />
+                    </div>
                   </div>
                 )}
 

@@ -48,6 +48,7 @@ import {
   Thermometer,
   Stethoscope,
   Smartphone,
+  Bike,
 } from "lucide-react";
 import { getEffectiveTierId, resolvePlan } from "@/lib/planMatrix";
 import {
@@ -173,6 +174,7 @@ function buildRestaurantSections(input: SidebarSectionsInput): SidebarSection[] 
         { nameKey: "restaurant_active_bills", path: "/dashboard/restaurant/active-bills", icon: Receipt, permissionKey: "pos" },
         { nameKey: "restaurant_kot", path: "/dashboard/restaurant/kot", icon: ChefHat, permissionKey: "pos" },
         { nameKey: "restaurant_orders", path: "/dashboard/restaurant/orders", icon: ClipboardList, permissionKey: "sales" },
+        { nameKey: "restaurant_riders", path: "/dashboard/restaurant/riders", icon: Bike, permissionKey: "sales" },
       ],
     },
     {

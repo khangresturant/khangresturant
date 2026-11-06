@@ -1,8 +1,9 @@
+import "server-only";
 import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 
-const DEFAULT_REL = path.join("data", "flame9.sqlite");
+const DEFAULT_REL = path.join("data", "cafe-master.sqlite");
 
 let db: Database.Database | null = null;
 

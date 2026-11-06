@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { isLocalSqliteEnabled } from "@/lib/config";
 import { FLAME9_LOCAL_LOGINS } from "@/lib/local-sqlite/seed-data";
+import { persistLocalAuthCookie } from "@/lib/local-sqlite/local-auth";
 
 const loginFont = Outfit({
   subsets: ["latin"],
@@ -42,6 +43,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true);
+    if (isLocalSqliteEnabled()) {
+      try {
+        const raw = sessionStorage.getItem("mock_auth_session");
+        if (raw) persistLocalAuthCookie(JSON.parse(raw));
+      } catch {
+        /* ignore */
+      }
+    }
   }, []);
 
   const routeAfterLogin = async () => {
@@ -174,7 +183,7 @@ export default function LoginPage() {
 
         toast.error("Sign in failed", {
           description: isNetworkErr
-            ? "Cannot connect to server. Check connection or Supabase URL in .env.local."
+            ? "Check email and password (local: admin@flame9.pizza / admin123)."
             : error.message,
         });
         return;

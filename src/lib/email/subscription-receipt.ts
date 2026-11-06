@@ -1,7 +1,8 @@
 import { sendEmail } from "@/lib/email";
+import { getPublicAppUrl } from "@/lib/app-url";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://theaccounts.cloud";
-const SUPPORT_EMAIL = process.env.SMTP_FROM || process.env.SMTP_USER || "support@theaccounts.cloud";
+const APP_URL = getPublicAppUrl();
+const SUPPORT_EMAIL = process.env.SMTP_FROM || process.env.SMTP_USER || "admin@local.cafe";
 
 export type SubscriptionReceiptEmailData = {
   customerName?: string;
@@ -35,7 +36,7 @@ function formatPlanLabel(planId: string) {
 
 function formatDate(value: Date | string) {
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("en-PK", {
     day: "numeric",
     month: "long",
@@ -56,7 +57,7 @@ function receiptRow(label: string, value: string, valueColor = "#0f172a") {
 }
 
 /**
- * Premium colorful order receipt — use for Safepay onboarding sample & customer notifications.
+ * Premium colorful order receipt - use for Safepay onboarding sample & customer notifications.
  */
 export function generateSubscriptionReceiptEmailHtml(data: SubscriptionReceiptEmailData) {
   const isPending = data.status === "pending";
@@ -85,7 +86,7 @@ export function generateSubscriptionReceiptEmailHtml(data: SubscriptionReceiptEm
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${statusLabel} — The Accounts</title>
+  <title>${statusLabel} - The Accounts</title>
 </head>
 <body style="margin:0;padding:0;background:#eef2ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
   <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background:linear-gradient(180deg,#eef2ff 0%,#f8fafc 45%,#fdf2f8 100%);padding:36px 16px;">
@@ -204,9 +205,9 @@ export function generateSubscriptionReceiptEmailHtml(data: SubscriptionReceiptEm
 export function subscriptionReceiptSubject(data: SubscriptionReceiptEmailData) {
   const planTitle = data.planName || formatPlanLabel(data.planId);
   if (data.status === "pending") {
-    return `⏳ Payment Received — ${planTitle} | The Accounts`;
+    return `⏳ Payment Received - ${planTitle} | The Accounts`;
   }
-  return `✅ Order Confirmed — ${planTitle} is Active | The Accounts`;
+  return `✅ Order Confirmed - ${planTitle} is Active | The Accounts`;
 }
 
 export async function sendSubscriptionReceiptEmail(

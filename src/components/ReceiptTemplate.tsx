@@ -2,6 +2,7 @@
 
 import React from "react";
 import { formatDateTime } from "@/lib/timezone";
+import { getPublicAppUrl } from "@/lib/app-url";
 
 // Centralized branding constant
 export const SOFTWARE_BRANDING = "The Accounts";
@@ -49,6 +50,14 @@ export type ReceiptSettings = {
   marginRight?: number; // In mm (0 to 30) for thermal alignment
   marginTop?: number; // In mm (0 to 30)
   marginBottom?: number; // In mm (0 to 40)
+  /** Restaurant: Windows printer name for KOT / kitchen (saved in Business Details). */
+  kitchenPrinterName?: string;
+  /** Restaurant: Windows printer for guest bill + payment slip; empty = Windows default. */
+  customerPrinterName?: string;
+  /** Show company logo on KOT header. */
+  restaurantLogoOnKot?: boolean;
+  /** POS: auto-print KOT slip when sending to kitchen. */
+  restaurantPrintKitchenOnKot?: boolean;
 };
 
 // Default Settings
@@ -93,6 +102,10 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   marginRight: 0,
   marginTop: 0,
   marginBottom: 0,
+  kitchenPrinterName: "",
+  customerPrinterName: "",
+  restaurantLogoOnKot: true,
+  restaurantPrintKitchenOnKot: true,
 };
 
 // 15 Template Definitions
@@ -208,6 +221,10 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
 
   const currencySymbol = selectedCurrency || "Rs";
 
+  const receiptBillNo =
+    (invoice?.order_number && String(invoice.order_number).trim()) ||
+    (invoice?.id ? invoice.id.slice(0, 8).toUpperCase() : "PREVIEW");
+
   // Determine width based on Page Size setting
   let containerWidth = "w-full max-w-[320px]"; // Default 80mm
   if (pageSize === "MM58") {
@@ -259,9 +276,9 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
     if (templateId === "islamic-grace") {
       return (
         <div className="flex items-center justify-center gap-1.5 my-1 text-black font-bold text-[8.5px]">
-          <span className="flex-1 border-t border-black/40"></span>
-          <span>۞</span>
-          <span className="flex-1 border-t border-black/40"></span>
+          <div className="flex-1 border-t border-black/40"></div>
+          <div>۞</div>
+          <div className="flex-1 border-t border-black/40"></div>
         </div>
       );
     }
@@ -345,9 +362,9 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
 
       {templateId === "corp-invoice" && (
         <div className="text-center pb-1 mb-1 border-b-2 border-black">
-          <span className="text-[10px] font-black uppercase tracking-widest bg-black text-white px-3 py-0.5 rounded-xs">
+          <div className="text-[10px] font-black uppercase tracking-widest bg-black text-white px-3 py-0.5 rounded-xs">
             Commercial Tax Invoice
-          </span>
+          </div>
         </div>
       )}
 
@@ -403,8 +420,8 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
           <div className="text-[9px] text-zinc-800 font-medium space-y-0.5 pt-0.5">
             {showAddress && shopDetails.address && <p>{shopDetails.address}</p>}
             <div className="flex justify-center gap-2 flex-wrap">
-              {showPhone && shopDetails.phone && <span>Ph: {shopDetails.phone}</span>}
-              {showEmail && shopDetails.email && <span>Email: {shopDetails.email}</span>}
+              {showPhone && shopDetails.phone && <div>Ph: {shopDetails.phone}</div>}
+              {showEmail && shopDetails.email && <div>Email: {shopDetails.email}</div>}
             </div>
             {showWebsite && shopDetails.website && <p className="font-bold underline">{shopDetails.website}</p>}
           </div>
@@ -414,12 +431,12 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         {enableFBR && (
           <div className="my-1.5 p-1 border border-black rounded text-center space-y-0.5 font-mono text-black">
             <div className="flex items-center justify-center gap-1 font-black text-[9.5px] text-black">
-              <span>🇵🇰</span>
-              <span>FBR INVOICE (Tier-1 POS)</span>
+              <div>🇵🇰</div>
+              <div>FBR INVOICE (Tier-1 POS)</div>
             </div>
             <div className="flex justify-between items-center text-[8.5px] text-black font-bold px-1">
-              <span>POS ID: {fbrPosId || "100001"}</span>
-              <span>NTN: {fbrNtnStrn || "0000000-0"}</span>
+              <div>POS ID: {fbrPosId || "100001"}</div>
+              <div>NTN: {fbrNtnStrn || "0000000-0"}</div>
             </div>
             <div className="text-[8px] font-black text-black truncate border-t border-black/30 pt-0.5 mt-0.5">
               FBR USIN: {invoice?.fbr_usin || `${fbrPosId || '100001'}-${(invoice?.id || 'PREVIEW').slice(0, 8).toUpperCase()}`}
@@ -434,63 +451,63 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
       {templateId === "two-column-compact" ? (
         <div className="grid grid-cols-2 gap-1.5 text-[8.5px] font-bold text-black my-1 border border-black/30 p-1.5 rounded-sm">
           <div>
-            <span className="text-zinc-500 font-normal">Date: </span>
-            <span>{formatDateTime(invoice?.created_at || new Date(), settings.timezone)}</span>
+            <div className="text-zinc-500 font-normal">Date: </div>
+            <div>{formatDateTime(invoice?.created_at || new Date(), settings.timezone)}</div>
           </div>
           <div className="text-right">
-            <span className="text-zinc-500 font-normal">Inv#: </span>
-            <span className="font-black font-mono">#{invoice?.id ? invoice.id.slice(0, 8).toUpperCase() : "PREVIEW"}</span>
+            <div className="text-zinc-500 font-normal">Inv#: </div>
+            <div className="font-black font-mono">#{receiptBillNo}</div>
           </div>
           {showCustomerInfo && invoice?.customer_name && (
             <div className="col-span-2 border-t border-dashed border-black/30 pt-1 flex justify-between">
-              <span>Cust: <span className="font-black">{invoice.customer_name}</span></span>
-              {invoice.customer_phone && <span className="font-mono">{invoice.customer_phone}</span>}
+              <div>Cust: <div className="font-black">{invoice.customer_name}</div></div>
+              {invoice.customer_phone && <div className="font-mono">{invoice.customer_phone}</div>}
             </div>
           )}
         </div>
       ) : templateId === "corp-invoice" ? (
         <div className="border border-black p-1.5 rounded-xs text-[8.5px] space-y-0.5 my-1.5 font-sans">
           <div className="flex justify-between font-bold">
-            <span>Invoice No: <span className="font-black font-mono">#{invoice?.id ? invoice.id.slice(0, 8).toUpperCase() : "PREVIEW"}</span></span>
-            <span>Date: {formatDateTime(invoice?.created_at || new Date(), settings.timezone)}</span>
+            <div>Invoice No: <div className="font-black font-mono">#{receiptBillNo}</div></div>
+            <div>Date: {formatDateTime(invoice?.created_at || new Date(), settings.timezone)}</div>
           </div>
           {showCustomerInfo && invoice?.customer_name && (
             <div className="border-t border-black/30 pt-1 mt-1 flex justify-between font-medium">
-              <span>Bill To (Buyer): <strong className="text-black">{invoice.customer_name}</strong></span>
-              {invoice.customer_phone && <span>Ph: {invoice.customer_phone}</span>}
+              <div>Bill To (Buyer): <strong className="text-black">{invoice.customer_name}</strong></div>
+              {invoice.customer_phone && <div>Ph: {invoice.customer_phone}</div>}
             </div>
           )}
         </div>
       ) : templateId === "retro-double" ? (
         <div className="font-mono text-[8.5px] text-black font-bold space-y-0.5 my-1">
           <div className="flex justify-between border-b border-dotted border-black pb-0.5">
-            <span>DATE: {new Date(invoice?.created_at || Date.now()).toLocaleDateString()}</span>
-            <span>TIME: {new Date(invoice?.created_at || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+            <div>DATE: {new Date(invoice?.created_at || Date.now()).toLocaleDateString()}</div>
+            <div>TIME: {new Date(invoice?.created_at || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
           </div>
           <div className="flex justify-between pt-0.5">
-            <span>RECEIPT: #{invoice?.id ? invoice.id.slice(0, 8).toUpperCase() : "PREVIEW"}</span>
-            {showCustomerInfo && invoice?.customer_name && <span>CL: {invoice.customer_name}</span>}
+            <div>RECEIPT: #{receiptBillNo}</div>
+            {showCustomerInfo && invoice?.customer_name && <div>CL: {invoice.customer_name}</div>}
           </div>
         </div>
       ) : (
         <div className="text-[9px] text-black space-y-0.5 my-1.5">
           <div className="flex justify-between items-center font-bold">
-            <span>Date: {formatDateTime(invoice?.created_at || new Date(), settings.timezone)}</span>
-            <span className="font-black">
+            <div>Date: {formatDateTime(invoice?.created_at || new Date(), settings.timezone)}</div>
+            <div className="font-black">
               {invoice?.status === "quotation" || invoice?.payment_mode === "quotation"
-                ? `Quot: #${invoice?.id ? invoice.id.slice(0, 8).toUpperCase() : "PREVIEW"}`
-                : `Inv: #${invoice?.id ? invoice.id.slice(0, 8).toUpperCase() : "PREVIEW"}`
+                ? `Quot: #${receiptBillNo}`
+                : `Inv: #${receiptBillNo}`
               }
-            </span>
+            </div>
           </div>
 
           {showCustomerInfo && (invoice?.customer_name) && (
             <div className="pt-0.5 font-bold flex flex-wrap gap-x-2 gap-y-0.5">
-              <span>Customer: <span className="font-black">{invoice.customer_name}</span></span>
-              {invoice.customer_phone && <span>· Ph: {invoice.customer_phone}</span>}
-              {invoice.customer_cnic && <span>· CNIC: {invoice.customer_cnic}</span>}
-              {invoice.customer_father_name && <span>· S/O: {invoice.customer_father_name}</span>}
-              {invoice.crop_season && <span>· Season: {invoice.crop_season}</span>}
+              <div>Customer: <div className="font-black">{invoice.customer_name}</div></div>
+              {invoice.customer_phone && <div>· Ph: {invoice.customer_phone}</div>}
+              {invoice.customer_cnic && <div>· CNIC: {invoice.customer_cnic}</div>}
+              {invoice.customer_father_name && <div>· S/O: {invoice.customer_father_name}</div>}
+              {invoice.crop_season && <div>· Season: {invoice.crop_season}</div>}
             </div>
           )}
 
@@ -551,20 +568,20 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
                     </p>
                     <div className="flex gap-1.5 flex-wrap text-[8px] font-medium text-zinc-700 mt-0.5">
                       {showItemCode && (item.code || item.products?.code) && (
-                        <span className="font-mono border border-black/40 px-0.5 rounded-xs">{item.code || item.products?.code}</span>
+                        <div className="font-mono border border-black/40 px-0.5 rounded-xs">{item.code || item.products?.code}</div>
                       )}
-                      {item.packingName && <span>({item.packingName})</span>}
-                      {item.warranty && <span className="border border-black/40 px-0.5 rounded-xs">Warr: {item.warranty}</span>}
+                      {item.packingName && <div>({item.packingName})</div>}
+                      {item.warranty && <div className="border border-black/40 px-0.5 rounded-xs">Warr: {item.warranty}</div>}
                       {showShelfLocation && (item.shelf_location || item.shelfLocation || item.products?.shelf_location) && (
-                        <span className="border border-black/40 px-0.5 rounded-xs">
+                        <div className="border border-black/40 px-0.5 rounded-xs">
                           Shelf: {item.shelf_location || item.shelfLocation || item.products?.shelf_location}
-                        </span>
+                        </div>
                       )}
                       {showBatchNumber && (item.batch_number || item.batchNumber) && (
-                        <span className="border border-black/40 px-0.5 rounded-xs font-mono">
+                        <div className="border border-black/40 px-0.5 rounded-xs font-mono">
                           Batch: {item.batch_number || item.batchNumber}
                           {showExpiryDate && (item.expiry_date || item.expiryDate) && ` · Exp: ${item.expiry_date || item.expiryDate}`}
-                        </span>
+                        </div>
                       )}
                     </div>
                     {item.sold_imeis && (
@@ -599,38 +616,38 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         {/* Gross Subtotal */}
         {totalItemDiscount > 0 && (
           <div className="flex justify-between items-center">
-            <span>Gross Total:</span>
-            <span className="font-mono font-black">{currencySymbol} {grossSubtotal.toFixed(2)}</span>
+            <div>Gross Total:</div>
+            <div className="font-mono font-black">{currencySymbol} {grossSubtotal.toFixed(2)}</div>
           </div>
         )}
 
         {/* Item Discount */}
         {totalItemDiscount > 0 && (
           <div className="flex justify-between items-center">
-            <span>Item Discounts:</span>
-            <span className="font-mono font-black">-{currencySymbol} {totalItemDiscount.toFixed(2)}</span>
+            <div>Item Discounts:</div>
+            <div className="font-mono font-black">-{currencySymbol} {totalItemDiscount.toFixed(2)}</div>
           </div>
         )}
 
         {/* Subtotal */}
         <div className="flex justify-between items-center">
-          <span>Subtotal:</span>
-          <span className="font-mono font-black">{currencySymbol} {subtotal.toFixed(2)}</span>
+          <div>Subtotal:</div>
+          <div className="font-mono font-black">{currencySymbol} {subtotal.toFixed(2)}</div>
         </div>
 
         {/* Tax */}
         {showTax && (invoice?.tax_amount > 0) && (
           <div className="flex justify-between items-center">
-            <span>Tax ({invoice.tax_rate ? `${invoice.tax_rate}%` : ""}):</span>
-            <span className="font-mono font-black">{currencySymbol} {Number(invoice.tax_amount).toFixed(2)}</span>
+            <div>Tax ({invoice.tax_rate ? `${invoice.tax_rate}%` : ""}):</div>
+            <div className="font-mono font-black">{currencySymbol} {Number(invoice.tax_amount).toFixed(2)}</div>
           </div>
         )}
 
         {/* Discount */}
         {showDiscount && (invoice?.discount > 0) && (
           <div className="flex justify-between items-center">
-            <span>Discount:</span>
-            <span className="font-mono font-black">-{currencySymbol} {Number(invoice.discount).toFixed(2)}</span>
+            <div>Discount:</div>
+            <div className="font-mono font-black">-{currencySymbol} {Number(invoice.discount).toFixed(2)}</div>
           </div>
         )}
 
@@ -638,8 +655,8 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         {invoice?.subsidy_amount > 0 && (
           <>
             <div className="flex justify-between items-center border border-black/40 px-1 rounded">
-              <span>Govt Subsidy:</span>
-              <span className="font-mono font-black">-{currencySymbol} {Number(invoice.subsidy_amount).toFixed(2)}</span>
+              <div>Govt Subsidy:</div>
+              <div className="font-mono font-black">-{currencySymbol} {Number(invoice.subsidy_amount).toFixed(2)}</div>
             </div>
             {invoice.subsidy_voucher && (
               <div className="text-[8px] font-bold text-right">
@@ -652,37 +669,37 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         {/* Grand Total Styles per Template */}
         {templateId === "midnight-shaded" || templateId === "bold-stripe" ? (
           <div className="flex justify-between items-center p-1.5 rounded-xs text-white font-black bg-black my-1">
-            <span className="tracking-wide">TOTAL RECEIVABLE:</span>
-            <span className="font-mono text-sm">{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)}</span>
+            <div className="tracking-wide">TOTAL RECEIVABLE:</div>
+            <div className="font-mono text-sm">{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)}</div>
           </div>
         ) : templateId === "modern-carbon" ? (
           <div className="border-2 border-black p-1.5 rounded-md flex justify-between items-center my-1.5 bg-slate-50">
-            <span className="font-black text-[10px] uppercase tracking-wider">Net Amount:</span>
-            <span className="font-mono text-sm font-black">{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)}</span>
+            <div className="font-black text-[10px] uppercase tracking-wider">Net Amount:</div>
+            <div className="font-mono text-sm font-black">{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)}</div>
           </div>
         ) : templateId === "boutique-serif" ? (
           <div className="flex justify-between items-center py-1 border-y-2 border-double border-black font-serif font-black text-black my-1">
-            <span className="tracking-widest uppercase">Amount Payable:</span>
-            <span className="font-mono text-sm">{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)}</span>
+            <div className="tracking-widest uppercase">Amount Payable:</div>
+            <div className="font-mono text-sm">{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)}</div>
           </div>
         ) : templateId === "retro-double" ? (
           <div className="font-mono text-center my-1 border-y-2 border-black py-1">
             <div className="flex justify-between font-black text-sm">
-              <span>*** TOTAL:</span>
-              <span>{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)} ***</span>
+              <div>*** TOTAL:</div>
+              <div>{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)} ***</div>
             </div>
           </div>
         ) : templateId === "minimalist-air" ? (
           <div className="flex justify-between items-center pt-2 text-black font-black text-sm">
-            <span>Total:</span>
-            <span className="font-mono font-extrabold">{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)}</span>
+            <div>Total:</div>
+            <div className="font-mono font-extrabold">{currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)}</div>
           </div>
         ) : (
           <div className="flex justify-between items-center py-1 border-y border-black text-black font-black my-1">
-            <span>Total Receivable:</span>
-            <span className="font-mono text-sm font-black">
+            <div>Total Receivable:</div>
+            <div className="font-mono text-sm font-black">
               {currencySymbol} {Number(invoice?.total_amount || 0).toFixed(2)}
-            </span>
+            </div>
           </div>
         )}
 
@@ -690,26 +707,26 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         {showPaymentMode && invoice?.payment_mode && (
           <div className="pt-0.5 space-y-0.5">
             <div className="flex justify-between">
-              <span>Payment Mode:</span>
-              <span className="font-black uppercase">
+              <div>Payment Mode:</div>
+              <div className="font-black uppercase">
                 {invoice.payment_mode === "quotation" 
                   ? "Quotation / Estimate" 
                   : invoice.payment_mode === "emi" 
                     ? "Installments (EMI)" 
                     : invoice.payment_mode}
-              </span>
+              </div>
             </div>
             
             {((invoice.payment_mode === "credit" || invoice.payment_mode === "emi" || invoice.payment_mode === "partial") ||
               (Number(invoice.received_amount ?? invoice.paid_amount ?? 0) > 0 && Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0)) > 0)) && (
               <>
                 <div className="flex justify-between font-bold">
-                  <span>{invoice.payment_mode === "emi" ? "Down Payment:" : (billingLanguage === "ur" ? "نقد وصولی (Cash Paid):" : "Cash Paid:")}</span>
-                  <span className="font-mono font-black">{currencySymbol} {Number(invoice.received_amount !== undefined && invoice.received_amount !== null ? invoice.received_amount : (invoice.paid_amount || 0)).toFixed(2)}</span>
+                  <div>{invoice.payment_mode === "emi" ? "Down Payment:" : (billingLanguage === "ur" ? "نقد وصولی (Cash Paid):" : "Cash Paid:")}</div>
+                  <div className="font-mono font-black">{currencySymbol} {Number(invoice.received_amount !== undefined && invoice.received_amount !== null ? invoice.received_amount : (invoice.paid_amount || 0)).toFixed(2)}</div>
                 </div>
                 <div className="flex justify-between font-black border-t border-dashed border-black/40 pt-0.5">
-                  <span>{invoice.payment_mode === "emi" ? "EMI Debt Balance:" : (billingLanguage === "ur" ? "Udhaar Balance (کھاتا):" : "Balance Due:")}</span>
-                  <span className="font-mono">{currencySymbol} {Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount !== undefined && invoice.received_amount !== null ? invoice.received_amount : (invoice.paid_amount || 0))).toFixed(2)}</span>
+                  <div>{invoice.payment_mode === "emi" ? "EMI Debt Balance:" : (billingLanguage === "ur" ? "Udhaar Balance (کھاتا):" : "Balance Due:")}</div>
+                  <div className="font-mono">{currencySymbol} {Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount !== undefined && invoice.received_amount !== null ? invoice.received_amount : (invoice.paid_amount || 0))).toFixed(2)}</div>
                 </div>
               </>
             )}
@@ -720,19 +737,19 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         {invoice?.payment_mode === "emi" && invoice?.emiSchedules && invoice.emiSchedules.length > 0 && (
           <div className="mt-2 border-t border-black pt-1.5 space-y-1 text-left">
             <div className="flex justify-between items-center text-[8.5px] font-black text-black border-b border-black pb-0.5">
-              <span>📅 {billingLanguage === "ur" ? "Installment Plan (اقساط کا شیڈول):" : "Installment Schedule:"}</span>
-              <span className="text-[7.5px] font-mono border border-black px-1">
+              <div>📅 {billingLanguage === "ur" ? "Installment Plan (اقساط کا شیڈول):" : "Installment Schedule:"}</div>
+              <div className="text-[7.5px] font-mono border border-black px-1">
                 {invoice.emiSchedules.length} Payments
-              </span>
+              </div>
             </div>
             
             <div className="space-y-0.5 font-mono text-[8px] font-bold text-black">
               {invoice.emiSchedules.map((s: any) => (
                 <div key={s.installmentNum} className="flex justify-between border-b border-dotted border-black/40 pb-0.5 last:border-b-0">
-                  <span>Inst #{s.installmentNum}: {new Date(s.dueDate).toLocaleDateString()}</span>
-                  <span className="font-black">
+                  <div>Inst #{s.installmentNum}: {new Date(s.dueDate).toLocaleDateString()}</div>
+                  <div className="font-black">
                     {currencySymbol} {Number(s.amount).toFixed(2)} {s.status === 'paid' && '✓'}
-                  </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -747,37 +764,37 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
           <div className="mt-2 border-t-2 border-black pt-1.5 space-y-0.5">
             {/* Previous (pre-this-bill) balance */}
             <div className="flex justify-between items-center text-[8.5px] font-black text-black">
-              <span>
+              <div>
                 {billingLanguage === "ur" ? "پچھلا بقایا / Prev Balance:" : "Previous Balance:"}
-              </span>
-              <span className="font-mono">
+              </div>
+              <div className="font-mono">
                 {currencySymbol}{" "}
                 {(Number(invoice.customer_balance) - (
                   (invoice.payment_mode === "credit" || invoice.payment_mode === "partial")
                     ? Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0))
                     : 0
                 )).toFixed(2)}
-              </span>
+              </div>
             </div>
             {/* This bill's added credit (if credit/partial) */}
             {(invoice.payment_mode === "credit" || invoice.payment_mode === "partial") &&
               Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0)) > 0.009 && (
               <div className="flex justify-between items-center text-[8.5px] font-bold text-black">
-                <span>{billingLanguage === "ur" ? "+ اس بل کا بقایا:" : "+ This Bill Due:"}</span>
-                <span className="font-mono">
+                <div>{billingLanguage === "ur" ? "+ اس بل کا بقایا:" : "+ This Bill Due:"}</div>
+                <div className="font-mono">
                   {currencySymbol}{" "}
                   {Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0)).toFixed(2)}
-                </span>
+                </div>
               </div>
             )}
-            {/* Grand total outstanding — bold black strip */}
+            {/* Grand total outstanding - bold black strip */}
             <div className="flex justify-between items-center py-1 px-1.5 rounded font-black text-[9px] text-white bg-black mt-0.5">
-              <span>
+              <div>
                 {billingLanguage === "ur" ? "کُل بقایا / Total Due:" : "Total Outstanding:"}
-              </span>
-              <span className="font-mono">
+              </div>
+              <div className="font-mono">
                 {currencySymbol} {Math.abs(Number(invoice.customer_balance)).toFixed(2)}
-              </span>
+              </div>
             </div>
           </div>
         )}
@@ -803,21 +820,21 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         {/* QR Code Layout (Single QR Tech) */}
         {templateId === "qr-tech" && (
           <div className="flex flex-col items-center justify-center py-2 my-1 border border-black/30 bg-slate-50 p-2 rounded-lg space-y-1">
-            <span className="text-[7.5px] font-black uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded-full">
+            <div className="text-[7.5px] font-black uppercase tracking-wider bg-black text-white px-2 py-0.5 rounded-full">
               ⚡ Digital Receipt Verified
-            </span>
+            </div>
             <div className="w-16 h-16 bg-white border border-black p-0.5 flex items-center justify-center rounded overflow-hidden shadow-xs">
               <img 
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(
                   typeof window !== "undefined" && invoice?.id && invoice.id !== "PREVIEW"
                     ? `${window.location.origin}/public/receipt/${invoice.id}` 
-                    : "https://theaccounts.cloud"
+                    : getPublicAppUrl()
                 )}`} 
                 alt="Digital Receipt QR" 
                 className="w-full h-full object-contain filter grayscale contrast-200"
               />
             </div>
-            <span className="text-[7px] text-zinc-500 font-mono">Scan on mobile to view & download PDF</span>
+            <div className="text-[7px] text-zinc-500 font-mono">Scan on mobile to view & download PDF</div>
           </div>
         )}
 
@@ -831,13 +848,13 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(
                     typeof window !== "undefined" && invoice?.id && invoice.id !== "PREVIEW"
                       ? `${window.location.origin}/public/receipt/${invoice.id}` 
-                      : "https://theaccounts.cloud"
+                      : getPublicAppUrl()
                   )}`} 
                   alt="Digital Receipt QR" 
                   className="w-full h-full object-contain filter grayscale contrast-200"
                 />
               </div>
-              <span className="text-[7px] font-black text-black">Digital Bill</span>
+              <div className="text-[7px] font-black text-black">Digital Bill</div>
             </div>
 
             {/* QR 2: E-Commerce Store */}
@@ -847,13 +864,13 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(
                     typeof window !== "undefined"
                       ? `${window.location.origin}/store/faizan-mobile-shop` 
-                      : "https://theaccounts.cloud"
+                      : getPublicAppUrl()
                   )}`} 
                   alt="Online Web Store QR" 
                   className="w-full h-full object-contain filter grayscale contrast-200"
                 />
               </div>
-              <span className="text-[7px] font-black text-black">Online Store</span>
+              <div className="text-[7px] font-black text-black">Online Store</div>
             </div>
           </div>
         )}
@@ -868,7 +885,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
               </div>
               <div className="text-center">
                 <div className="w-24 border-b border-black mb-1"></div>
-                <span className="text-[7.5px] font-bold uppercase">Authorized Signature</span>
+                <div className="text-[7.5px] font-bold uppercase">Authorized Signature</div>
               </div>
             </div>
           </div>

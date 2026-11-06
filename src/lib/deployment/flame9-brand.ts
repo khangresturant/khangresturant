@@ -1,5 +1,5 @@
 /**
- * Flame 9 — Pizza House & Café deployment profile (D:\pizza).
+ * Flame 9 - Pizza House & Café deployment profile (D:\pizza).
  * Branding + permanent restaurant license (no SaaS billing UI).
  */
 
@@ -25,6 +25,7 @@ export function isFlame9Brand(): boolean {
 /** Owner-operated install: premium features, no expiry, hide payment plans. */
 export function isPermanentRestaurantLicense(): boolean {
   if (process.env.NEXT_PUBLIC_PERMANENT_LICENSE === "true") return true;
+  if (process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE === "true") return true;
   return isFlame9Brand();
 }
 
@@ -58,4 +59,4 @@ export function getFlame9AdminEmailHint(): string {
   return first || "admin@flame9.pizza";
 }
 
-export const PERMANENT_PLAN_LABEL = "Permanent — Pizza House & Café";
+export const PERMANENT_PLAN_LABEL = "Permanent - Pizza House & Café";

@@ -30,8 +30,8 @@ export async function GET(req: NextRequest) {
 
     if (invErr) throw invErr;
 
-    const invoiceIds = (invoices || []).map(i => i.id);
-    const revenue = (invoices || []).reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
+    const invoiceIds = (invoices || []).map((i: any) => i.id);
+    const revenue = (invoices || []).reduce((sum: number, item: any) => sum + Number(item.total_amount || 0), 0);
 
     // 2. Fetch Invoice Items to calculate COGS
     let cogs = 0;
@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
       if (itemsErr) throw itemsErr;
 
       if (items && items.length > 0) {
-        const productIds = Array.from(new Set(items.map(it => it.product_id)));
-        const variantIds = Array.from(new Set(items.map(it => it.variant_id).filter(Boolean)));
+        const productIds = Array.from(new Set(items.map((it: any) => it.product_id)));
+        const variantIds = Array.from(new Set(items.map((it: any) => it.variant_id).filter(Boolean)));
 
         // Fetch purchase costs
         const [productsRes, variantsRes] = await Promise.all([
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
           variantCostMap[v.id] = Number(v.purchase_price || 0);
         });
 
-        items.forEach(it => {
+        items.forEach((it: any) => {
           const itemCost = it.variant_id && variantCostMap[it.variant_id]
             ? variantCostMap[it.variant_id]
             : (productCostMap[it.product_id] || 0);
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
 
     if (expErr) throw expErr;
 
-    const totalExpenses = (expenses || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const totalExpenses = (expenses || []).reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
 
     // 4. Showroom Integration: Sold vehicles (Cash Sales + Installment Sales)
     let showroomRevenue = 0;

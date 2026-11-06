@@ -22,29 +22,67 @@ import {
   cancelRestaurantOrder,
   markBillPrinted,
   canMarkPaidInHistory,
+  canPrintGuestBill,
   normalizeOrderStatus,
+  canCancelRestaurantOrder,
 } from "@/lib/restaurant-orders";
 import { SettleOrderDialog, type SettleOrderData } from "@/components/restaurant/SettleOrderDialog";
+import { DEFAULT_RECEIPT_SETTINGS } from "@/components/ReceiptTemplate";
+import {
+  companyRowToShopDetails,
+  mergeRestaurantPrintProfile,
+} from "@/lib/restaurant-print-profile";
+import {
+  mapDbInvoiceItemsToReceiptLines,
+  printRestaurantGuestBill,
+  printRestaurantRevisedGuestBill,
+  printRestaurantPaidReceipt,
+  printRestaurantKOTSlip,
+} from "@/lib/restaurant-receipt-print";
+import { loadLatestKOTForInvoice, loadKitchenTicketForPrint } from "@/lib/restaurant-kitchen";
+import { staffPhone } from "@/lib/restaurant-riders";
+import { RestaurantBillEditHistoryModal } from "@/components/restaurant/RestaurantBillEditHistoryModal";
+import {
+  parseRestaurantEditHistory,
+  type RestaurantBillEditHistoryEntry,
+} from "@/lib/restaurant-bill-edit";
 
 type OrderRow = {
   id: string;
   order_number: string | null;
   created_at: string;
   total_amount: number;
+  cost_amount?: number | null;
+  profit_amount?: number | null;
   discount: number;
   tax_rate: number;
   tax_amount: number;
   status: string;
+  payment_mode?: string | null;
+  paid_amount?: number | null;
+  is_edited?: boolean;
+  edit_history?: RestaurantBillEditHistoryEntry[] | null;
   restaurant_order_status: RestaurantOrderStatus | null;
   service_type: string | null;
   customer_name: string | null;
   customer_phone: string | null;
+  customer_address?: string | null;
+  special_instructions?: string | null;
+  delivery_fee?: number | null;
+  additional_charges?: number | null;
   party_id: string | null;
   table_id: string | null;
   waiter_id?: string | null;
   rider_id?: string | null;
   parties: { name: string } | null;
-  invoice_items: { product_id: string; quantity: number; unit_price: number; products: { name: string } | null }[];
+  invoice_items: {
+    product_id: string;
+    quantity: number;
+    unit_price: number;
+    packing_name?: string | null;
+    menu_size_id?: string | null;
+    products: { name: string } | null;
+  }[];
   tableName?: string;
 };
 
@@ -86,7 +124,7 @@ function ordersSnapshotKey(rows: OrderRow[]): string {
 }
 
 export default function RestaurantOrdersPage() {
-  const { shopId } = useShop();
+  const { shopId, shopName, shopPhone, shopAddress, shopEmail } = useShop();
   const { language } = useLanguage();
   const supabase = useMemo(() => createClient(), []);
   const isEn = language === "en";
@@ -105,7 +143,35 @@ export default function RestaurantOrdersPage() {
   const [dateFilter, setDateFilter] = useState("today");
   const [page, setPage] = useState(1);
   const [settleOrder, setSettleOrder] = useState<SettleOrderData | null>(null);
+  const [receiptSettings, setReceiptSettings] = useState<any>(DEFAULT_RECEIPT_SETTINGS);
+  const [companyDetails, setCompanyDetails] = useState<Record<string, unknown> | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyOrder, setHistoryOrder] = useState<OrderRow | null>(null);
+  const [staff, setStaff] = useState<{ id: string; name: string; phone?: string | null }[]>([]);
   const pageSize = 50;
+
+  useEffect(() => {
+    if (!shopId) return;
+    (async () => {
+      const [{ data: printData }, { data: companyData }, { data: staffData }] = await Promise.all([
+        supabase
+          .from("print_settings")
+          .select("receipt_page_size, receipt_font, receipt_font_size, receipt_design_settings")
+          .eq("shop_id", shopId)
+          .maybeSingle(),
+        supabase.from("company_details").select("*").eq("shop_id", shopId).maybeSingle(),
+        supabase.from("user_profiles").select("id, name, phone, permissions").eq("shop_id", shopId),
+      ]);
+      if (companyData) setCompanyDetails(companyData as Record<string, unknown>);
+      setStaff((staffData || []) as { id: string; name: string; phone?: string | null }[]);
+      setReceiptSettings(
+        mergeRestaurantPrintProfile(
+          companyData as Record<string, unknown> | null,
+          printData as Record<string, unknown> | null
+        )
+      );
+    })();
+  }, [shopId, supabase]);
 
   const loadOrders = useCallback(async (opts?: { silent?: boolean }) => {
     if (!shopId) return;
@@ -114,32 +180,83 @@ export default function RestaurantOrdersPage() {
     try {
       const { data: tables } = await supabase.from("restaurant_tables").select("id, name, active_invoice_id").eq("shop_id", shopId);
 
-      let q = supabase
-        .from("invoices")
-        .select(`
+      const applyDateFilters = (q: ReturnType<typeof supabase.from>) => {
+        const { start, end } = computeDateRange(dateFilter);
+        let next = q;
+        if (start) next = next.gte("created_at", start);
+        if (end) next = next.lt("created_at", end);
+        return next;
+      };
+
+      const fullSelect = `
+          id, order_number, created_at, total_amount, cost_amount, profit_amount, discount, tax_rate, tax_amount, status,
+          payment_mode, paid_amount,
+          is_edited, edit_history,
+          restaurant_order_status, service_type, customer_name, customer_phone, customer_address,
+          special_instructions, delivery_fee, additional_charges, table_id, party_id,
+          waiter_id, rider_id,
+          parties ( name ),
+          invoice_items ( product_id, quantity, unit_price, packing_name, menu_size_id, products ( name ) )
+        `;
+      const legacySelect = `
           id, order_number, created_at, total_amount, discount, tax_rate, tax_amount, status,
-          restaurant_order_status, service_type, customer_name, customer_phone, table_id, party_id,
+          payment_mode, paid_amount,
+          restaurant_order_status, service_type, customer_name, customer_phone, customer_address,
+          special_instructions, delivery_fee, additional_charges, table_id, party_id,
           waiter_id, rider_id,
           parties ( name ),
           invoice_items ( product_id, quantity, unit_price, products ( name ) )
-        `)
-        .eq("shop_id", shopId)
-        .not("service_type", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(500);
+        `;
 
-      const { start, end } = computeDateRange(dateFilter);
-      if (start) q = q.gte("created_at", start);
-      if (end) q = q.lt("created_at", end);
+      let q = applyDateFilters(
+        supabase
+          .from("invoices")
+          .select(fullSelect)
+          .eq("shop_id", shopId)
+          .not("service_type", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(500)
+      );
 
-      const { data, error } = await q;
+      let { data, error } = await q;
       if (error) {
         if (error.message.includes("service_type") || error.message.includes("restaurant_order_status")) {
           setMigrationNeeded(true);
           setOrders([]);
           return;
         }
-        throw error;
+        const needsLegacy =
+          error.message.includes("menu_size_id") ||
+          error.message.includes("packing_name") ||
+          error.message.includes("cost_amount") ||
+          error.message.includes("profit_amount") ||
+          error.message.includes("edit_history") ||
+          error.message.includes("is_edited");
+        if (needsLegacy) {
+          const fb = await applyDateFilters(
+            supabase
+              .from("invoices")
+              .select(legacySelect)
+              .eq("shop_id", shopId)
+              .not("service_type", "is", null)
+              .order("created_at", { ascending: false })
+              .limit(500)
+          );
+          if (fb.error) throw fb.error;
+          data = (fb.data || []).map((inv: any) => ({
+            ...inv,
+            cost_amount: inv.cost_amount ?? null,
+            profit_amount: inv.profit_amount ?? null,
+            invoice_items: (inv.invoice_items || []).map((it: any) => ({
+              ...it,
+              packing_name: it.packing_name ?? null,
+              menu_size_id: it.menu_size_id ?? null,
+            })),
+          }));
+          error = null;
+        } else {
+          throw error;
+        }
       }
 
       setMigrationNeeded(false);
@@ -148,6 +265,7 @@ export default function RestaurantOrdersPage() {
         const t = tableList.find((x: any) => x.id === inv.table_id || x.active_invoice_id === inv.id);
         return {
           ...inv,
+          edit_history: parseRestaurantEditHistory(inv.edit_history),
           restaurant_order_status: normalizeOrderStatus(inv.restaurant_order_status),
           tableName: t?.name || (inv.service_type === "takeaway" ? "Takeaway" : inv.service_type === "delivery" ? "Delivery" : "Dine-In"),
         };
@@ -270,14 +388,157 @@ export default function RestaurantOrdersPage() {
   };
 
   const handleCancel = async (order: OrderRow) => {
-    if (!window.confirm(isEn ? `Cancel order ${order.order_number || order.id.slice(0, 8)}?` : "آرڈر منسوخ کریں؟")) return;
+    const gate = canCancelRestaurantOrder({
+      orderStatus: order.restaurant_order_status,
+      invoiceStatus: order.status,
+    });
+    if (!gate.allowed) {
+      toast.error(gate.reason || "Cannot cancel this order");
+      return;
+    }
+    const msg =
+      gate.phase === "before_prep"
+        ? isEn
+          ? `Cancel ${order.order_number || order.id.slice(0, 8)} before cooking?\nStock will be restored. Cost and payment = 0.`
+          : "ککنگ سے پہلے منسوخ؟ اسٹاک واپس، لاگت/ادائیگی صفر۔"
+        : isEn
+          ? `Cancel ${order.order_number || order.id.slice(0, 8)} after kitchen ready?\nPayment = 0. Ingredient cost stays as loss.`
+          : "تیار ہونے کے بعد منسوخ؟ ادائیگی صفر، لاگت نقصان رہے گی۔";
+    if (!window.confirm(msg)) return;
     try {
-      await cancelRestaurantOrder(supabase, order.id);
-      toast.success("Order cancelled");
+      await cancelRestaurantOrder(supabase, order.id, order.table_id);
+      toast.success(
+        gate.phase === "before_prep"
+          ? "Cancelled - stock restored, no cost."
+          : "Cancelled - cost kept as kitchen loss."
+      );
       scheduleSilentRefresh();
     } catch (e: any) {
       toast.error(e.message);
     }
+  };
+
+  const shopDetailsForPrint = () =>
+    companyRowToShopDetails(companyDetails, shopName);
+
+  const orderGuestDetails = (order: OrderRow) => {
+    const waiter = staff.find((s) => s.id === order.waiter_id);
+    const rider = staff.find((s) => s.id === order.rider_id);
+    return {
+      customerName: order.customer_name || order.parties?.name || null,
+      customerPhone: order.customer_phone || null,
+      customerAddress: order.customer_address || null,
+      waiterName: waiter?.name || null,
+      riderName: rider?.name || null,
+      riderPhone: staffPhone(rider),
+      specialInstructions: order.special_instructions || null,
+      deliveryFee: Number(order.delivery_fee || 0),
+      additionalCharges: Number(order.additional_charges || 0),
+    };
+  };
+
+  const handleReprintKOT = async (order: OrderRow) => {
+    const kotId = await loadLatestKOTForInvoice(supabase, order.id);
+    if (!kotId) {
+      toast.error(isEn ? "No kitchen ticket for this order." : "KOT نہیں ملا۔");
+      return;
+    }
+    const payload = await loadKitchenTicketForPrint(supabase, kotId);
+    if (!payload) {
+      toast.error(isEn ? "Could not load KOT." : "KOT لوڈ نہیں ہوا۔");
+      return;
+    }
+    printRestaurantKOTSlip(
+      {
+        orderNumber: payload.orderNumber,
+        tableName: payload.tableName,
+        serviceType: payload.serviceType,
+        customerName: payload.customerName || order.customer_name,
+        customerPhone: payload.customerPhone || order.customer_phone,
+        customerAddress: payload.customerAddress || order.customer_address || null,
+        waiterName: payload.waiterName,
+        riderName: payload.riderName,
+        riderPhone: payload.riderPhone,
+        specialInstructions: payload.specialInstructions || order.special_instructions || null,
+        items: payload.items,
+        settings: receiptSettings,
+        shopDetails: shopDetailsForPrint(),
+        companyRow: companyDetails,
+        isReprint: true,
+        kotTicketId: payload.kotId,
+      },
+      { onError: (msg) => toast.error(msg) }
+    );
+  };
+
+  const handleReprintPaidReceipt = (order: OrderRow) => {
+    const lines = mapDbInvoiceItemsToReceiptLines(order.invoice_items);
+    const subtotal = lines.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+    const paidAmount = Number(order.paid_amount ?? order.total_amount);
+    const remainingDue = Math.max(0, Number(order.total_amount) - paidAmount);
+    printRestaurantPaidReceipt(
+      {
+        invoiceId: order.id,
+        orderNumber: order.order_number,
+        tableName: order.tableName || null,
+        serviceType: order.service_type,
+        ...orderGuestDetails(order),
+        paymentMode: order.payment_mode || "cash",
+        items: lines,
+        subtotal,
+        discount: order.discount || 0,
+        taxRate: order.tax_rate || 0,
+        taxAmount: order.tax_amount || 0,
+        netTotal: order.total_amount,
+        paidAmount,
+        remainingDue,
+        settings: receiptSettings,
+        shopDetails: shopDetailsForPrint(),
+        companyRow: companyDetails,
+        createdAt: order.created_at,
+      },
+      { onError: (msg) => toast.error(msg) }
+    );
+  };
+
+  const handleReprintRevised = (order: OrderRow) => {
+    const history = parseRestaurantEditHistory(order.edit_history);
+    const latest = history[0];
+    const lines = mapDbInvoiceItemsToReceiptLines(order.invoice_items);
+    const subtotal = lines.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+    printRestaurantRevisedGuestBill(
+      {
+        invoiceId: order.id,
+        orderNumber: order.order_number,
+        tableName: order.tableName || null,
+        serviceType: order.service_type,
+        ...orderGuestDetails(order),
+        items: lines,
+        subtotal,
+        discount: order.discount || 0,
+        taxRate: order.tax_rate || 0,
+        taxAmount: order.tax_amount || 0,
+        netTotal: order.total_amount,
+        settings: receiptSettings,
+        shopDetails: shopDetailsForPrint(),
+        companyRow: companyDetails,
+        revisionNumber: Math.max(1, history.length),
+        previousTotal: latest?.total_amount ?? order.total_amount,
+        editedAt: latest?.edited_at,
+        editedBy: latest?.edited_by,
+        changes: latest?.changes,
+        createdAt: order.created_at,
+      },
+      {
+        onError: (msg) =>
+          toast.error(isEn ? msg : `${msg} - تھرمل پرنٹر ڈیفالٹ بنائیں`),
+      }
+    );
+  };
+
+  const openOrderHistory = (order: OrderRow) => {
+    setHistoryOrder(order);
+    setHistoryOpen(true);
   };
 
   const handlePrintBill = async (order: OrderRow) => {
@@ -285,9 +546,52 @@ export default function RestaurantOrdersPage() {
       window.open(`/public/receipt/${order.id}`, "_blank");
       return;
     }
+    const st = order.restaurant_order_status || "pending";
+    if (!canPrintGuestBill(st)) {
+      toast.error(
+        isEn
+          ? "Guest bill already printed or order cannot be billed."
+          : "بل پہلے پرنٹ ہو چکا یا آرڈر بل کے قابل نہیں۔"
+      );
+      return;
+    }
     try {
       await markBillPrinted(supabase, order.id);
-      toast.success(isEn ? "Bill printed - tap Settle / Mark Paid" : "بل پرنٹ - اب Settle کریں");
+      const lines = mapDbInvoiceItemsToReceiptLines(order.invoice_items);
+      const subtotal = lines.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+      const discount = Number(order.discount) || 0;
+      const taxAmount = Number(order.tax_amount) || 0;
+      const netTotal = Math.max(0, subtotal + taxAmount - discount);
+
+      printRestaurantGuestBill(
+        {
+          invoiceId: order.id,
+          orderNumber: order.order_number,
+          tableName: order.tableName || null,
+          serviceType: order.service_type,
+          ...orderGuestDetails(order),
+          items: lines,
+          subtotal,
+          discount,
+          taxRate: Number(order.tax_rate) || 0,
+          taxAmount,
+          netTotal,
+          settings: receiptSettings,
+          shopDetails: shopDetailsForPrint(),
+          companyRow: companyDetails,
+          createdAt: order.created_at,
+        },
+        {
+          onError: (msg) =>
+            toast.error(
+              isEn
+                ? `${msg} (Settings → Printers → default thermal printer)`
+                : `${msg} - Windows میں تھرمل پرنٹر ڈیفالٹ بنائیں`
+            ),
+        }
+      );
+
+      toast.success(isEn ? "Guest bill printing - then tap Settle" : "بل پرنٹ - اب Settle کریں");
       scheduleSilentRefresh();
     } catch (e: any) {
       toast.error(e.message);
@@ -299,7 +603,7 @@ export default function RestaurantOrdersPage() {
     if (!canMarkPaidInHistory(st, order.status)) {
       toast.error(
         isEn
-          ? "Print guest bill first (or wait until order is ready), then settle."
+          ? "Wait until kitchen marks ready (or print guest bill), then settle."
           : "پہلے بل پرنٹ کریں یا آرڈر تیار ہونے کا انتظار کریں۔"
       );
       return;
@@ -321,13 +625,27 @@ export default function RestaurantOrdersPage() {
         product_id: i.product_id,
         quantity: Number(i.quantity),
         unit_price: Number(i.unit_price),
+        packing_name: i.packing_name,
+        menu_size_id: i.menu_size_id,
       })),
       line_items: order.invoice_items.map((i) => ({
-        name: i.products?.name || "Item",
+        name: i.products?.name
+          ? i.packing_name
+            ? `${i.products.name} (${i.packing_name})`
+            : i.products.name
+          : "Item",
         quantity: Number(i.quantity),
         unit_price: Number(i.unit_price),
       })),
       customer_name: order.customer_name || order.parties?.name || null,
+      customer_phone: order.customer_phone,
+      customer_address: order.customer_address || null,
+      waiterName: orderGuestDetails(order).waiterName,
+      riderName: orderGuestDetails(order).riderName,
+      riderPhone: orderGuestDetails(order).riderPhone,
+      special_instructions: order.special_instructions || null,
+      delivery_fee: order.delivery_fee || 0,
+      additional_charges: order.additional_charges || 0,
     });
   };
 
@@ -422,6 +740,8 @@ export default function RestaurantOrdersPage() {
                   <th className="p-3 font-bold">Status</th>
                   <th className="p-3 font-bold">Payment</th>
                   <th className="p-3 font-bold text-right">Total</th>
+                  <th className="p-3 font-bold text-right">Cost</th>
+                  <th className="p-3 font-bold text-right">Profit</th>
                   <th className="p-3 font-bold text-center">Actions</th>
                 </tr>
               </thead>
@@ -430,6 +750,10 @@ export default function RestaurantOrdersPage() {
                   const st = o.restaurant_order_status || (o.status !== "draft" ? "settled" : "pending");
                   const pay = getPaymentStatus(o);
                   const canSettle = o.status === "draft" && canMarkPaidInHistory(st, o.status);
+                  const cancelGate = canCancelRestaurantOrder({
+                    orderStatus: st,
+                    invoiceStatus: o.status,
+                  });
                   const itemSummary = o.invoice_items?.slice(0, 3).map((i) => `${i.quantity}x ${i.products?.name}`).join(", ") || "-";
                   const cust = o.customer_name || o.parties?.name || "Walk-in";
                   return (
@@ -460,16 +784,39 @@ export default function RestaurantOrdersPage() {
                         </div>
                       </td>
                       <td className="p-3 text-right font-mono font-bold">Rs {Number(o.total_amount).toLocaleString()}</td>
+                      <td className="p-3 text-right font-mono text-xs text-slate-500">
+                        {o.cost_amount != null ? `Rs ${Number(o.cost_amount).toFixed(0)}` : "-"}
+                      </td>
+                      <td className={`p-3 text-right font-mono text-xs font-semibold ${
+                        Number(o.profit_amount || 0) < 0 ? "text-red-600" : "text-emerald-700"
+                      }`}>
+                        {o.profit_amount != null ? `Rs ${Number(o.profit_amount).toFixed(0)}` : "-"}
+                      </td>
                       <td className="p-3">
                         <div className="flex items-center justify-center gap-1 flex-wrap">
                           {o.status === "draft" && (
                             <>
-                              <Link href={`/dashboard/restaurant/pos?reopen=${o.id}`}>
-                                <Button size="sm" variant="outline" className="h-7 text-[10px] px-2">Edit</Button>
+                              <Link href={`/dashboard/restaurant/active-bills?bill=${o.id}`}>
+                                <Button size="sm" variant="outline" className="h-7 text-[10px] px-2">
+                                  {isEn ? "Edit bill" : "بل ایڈٹ"}
+                                </Button>
                               </Link>
+                              <Button size="sm" variant="outline" className="h-7 text-[10px] px-2" onClick={() => handleReprintKOT(o)}>
+                                KOT
+                              </Button>
                               <Button size="sm" variant="outline" className="h-7 text-[10px] px-2" onClick={() => handlePrintBill(o)} title="Print bill">
                                 <Printer size={10} className="mr-0.5" /> Bill
                               </Button>
+                              {(o.is_edited || (o.edit_history?.length ?? 0) > 0) && (
+                                <>
+                                  <Button size="sm" variant="outline" className="h-7 text-[10px] px-2" onClick={() => openOrderHistory(o)}>
+                                    {isEn ? "History" : "تاریخ"}
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-7 text-[10px] px-2" onClick={() => handleReprintRevised(o)}>
+                                    {isEn ? "Revised" : "نیا بل"}
+                                  </Button>
+                                </>
+                              )}
                               <Button
                                 size="sm"
                                 className={`h-7 text-[10px] px-2 text-white ${canSettle ? "bg-purple-600 hover:bg-purple-700" : "bg-slate-300"}`}
@@ -479,13 +826,18 @@ export default function RestaurantOrdersPage() {
                               >
                                 <CreditCard size={10} className="mr-0.5" /> {isEn ? "Settle" : "ادائیگی"}
                               </Button>
-                              <Button size="sm" variant="outline" className="h-7 text-[10px] px-2 text-red-600" onClick={() => handleCancel(o)}>
+                              {cancelGate.allowed && (
+                              <Button size="sm" variant="outline" className="h-7 text-[10px] px-2 text-red-600" onClick={() => handleCancel(o)} title={cancelGate.phase === "before_prep" ? "Cancel before cooking" : "Cancel after ready (keep cost)"}>
                                 <Ban size={10} />
                               </Button>
+                              )}
                             </>
                           )}
                           {o.status !== "draft" && (
                             <>
+                              <Button size="sm" variant="outline" className="h-7 text-[10px] px-2" onClick={() => handleReprintPaidReceipt(o)}>
+                                <Printer size={10} className="mr-0.5" /> {isEn ? "Reprint" : "دوبارہ"}
+                              </Button>
                               <a href={`/public/receipt/${o.id}`} target="_blank" rel="noopener noreferrer">
                                 <Button size="sm" variant="outline" className="h-7 text-[10px] px-2">
                                   <ExternalLink size={10} className="mr-0.5" /> {isEn ? "Receipt" : "رسید"}
@@ -521,6 +873,40 @@ export default function RestaurantOrdersPage() {
         onSettled={() => {
           void loadOrdersRef.current({ silent: true });
         }}
+        receiptSettings={receiptSettings}
+        shopDetails={shopDetailsForPrint()}
+      />
+
+      <RestaurantBillEditHistoryModal
+        open={historyOpen}
+        title={
+          historyOrder
+            ? `Bill edits · #${historyOrder.order_number || historyOrder.id.slice(0, 8).toUpperCase()}`
+            : "Bill edits"
+        }
+        onClose={() => {
+          setHistoryOpen(false);
+          setHistoryOrder(null);
+        }}
+        history={parseRestaurantEditHistory(historyOrder?.edit_history)}
+        currentBill={
+          historyOrder
+            ? {
+                total_amount: historyOrder.total_amount,
+                discount: historyOrder.discount,
+              }
+            : null
+        }
+        currentItems={(historyOrder?.invoice_items || []).map((i) => ({
+          name: i.products?.name
+            ? i.packing_name
+              ? `${i.products.name} (${i.packing_name})`
+              : i.products.name
+            : "Item",
+          quantity: Number(i.quantity),
+          unit_price: Number(i.unit_price),
+        }))}
+        language={isEn ? "en" : "ur"}
       />
     </div>
   );

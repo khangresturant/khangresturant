@@ -1,4 +1,5 @@
 import { SIDEBAR_THEME_STORAGE_KEY } from "@/lib/dashboard/sidebar-themes";
+import { clearLocalAuthCookie } from "@/lib/local-sqlite/local-auth";
 
 const MOCK_DB_PREFIX = "mock_db_";
 
@@ -25,6 +26,7 @@ export function clearFlame9ClientCaches() {
   try {
     sessionStorage.removeItem("mock_auth_session");
     sessionStorage.removeItem("flame9_whatsapp_draft");
+    clearLocalAuthCookie();
   } catch {
     /* ignore */
   }

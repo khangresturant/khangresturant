@@ -12,13 +12,24 @@ import {
   VolumeX,
   ArrowLeft,
   Loader2,
+  Ban,
+  Printer,
 } from "lucide-react";
 import { useShop } from "@/context/ShopContext";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { syncRestaurantOrderStatus } from "@/lib/restaurant-orders";
+import { DEFAULT_RECEIPT_SETTINGS } from "@/components/ReceiptTemplate";
+import { mergePrintSettingsFromRow } from "@/lib/merge-print-settings";
+import { printRestaurantKOTSlip } from "@/lib/restaurant-receipt-print";
+import {
+  syncRestaurantOrderStatus,
+  startOrderPreparation,
+  cancelRestaurantOrder,
+  normalizeOrderStatus,
+  type RestaurantOrderStatus,
+} from "@/lib/restaurant-orders";
 import { fetchStations } from "@/lib/restaurant-ops";
 import {
   KITCHEN_POLL_INTERVAL_MS,
@@ -36,6 +47,11 @@ type KdsTicket = {
   order_number: string | null;
   station_id: string | null;
   kitchen_hub: string | null;
+  invoice_status: RestaurantOrderStatus | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  customer_address?: string | null;
+  special_instructions?: string | null;
   items: {
     id: string;
     product_name: string;
@@ -45,11 +61,18 @@ type KdsTicket = {
 };
 
 export default function KitchenDisplayPage() {
-  const { shopId } = useShop();
+  const { shopId, shopName, shopPhone, shopAddress, shopEmail } = useShop();
   const supabase = createClient();
 
   const [tickets, setTickets] = useState<KdsTicket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [receiptSettings, setReceiptSettings] = useState(DEFAULT_RECEIPT_SETTINGS);
+  const [companyDetails, setCompanyDetails] = useState<{
+    name?: string;
+    phone?: string;
+    address?: string;
+    email?: string;
+  } | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [now, setNow] = useState<Date>(new Date());
   const [stations, setStations] = useState<{ id: string; name: string; kitchen_hub: string | null }[]>([]);
@@ -142,18 +165,33 @@ export default function KitchenDisplayPage() {
 
       let invoiceMeta: Record<
         string,
-        { service_type?: string | null; order_number?: string | null }
+        {
+          service_type?: string | null;
+          order_number?: string | null;
+          restaurant_order_status?: string | null;
+          customer_name?: string | null;
+          customer_phone?: string | null;
+          customer_address?: string | null;
+          special_instructions?: string | null;
+        }
       > = {};
 
       if (invoiceIds.length > 0) {
         const { data: invRows } = await supabase
           .from("invoices")
-          .select("id, service_type, order_number")
+          .select(
+            "id, service_type, order_number, restaurant_order_status, customer_name, customer_phone, customer_address, special_instructions"
+          )
           .in("id", invoiceIds);
         for (const row of invRows || []) {
           invoiceMeta[row.id] = {
             service_type: row.service_type,
             order_number: row.order_number,
+            restaurant_order_status: row.restaurant_order_status,
+            customer_name: row.customer_name,
+            customer_phone: row.customer_phone,
+            customer_address: row.customer_address,
+            special_instructions: row.special_instructions,
           };
         }
       }
@@ -171,6 +209,11 @@ export default function KitchenDisplayPage() {
           order_number: meta?.order_number || null,
           station_id: o.station_id || null,
           kitchen_hub: o.kitchen_hub || null,
+          invoice_status: normalizeOrderStatus(meta?.restaurant_order_status) || "pending",
+          customer_name: meta?.customer_name || null,
+          customer_phone: meta?.customer_phone || null,
+          customer_address: meta?.customer_address || null,
+          special_instructions: meta?.special_instructions || null,
           items: (o.kitchen_order_items || []).map((item: any) => ({
             id: item.id,
             quantity: Number(item.quantity),
@@ -212,6 +255,50 @@ export default function KitchenDisplayPage() {
 
   useEffect(() => {
     if (!shopId) return;
+    (async () => {
+      const [printRes, companyRes] = await Promise.all([
+        supabase.from("print_settings").select("*").eq("shop_id", shopId).maybeSingle(),
+        supabase.from("company_details").select("name, phone, address, email").eq("shop_id", shopId).maybeSingle(),
+      ]);
+      if (printRes.data) setReceiptSettings(mergePrintSettingsFromRow(printRes.data as Record<string, unknown>));
+      if (companyRes.data) setCompanyDetails(companyRes.data);
+    })();
+  }, [shopId, supabase]);
+
+  const reprintKot = (t: KdsTicket) => {
+    printRestaurantKOTSlip(
+      {
+        orderNumber: t.order_number,
+        tableName: t.table_name,
+        serviceType: t.service_type,
+        customerName: t.customer_name,
+        customerPhone: t.customer_phone,
+        customerAddress: t.customer_address,
+        specialInstructions: t.special_instructions,
+        items: t.items.map((i) => ({
+          name: i.product_name,
+          quantity: i.quantity,
+          remarks: i.remarks,
+        })),
+        settings: receiptSettings,
+        shopDetails: {
+          name: companyDetails?.name || shopName || "Restaurant",
+          phone: companyDetails?.phone || shopPhone,
+          address: companyDetails?.address || shopAddress,
+          email: companyDetails?.email || shopEmail,
+        },
+        isReprint: true,
+        kotTicketId: t.id,
+      },
+      {
+        onError: (msg) => toast.error(msg),
+      }
+    );
+    toast.success("KOT reprint sent to thermal printer");
+  };
+
+  useEffect(() => {
+    if (!shopId) return;
     fetchStations(supabase, shopId).then(setStations);
     fetchActiveTickets(false);
 
@@ -244,6 +331,38 @@ export default function KitchenDisplayPage() {
       supabase.removeChannel(channel);
     };
   }, [shopId]);
+
+  const startCooking = async (ticket: KdsTicket) => {
+    if (!ticket.invoice_id) {
+      toast.error("This ticket is not linked to an order.");
+      return;
+    }
+    try {
+      await startOrderPreparation(supabase, ticket.invoice_id);
+      toast.success("Cooking started");
+      fetchActiveTickets(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to start");
+    }
+  };
+
+  const cancelPendingTicket = async (ticket: KdsTicket) => {
+    if (ticket.invoice_status !== "pending") {
+      toast.error("Only pending (not started) orders can be cancelled from kitchen.");
+      return;
+    }
+    if (!ticket.invoice_id) return;
+    if (!window.confirm(`Cancel order ${ticket.order_number || ticket.id.slice(0, 6)} before cooking? Stock and cost will be reversed.`)) {
+      return;
+    }
+    try {
+      await cancelRestaurantOrder(supabase, ticket.invoice_id, ticket.table_id);
+      toast.success("Order cancelled - stock restored, no cost.");
+      fetchActiveTickets(false);
+    } catch (err: any) {
+      toast.error(err.message || "Cancel failed");
+    }
+  };
 
   const updateTicketStatus = async (
     ticket: KdsTicket,
@@ -440,8 +559,34 @@ export default function KitchenDisplayPage() {
                     ))}
                   </div>
 
-                  <div className="p-3 bg-slate-950/80 border-t border-slate-850 flex gap-2 shrink-0">
-                    {t.status === "cooking" ? (
+                  <div className="p-3 bg-slate-950/80 border-t border-slate-850 flex gap-2 shrink-0 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => reprintKot(t)}
+                      className="h-9 px-3 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-[10px] font-bold flex items-center gap-1"
+                      title="Reprint KOT thermal"
+                    >
+                      <Printer size={13} /> KOT
+                    </button>
+                    {t.status === "cooking" && t.invoice_status === "pending" ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => startCooking(t)}
+                          className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black h-9 rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                        >
+                          <Play size={13} className="fill-current" /> Start
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => cancelPendingTicket(t)}
+                          className="h-9 px-3 rounded-xl border border-rose-800 text-rose-400 hover:bg-rose-950/40 transition"
+                          title="Cancel before cooking"
+                        >
+                          <Ban size={14} />
+                        </button>
+                      </>
+                    ) : t.status === "cooking" ? (
                       <button
                         type="button"
                         onClick={() => updateTicketStatus(t, "ready")}

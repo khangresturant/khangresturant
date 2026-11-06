@@ -1,23 +1,27 @@
 import nodemailer from "nodemailer";
+import { usesLocalDatabase } from "@/lib/config";
 
-// Configured using environment variables
-const host = process.env.SMTP_HOST || "smtp.hostinger.com";
+const host = process.env.SMTP_HOST?.trim() || "";
 const port = parseInt(process.env.SMTP_PORT || "465", 10);
-const user = process.env.SMTP_USER || "support@theaccounts.cloud";
-const pass = process.env.SMTP_PASS || "Usman677@@##";
-const from = process.env.SMTP_FROM || user;
+const user = process.env.SMTP_USER?.trim() || "";
+const pass = process.env.SMTP_PASS || "";
+const from = process.env.SMTP_FROM?.trim() || user;
 
-const transporter = nodemailer.createTransport({
-  host,
-  port,
-  secure: port === 465, // true for 465, false for other ports
-  auth: {
-    user,
-    pass,
-  },
-});
+const transporter =
+  host && user && pass
+    ? nodemailer.createTransport({
+        host,
+        port,
+        secure: port === 465,
+        auth: { user, pass },
+      })
+    : null;
 
 export async function sendEmail(to: string, subject: string, html: string) {
+  if (!transporter || usesLocalDatabase()) {
+    console.log(`[Email offline] To: ${to} | Subject: ${subject}`);
+    return { success: true, messageId: "offline-local" };
+  }
   try {
     const info = await transporter.sendMail({
       from,
@@ -126,5 +130,5 @@ export function generateOtpEmailHtml(otpCode: string, title: string = "Security 
 
 export async function sendOtpEmail(to: string, otpCode: string, title: string = "Security Verification Code") {
   const html = generateOtpEmailHtml(otpCode, title);
-  return sendEmail(to, `🔑 Verification Code: ${otpCode} — The Accounts`, html);
+  return sendEmail(to, `🔑 Verification Code: ${otpCode} - The Accounts`, html);
 }

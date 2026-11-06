@@ -1,20 +1,22 @@
 /**
  * Runtime configuration from environment variables.
- * Never hardcode secrets or connection strings in application code.
+ * Cafe Master defaults to local SQLite when cloud Supabase is not configured.
  */
 
 export function getSupabaseUrl(): string {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   if (!url) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL. Copy .env.example to .env.local and fill values.");
+    if (isLocalSqliteEnabled()) return "";
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL.");
   }
   return url;
 }
 
 export function getSupabaseAnonKey(): string {
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (!key) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY. Copy .env.example to .env.local and fill values.");
+    if (isLocalSqliteEnabled()) return "";
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY.");
   }
   return key;
 }
@@ -40,7 +42,18 @@ export function isMockSupabaseEnabled(): boolean {
   return process.env.NEXT_PUBLIC_USE_MOCK === "true";
 }
 
-/** Persist mock data to `data/flame9.sqlite` via /api/local-sqlite */
+/** Local file DB via better-sqlite3 + /api/local-sqlite (default when no cloud URL). */
 export function isLocalSqliteEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE === "true";
+  if (process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE === "false") return false;
+  if (process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE === "true") return true;
+  return !process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+}
+
+/** Browser app uses mock Supabase + SQLite file instead of cloud PostgREST. */
+export function usesLocalDatabase(): boolean {
+  return (
+    isMockSupabaseEnabled() ||
+    isLocalSqliteEnabled() ||
+    (process.env.NEXT_PUBLIC_BRAND || "").toLowerCase() === "flame9"
+  );
 }

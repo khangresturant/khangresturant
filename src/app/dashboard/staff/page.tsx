@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, Plus, Edit2, Trash2, Key, ShieldAlert, Loader2, 
-  X, CheckSquare, Square, ShieldCheck, Mail, User, Shield, FileText, Landmark, DollarSign, Printer
+  X, CheckSquare, Square, ShieldCheck, Mail, User, Shield, FileText, Landmark, DollarSign, Printer, Phone
 } from "lucide-react";
 import { toast } from "sonner";
 import { SubscriptionBlocker } from "@/components/dashboard/SubscriptionBlocker";
@@ -18,7 +18,8 @@ interface StaffProfile {
   id: string;
   name: string;
   email: string;
-  role: string; // 'salesman' | 'manager' | 'superadmin'
+  role: string; // 'salesman' | 'manager' | 'superadmin' | 'rider'
+  phone?: string | null;
   created_at: string;
   permissions: {
     panels: Record<string, boolean>;
@@ -100,6 +101,7 @@ export default function StaffPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("salesman");
+  const [phone, setPhone] = useState("");
   const [panelsPerms, setPanelsPerms] = useState<Record<string, boolean>>({});
   const [actionsPerms, setActionsPerms] = useState<Record<string, boolean>>({});
   const [modalTab, setModalTab] = useState<"profile" | "permissions">("profile");
@@ -677,6 +679,7 @@ export default function StaffPage() {
     setEmail("");
     setPassword("");
     setRole("salesman");
+    setPhone("");
     setModalTab("profile");
     setMaxDiscountPercentage(100);
     setBaseSalary(0);
@@ -700,6 +703,7 @@ export default function StaffPage() {
     setEmail(staff.email || "");
     setPassword("");
     setRole(staff.role);
+    setPhone(staff.phone || "");
     setModalTab("profile");
     setMaxDiscountPercentage(staff.permissions?.max_discount_percentage ?? 100);
     setBaseSalary(staff.permissions?.base_salary ?? 0);
@@ -744,8 +748,7 @@ export default function StaffPage() {
       ACTIONS.forEach(a => allTrueActions[a.key] = true);
       setPanelsPerms(allTruePanels);
       setActionsPerms(allTrueActions);
-    } else if (newRole === "salesman") {
-      // salesman typically doesn't manage staff or backups
+    } else if (newRole === "salesman" || newRole === "rider") {
       const salePanels: Record<string, boolean> = {};
       PANELS.forEach(p => salePanels[p.key] = p.key !== "staff" && p.key !== "backup" && p.key !== "accounts");
       setPanelsPerms(salePanels);
@@ -766,7 +769,8 @@ export default function StaffPage() {
         max_discount_percentage: maxDiscountPercentage,
         base_salary: baseSalary,
         wage_type: staffWageType,
-        is_offline: isOfflineEmployee
+        is_offline: isOfflineEmployee,
+        phone: phone.trim() || null,
       };
 
       if (selectedStaff) {
@@ -777,6 +781,7 @@ export default function StaffPage() {
             .update({
               name: name.trim(),
               role,
+              phone: phone.trim() || null,
               permissions: formattedPermissions
             })
             .eq("id", selectedStaff.id);
@@ -791,6 +796,10 @@ export default function StaffPage() {
             staff_password: password || null
           });
           if (error) throw error;
+          await supabase
+            .from("user_profiles")
+            .update({ phone: phone.trim() || null })
+            .eq("id", selectedStaff.id);
         }
 
         // Sync party name
@@ -828,6 +837,7 @@ export default function StaffPage() {
               name: name.trim(),
               email: email.trim() || `staff_${Date.now()}@shop.local`,
               role,
+              phone: phone.trim() || null,
               permissions: formattedPermissions
             })
             .select("id")
@@ -849,6 +859,12 @@ export default function StaffPage() {
           });
           if (error) throw error;
           if (newUserId) createdUserId = newUserId as string;
+          if (createdUserId && createdUserId !== "new") {
+            await supabase
+              .from("user_profiles")
+              .update({ phone: phone.trim() || null })
+              .eq("id", createdUserId);
+          }
         }
 
         // Create party record for any employee type
@@ -1585,6 +1601,20 @@ export default function StaffPage() {
                         </div>
                       </div>
 
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Phone (slips / riders)</label>
+                        <div className="relative">
+                          <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            placeholder="e.g. 0300-1112233"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition font-semibold text-slate-700"
+                          />
+                        </div>
+                      </div>
+
                       {!isOfflineEmployee && (
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Email Address</label>
@@ -1641,13 +1671,19 @@ export default function StaffPage() {
                     {/* Premium Security Role Cards */}
                     <div className="border-t border-slate-100 pt-5">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Security Access Role</label>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                         {[
                           {
                             key: "salesman",
                             title: "Salesman / Billing",
                             desc: "Limited to POS checkout counter, basic sales & customer ledger entries.",
                             badge: "Standard"
+                          },
+                          {
+                            key: "rider",
+                            title: "Delivery Rider",
+                            desc: "Shows on delivery orders with name + phone. Not used for dine-in or takeaway.",
+                            badge: "Fleet"
                           },
                           {
                             key: "manager",
@@ -1670,6 +1706,8 @@ export default function StaffPage() {
                               role === r.key
                                 ? r.key === "salesman"
                                   ? "bg-blue-50/70 border-blue-500 ring-2 ring-blue-500/10"
+                                  : r.key === "rider"
+                                  ? "bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/10"
                                   : r.key === "manager"
                                   ? "bg-indigo-50/70 border-indigo-500 ring-2 ring-indigo-500/10"
                                   : "bg-purple-50/70 border-purple-500 ring-2 ring-purple-500/10"
@@ -1682,6 +1720,8 @@ export default function StaffPage() {
                                   role === r.key
                                     ? r.key === "salesman"
                                       ? "text-blue-700"
+                                      : r.key === "rider"
+                                      ? "text-emerald-700"
                                       : r.key === "manager"
                                       ? "text-indigo-700"
                                       : "text-purple-700"

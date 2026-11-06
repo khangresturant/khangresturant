@@ -68,6 +68,7 @@ type RiderFleetItem = {
   id: string;
   name: string;
   role: string;
+  phone?: string | null;
   isOnRide: boolean;
   activeOrder?: any;
 };
@@ -307,7 +308,7 @@ export default function DashboardPage() {
           .then((r: any) => r, () => ({ data: [], error: null })),
         supabase
           .from("user_profiles")
-          .select("id, name, email, role, permissions, is_offline")
+          .select("id, name, email, role, phone, permissions, is_offline")
           .eq("shop_id", shopId)
           .order("name")
           .then((r: any) => r, () => ({ data: [], error: null })),
@@ -685,6 +686,7 @@ export default function DashboardPage() {
         id: s.id,
         name: s.name,
         role: s.role || "Rider",
+        phone: s.phone || s.permissions?.phone || null,
         isOnRide: !!activeOrder,
         activeOrder: activeOrder || null,
       };
@@ -1461,7 +1463,12 @@ export default function DashboardPage() {
                             <div className="h-5 w-5 rounded-md bg-slate-200 flex items-center justify-center text-[9px] font-black text-slate-700 shrink-0">
                               {rider.name.charAt(0).toUpperCase()}
                             </div>
-                            <p className="text-xs font-bold text-slate-800 truncate">{rider.name}</p>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 truncate">{rider.name}</p>
+                              {rider.phone ? (
+                                <p className="text-[9px] text-slate-400 truncate">{rider.phone}</p>
+                              ) : null}
+                            </div>
                           </div>
 
                           <div>

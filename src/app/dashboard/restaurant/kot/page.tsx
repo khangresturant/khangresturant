@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  ChefHat, Search, Check, Trash2, Clock, 
-  Loader2, Save, X, PlusCircle, Coffee, MessageSquare 
+  ChefHat, Search, Check, Clock, 
+  Loader2, Save, X, PlusCircle, Coffee, MessageSquare, Printer
 } from "lucide-react";
 import { useShop } from "@/context/ShopContext";
 import { createClient } from "@/lib/supabase/client";
@@ -15,7 +15,11 @@ import { syncRestaurantOrderStatus } from "@/lib/restaurant-orders";
 import {
   KITCHEN_POLL_INTERVAL_MS,
   shouldPollKitchenLive,
+  loadKitchenTicketForPrint,
 } from "@/lib/restaurant-kitchen";
+import { DEFAULT_RECEIPT_SETTINGS } from "@/components/ReceiptTemplate";
+import { mergePrintSettingsFromRow } from "@/lib/merge-print-settings";
+import { printRestaurantKOTSlip } from "@/lib/restaurant-receipt-print";
 
 type KOTOrderItem = {
   id: string;
@@ -45,10 +49,17 @@ type DBProduct = {
 };
 
 export default function KitchenOrdersPage() {
-  const { shopId } = useShop();
+  const { shopId, shopName, shopPhone, shopAddress, shopEmail } = useShop();
   const supabase = createClient();
 
   const [orders, setOrders] = useState<KOTOrder[]>([]);
+  const [receiptSettings, setReceiptSettings] = useState(DEFAULT_RECEIPT_SETTINGS);
+  const [companyDetails, setCompanyDetails] = useState<{
+    name?: string;
+    phone?: string;
+    address?: string;
+    email?: string;
+  } | null>(null);
   const [tables, setTables] = useState<DBTable[]>([]);
   const [products, setProducts] = useState<DBProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,6 +167,52 @@ export default function KitchenOrdersPage() {
         }
       }
     } catch (e) {}
+  };
+
+  useEffect(() => {
+    if (!shopId) return;
+    (async () => {
+      const [printRes, companyRes] = await Promise.all([
+        supabase.from("print_settings").select("*").eq("shop_id", shopId).maybeSingle(),
+        supabase.from("company_details").select("name, phone, address, email").eq("shop_id", shopId).maybeSingle(),
+      ]);
+      if (printRes.data) setReceiptSettings(mergePrintSettingsFromRow(printRes.data as Record<string, unknown>));
+      if (companyRes.data) setCompanyDetails(companyRes.data);
+    })();
+  }, [shopId, supabase]);
+
+  const reprintKot = async (orderId: string) => {
+    const payload = await loadKitchenTicketForPrint(supabase, orderId);
+    if (!payload) {
+      toast.error("Could not load KOT for print.");
+      return;
+    }
+    printRestaurantKOTSlip(
+      {
+        orderNumber: payload.orderNumber,
+        tableName: payload.tableName,
+        serviceType: payload.serviceType,
+        customerName: payload.customerName,
+        customerPhone: payload.customerPhone,
+        customerAddress: payload.customerAddress,
+        waiterName: payload.waiterName,
+        riderName: payload.riderName,
+        riderPhone: payload.riderPhone,
+        specialInstructions: payload.specialInstructions,
+        items: payload.items,
+        settings: receiptSettings,
+        shopDetails: {
+          name: companyDetails?.name || shopName || "Restaurant",
+          phone: companyDetails?.phone || shopPhone,
+          address: companyDetails?.address || shopAddress,
+          email: companyDetails?.email || shopEmail,
+        },
+        isReprint: true,
+        kotTicketId: payload.kotId,
+      },
+      { onError: (msg) => toast.error(msg) }
+    );
+    toast.success("KOT reprint sent to thermal printer");
   };
 
   useEffect(() => {
@@ -443,7 +500,15 @@ export default function KitchenOrdersPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 border-t border-slate-100 pt-4">
+                <div className="flex gap-2 border-t border-slate-100 pt-4 flex-wrap">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => reprintKot(order.id)}
+                    className="h-10 px-3 text-xs font-bold border-slate-200"
+                  >
+                    <Printer size={14} className="mr-1" /> Reprint KOT
+                  </Button>
                   {order.status === "cooking" ? (
                     <Button 
                       onClick={() => markAsReady(order.id)}
@@ -459,13 +524,6 @@ export default function KitchenOrdersPage() {
                       <Check size={14} className="mr-1.5" /> Dispatch / Serve
                     </Button>
                   )}
-                  <Button 
-                    variant="outline"
-                    onClick={() => handleDismiss(order.id)}
-                    className="text-slate-400 hover:text-red-500 hover:border-red-200 p-2"
-                  >
-                    <Trash2 size={16} />
-                  </Button>
                 </div>
               </motion.div>
             ))}

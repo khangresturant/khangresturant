@@ -96,11 +96,13 @@ const PAGES_LIST: SearchPageItem[] = [
   { name: "Waiter Mobile Ordering Desk", path: "/dashboard/restaurant/waiter", ur: "ویٹر آرڈرنگ ڈیسک", keywords: "waiter steward captain mobile tablet order table service captain app", industries: ["restaurant"], category: "Restaurant", iconType: "pos" },
   { name: "Active Dining Bills & Tables", path: "/dashboard/restaurant/active-bills", ur: "ایکٹو بلز اور میزیں", keywords: "active bills pending unpaid open tables checkout settle bill print receipt split bill payment", industries: ["restaurant"], category: "Restaurant", iconType: "sales" },
   { name: "Digital QR Code Menu", path: "/dashboard/restaurant/qr", ur: "ڈیجیٹل کیو آر مینو", keywords: "qr code digital menu contactless table scan phone ordering customer self order", industries: ["restaurant"], category: "Restaurant", iconType: "marketing" },
+  { name: "Menu Management", path: "/dashboard/restaurant/menu", ur: "مینو مینجمنٹ", keywords: "menu items categories sizes pricing base price restaurant food dishes manage posresturant", industries: ["restaurant"], category: "Restaurant", iconType: "inventory" },
   { name: "Food Deals & Combos", path: "/dashboard/restaurant/deals", ur: "کھانے کی ڈیلز اور کومبو", keywords: "deals combos meal special bundle discount package family deal burger deal pizza combo", industries: ["restaurant"], category: "Restaurant", iconType: "marketing" },
   { name: "Dish Modifiers & Add-ons", path: "/dashboard/restaurant/modifiers", ur: "موڈیفائرز اور اضافی آئٹمز", keywords: "modifiers addons toppings spice level extra cheese sauce beverage size sides crust cold drink", industries: ["restaurant"], category: "Restaurant", iconType: "inventory" },
   { name: "Kitchen Stations Master", path: "/dashboard/restaurant/stations", ur: "کچن اسٹیشنز ماسٹر", keywords: "stations hot kitchen grill bar drinks beverage tandoor dessert fry preparation printer", industries: ["restaurant"], category: "Restaurant", iconType: "settings" },
   { name: "Recipes & Food Costing", path: "/dashboard/restaurant/recipes", ur: "ترکیبیں اور لاگت لاگ", keywords: "recipes bom ingredients food cost yield raw material portions dish preparation chicken flour oil", industries: ["restaurant"], category: "Restaurant", iconType: "inventory" },
   { name: "Restaurant Sales & Kitchen Reports", path: "/dashboard/restaurant/reports", ur: "ریستوران رپورٹس و تجزیہ", keywords: "restaurant reports daily sales top dishes covers food cost kot summary waiter performance table turnover", industries: ["restaurant"], category: "Reports", iconType: "reports" },
+  { name: "Delivery Riders & Reports", path: "/dashboard/restaurant/riders", ur: "ڈیلیوری رائیڈرز رپورٹ", keywords: "rider delivery boy assignment cash bank online jazzcash easypaisa rider report phone dispatch fleet", industries: ["restaurant"], category: "Restaurant", iconType: "reports" },
 
   // Showroom & Vehicles
   { name: "Showroom Vehicles Stock", path: "/dashboard/showroom/vehicles", ur: "گاڑیوں کا اسٹاک", keywords: "showroom vehicles cars bikes stock inventory chassis engine model year make register color mileage", industries: ["showroom"], category: "Showroom", iconType: "showroom" },
@@ -1246,6 +1248,7 @@ function getActivePageName(pathname: string): string {
     "/dashboard/restaurant/waiter": "Waiter Desk",
     "/dashboard/restaurant/active-bills": "Active Table Bills",
     "/dashboard/restaurant/menu": "Menu & Recipe Master",
+    "/dashboard/restaurant/riders": "Delivery Riders",
     "/dashboard/pos": "Point of Sale (POS)",
     "/dashboard/sales": "Sales Ledger & Invoices",
     "/dashboard/khata": "Customer Khata Book",

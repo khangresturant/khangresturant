@@ -292,6 +292,8 @@ function ProductsPageContent() {
   const [isInventoryManaged, setIsInventoryManaged] = useState(false);
   // Restaurant-specific: raw ingredient flag
   const [isIngredient, setIsIngredient] = useState(false);
+  const [notDiscounted, setNotDiscounted] = useState(false);
+  const [showInRestaurantPos, setShowInRestaurantPos] = useState(true);
 
   useEffect(() => {
     const loadAllData = async () => {
@@ -785,6 +787,8 @@ function ProductsPageContent() {
     setIsDynamicPricing(false);
     setIsInventoryManaged(false);
     setIsIngredient(false);
+    setNotDiscounted(false);
+    setShowInRestaurantPos(true);
     setIsModalOpen(true);
   };
 
@@ -893,6 +897,8 @@ function ProductsPageContent() {
       const hasInventory = !!(product.unit && product.unit !== "") || (product.current_stock > 0);
       setIsInventoryManaged(hasInventory);
       setIsIngredient(!!product.is_ingredient);
+      setNotDiscounted(!!(product as any).not_discounted);
+      setShowInRestaurantPos((product as any).show_in_restaurant_pos !== false);
     }
 
     setIsModalOpen(true);
@@ -1044,7 +1050,13 @@ function ProductsPageContent() {
         warranty: formData.warranty || null,
         has_imei: formData.has_imei || false,
         formulation_id: formData.formulation_id || null,
-        is_ingredient: industryType === "restaurant" ? isIngredient : false
+        is_ingredient: industryType === "restaurant" ? isIngredient : false,
+        ...(industryType === "restaurant" && !isIngredient
+          ? {
+              not_discounted: notDiscounted,
+              show_in_restaurant_pos: showInRestaurantPos,
+            }
+          : {}),
       };
 
       let productId = "";
@@ -2976,6 +2988,38 @@ function ProductsPageContent() {
                           rows={2}
                           className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none disabled:bg-slate-50 disabled:text-slate-400"
                         />
+                      </div>
+                    )}
+
+                    {industryType === "restaurant" && !isIngredient && (
+                      <div className="space-y-2 p-3 bg-blue-50/60 border border-blue-100 rounded-xl">
+                        <label className="flex items-start gap-2 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showInRestaurantPos}
+                            onChange={(e) => setShowInRestaurantPos(e.target.checked)}
+                            className="mt-0.5"
+                          />
+                          <div>
+                            <strong className="block text-slate-800">Show on Restaurant POS</strong>
+                            <p className="text-[10px] text-slate-500 font-normal">Hidden items stay in Products / Menu Management only</p>
+                          </div>
+                        </label>
+                        <label className="flex items-start gap-2 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={notDiscounted}
+                            onChange={(e) => setNotDiscounted(e.target.checked)}
+                            className="mt-0.5"
+                          />
+                          <div>
+                            <strong className="block text-slate-800">Exclude from order discount</strong>
+                            <p className="text-[10px] text-slate-500 font-normal">Order % / fixed discount will not reduce this item&apos;s share</p>
+                          </div>
+                        </label>
+                        <Link href="/dashboard/restaurant/menu" className="text-[10px] text-blue-700 font-semibold underline block">
+                          Open full Menu Management (sizes, categories) →
+                        </Link>
                       </div>
                     )}
 

@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { CalendarDays, Loader2, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CalendarDays, Loader2, Plus, Trash2, UtensilsCrossed } from "lucide-react";
 import { useShop } from "@/context/ShopContext";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
@@ -12,6 +13,7 @@ import type { ReservationRow } from "@/lib/restaurant-ops";
 export default function RestaurantReservationsPage() {
   const { shopId } = useShop();
   const supabase = createClient();
+  const router = useRouter();
   const [rows, setRows] = useState<(ReservationRow & { restaurant_tables?: { name: string } | null })[]>([]);
   const [tables, setTables] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +85,22 @@ export default function RestaurantReservationsPage() {
     else load();
   };
 
+  const seatAndOpenPos = async (r: (typeof rows)[number]) => {
+    const { error } = await supabase
+      .from("restaurant_reservations")
+      .update({ status: "seated" })
+      .eq("id", r.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const params = new URLSearchParams();
+    if (r.table_id) params.set("table", r.table_id);
+    if (r.guest_name) params.set("guest", r.guest_name);
+    if (r.guest_phone) params.set("phone", r.guest_phone);
+    router.push(`/dashboard/restaurant/pos?${params.toString()}`);
+  };
+
   const remove = async (id: string) => {
     await supabase.from("restaurant_reservations").delete().eq("id", id);
     load();
@@ -128,7 +146,9 @@ export default function RestaurantReservationsPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-1">
-                <Button size="sm" variant="outline" onClick={() => setStatus(r.id, "seated")}>Seat</Button>
+                <Button size="sm" className="bg-slate-900 text-white" onClick={() => seatAndOpenPos(r)}>
+                  <UtensilsCrossed className="h-3.5 w-3.5 mr-1" /> Seat & POS
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => setStatus(r.id, "completed")}>Done</Button>
                 <Button size="sm" variant="outline" onClick={() => setStatus(r.id, "cancelled")}>Cancel</Button>
                 <Button size="sm" variant="outline" onClick={() => remove(r.id)}><Trash2 className="h-3.5 w-3.5" /></Button>

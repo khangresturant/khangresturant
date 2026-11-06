@@ -46,7 +46,7 @@ async function handleSubscriptionReminders(req: NextRequest) {
       const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
       // Find owner profile for this shop
-      const ownerProfile = profiles?.find(p => p.shop_id === shop.id) || profiles?.[0];
+      const ownerProfile = profiles?.find((p: any) => p.shop_id === shop.id) || profiles?.[0];
       const merchantEmail = ownerProfile?.email || "support@theaccounts.cloud";
       const merchantName = ownerProfile?.name || shop.name;
 

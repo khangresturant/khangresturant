@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeTableRows } from "@/lib/local-sqlite/database";
+import { getSqlitePath, writeTableRows } from "@/lib/local-sqlite/database";
 import { ensureTableSeeded, resetFlame9Database } from "@/lib/local-sqlite/seed";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
+  const info = request.nextUrl.searchParams.get("info");
+  if (info === "1") {
+    return NextResponse.json({
+      engine: "sqlite",
+      path: getSqlitePath(),
+      useLocal: process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE !== "false",
+    });
+  }
+
   const table = request.nextUrl.searchParams.get("table");
   if (!table) {
     return NextResponse.json({ error: "table query param required" }, { status: 400 });

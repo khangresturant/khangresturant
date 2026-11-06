@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Database, CheckCircle2, AlertTriangle, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { Database, CheckCircle2, AlertTriangle, Copy, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useShop } from "@/context/ShopContext";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,8 @@ import {
   type VenuePresetId,
   applyVenuePreset,
 } from "@/lib/restaurant-modifiers";
-import { P1P2_MIGRATION_SQL } from "@/lib/restaurant-ops";
+import { P1P2_MIGRATION_SQL, RESTAURANT_RECIPE_COST_SQL } from "@/lib/restaurant-ops";
+import { isLocalSqliteEnabled } from "@/lib/config";
 
 const WORKFLOW_SQL = `-- Restaurant Order Workflow
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS restaurant_order_status VARCHAR(50);
@@ -28,6 +29,11 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS additional_charges NUMERIC(15, 2) 
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS special_instructions TEXT;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS discount_percentage NUMERIC(5, 2) DEFAULT 0;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS rider_id UUID;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT false;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS edit_history JSONB;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stock_deducted BOOLEAN DEFAULT false;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cost_amount NUMERIC(15, 2);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS profit_amount NUMERIC(15, 2);
 ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS invoice_id UUID REFERENCES invoices(id) ON DELETE SET NULL;
 ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS waiter_id UUID;`;
 
@@ -118,7 +124,7 @@ CREATE POLICY "restaurant_waiter_calls_all" ON restaurant_waiter_calls FOR ALL T
 DROP POLICY IF EXISTS "restaurant_modifiers_all" ON restaurant_modifiers;
 CREATE POLICY "restaurant_modifiers_all" ON restaurant_modifiers FOR ALL TO authenticated USING (true) WITH CHECK (true);`;
 
-const MIGRATION_SQL = `${WORKFLOW_SQL}\n\n${EXTENDED_SQL}\n\n${P1P2_MIGRATION_SQL}`;
+const MIGRATION_SQL = `${WORKFLOW_SQL}\n\n${EXTENDED_SQL}\n\n${P1P2_MIGRATION_SQL}\n\n${RESTAURANT_RECIPE_COST_SQL}`;
 
 type MigrationStatus = "loading" | "ok" | "needed";
 
@@ -130,8 +136,25 @@ export default function RestaurantSetupMigrationPage() {
   const [extendedOk, setExtendedOk] = useState(false);
   const [modifiersOk, setModifiersOk] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [sqlitePath, setSqlitePath] = useState<string | null>(null);
 
   const checkMigration = async () => {
+    if (isLocalSqliteEnabled()) {
+      try {
+        const res = await fetch("/api/local-sqlite?info=1", { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          setSqlitePath(typeof json.path === "string" ? json.path : null);
+        }
+      } catch {
+        setSqlitePath(null);
+      }
+      setWorkflowOk(true);
+      setExtendedOk(true);
+      setModifiersOk(true);
+      setStatus("ok");
+      return;
+    }
     setStatus("loading");
     const [invRes, dealsRes, modRes, stRes] = await Promise.all([
       supabase.from("invoices").select("restaurant_order_status, service_type, rider_id, tip_amount").limit(1),
@@ -156,7 +179,11 @@ export default function RestaurantSetupMigrationPage() {
 
   const copySql = () => {
     navigator.clipboard.writeText(MIGRATION_SQL);
-    toast.success("SQL copied — paste in Supabase SQL Editor and click Run");
+    toast.success(
+      isLocalSqliteEnabled()
+        ? "SQL copied (for hosted Postgres only - not needed for local SQLite)"
+        : "SQL copied - paste in your database SQL editor and run"
+    );
   };
 
   const seedVenue = async (presetId: VenuePresetId) => {
@@ -171,7 +198,7 @@ export default function RestaurantSetupMigrationPage() {
         `${VENUE_PRESETS[presetId].label}: +${result.tables} tables, +${result.categories} categories, +${result.modifiers} modifiers`
       );
     } catch (e: any) {
-      toast.error(e.message || "Seed failed — run SQL migration first");
+      toast.error(e.message || "Seed failed - run SQL migration first");
     } finally {
       setSeeding(false);
     }
@@ -184,8 +211,15 @@ export default function RestaurantSetupMigrationPage() {
           <Database className="text-blue-600" /> Restaurant DB Setup
         </h2>
         <p className="text-slate-500 text-sm mt-1">
-          Migration for workflow, deals, sizes, modifiers, riders — plus venue presets (dhaba to fine dining)
+          {isLocalSqliteEnabled()
+            ? "Local SQLite mode - all restaurant data is stored in one file on this PC (no cloud Postgres). Venue presets seed tables into that file."
+            : "Migration for workflow, deals, sizes, modifiers, riders - plus venue presets (dhaba to fine dining)"}
         </p>
+        {isLocalSqliteEnabled() && sqlitePath && (
+          <p className="text-xs text-slate-600 mt-2 font-mono bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 break-all">
+            SQLite file: {sqlitePath}
+          </p>
+        )}
       </div>
 
       {status === "loading" && (
@@ -200,8 +234,9 @@ export default function RestaurantSetupMigrationPage() {
             <CheckCircle2 /> All migrations applied
           </div>
           <ul className="text-sm text-emerald-700 mt-2 space-y-1">
-            <li>✓ Order workflow &amp; status columns (incl. rider_id)</li>
-            <li>✓ Deals, menu sizes &amp; waiter calls tables</li>
+            <li>✓ Linked to local SQLite ({sqlitePath ? "file detected" : "via /api/local-sqlite"})</li>
+            <li>✓ Order workflow &amp; status fields (JSON rows - no Postgres ALTER needed)</li>
+            <li>✓ Deals, sizes, waiter calls, reservations tables</li>
             <li>✓ Configurable modifiers table</li>
           </ul>
           <div className="flex flex-wrap gap-2 mt-4">
@@ -238,7 +273,7 @@ export default function RestaurantSetupMigrationPage() {
         </div>
       </div>
 
-      {status === "needed" && (
+      {status === "needed" && !isLocalSqliteEnabled() && (
         <div className="space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
             <div className="flex items-center gap-2 text-amber-900 font-bold">
@@ -250,25 +285,14 @@ export default function RestaurantSetupMigrationPage() {
               <li>{modifiersOk ? "✓" : "✗"} Modifiers table</li>
             </ul>
             <p className="text-sm text-amber-800 mt-3">
-              Run the SQL below in the Supabase Dashboard SQL Editor.
+              Run the SQL below in your hosted Postgres SQL editor (if you use cloud database).
             </p>
           </div>
 
           <ol className="list-decimal list-inside space-y-2 text-sm text-slate-700 bg-white border rounded-xl p-5">
-            <li>
-              Open{" "}
-              <a
-                href="https://supabase.com/dashboard/project/bzlryfostkzotfgeozjr/sql/new"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 font-semibold inline-flex items-center gap-1"
-              >
-                Supabase SQL Editor <ExternalLink size={12} />
-              </a>
-            </li>
-            <li>Click <strong>Copy SQL</strong> below and paste into the editor</li>
-            <li>Click <strong>Run</strong> in Supabase</li>
-            <li>Come back here and click <strong>Check again</strong></li>
+            <li>Copy the SQL below into your database SQL editor</li>
+            <li>Click <strong>Run</strong></li>
+            <li>Return here and click <strong>Check again</strong></li>
           </ol>
 
           <pre className="bg-slate-900 text-slate-100 text-xs p-4 rounded-xl overflow-x-auto whitespace-pre-wrap max-h-96">
@@ -282,15 +306,6 @@ export default function RestaurantSetupMigrationPage() {
             <Button variant="outline" onClick={checkMigration}>
               Check again
             </Button>
-            <a
-              href="https://supabase.com/dashboard/project/bzlryfostkzotfgeozjr/sql/new"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="outline">
-                <ExternalLink size={14} className="mr-1.5" /> Open SQL Editor
-              </Button>
-            </a>
           </div>
         </div>
       )}

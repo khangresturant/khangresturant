@@ -1,12 +1,21 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { usesLocalDatabase } from "@/lib/config";
+import { parseLocalAuthFromCookies } from "@/lib/local-sqlite/local-auth";
+import { createLocalServerClient } from "@/lib/local-sqlite/server-client";
 
 /**
- * Supabase client for Server Components / Route Handlers (cookie session).
- * Uses the anon key; RLS applies as the signed-in user.
+ * Supabase client for Server Components / Route Handlers.
+ * Local SQLite mode uses the same mock/JSON store as the dashboard.
  */
 export async function createServerSupabaseClient() {
+  if (usesLocalDatabase()) {
+    const cookieStore = await cookies();
+    const user = parseLocalAuthFromCookies(cookieStore.getAll());
+    return createLocalServerClient(user);
+  }
+
   const cookieStore = await cookies();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -22,7 +31,7 @@ export async function createServerSupabaseClient() {
             cookieStore.set(name, value, options)
           );
         } catch {
-          // Called from a Server Component that cannot set cookies — ignore.
+          /* Server Component - ignore */
         }
       },
     },
@@ -30,10 +39,13 @@ export async function createServerSupabaseClient() {
 }
 
 /**
- * Service-role client (bypasses RLS). Server-only. Never import in client code.
- * Uses SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY with graceful fallback.
+ * Service-role client (bypasses RLS). Local mode uses SQLite with admin session.
  */
 export function createServiceSupabaseClient() {
+  if (usesLocalDatabase()) {
+    return createLocalServerClient(null);
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const serviceKey = (
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -41,18 +53,17 @@ export function createServiceSupabaseClient() {
     process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
   )?.trim();
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || "";
-
   const effectiveKey = serviceKey || anonKey;
 
-  if (!effectiveKey) {
+  if (!effectiveKey || !url) {
     throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY is required."
+      "Cloud Supabase is not configured. Use NEXT_PUBLIC_USE_LOCAL_SQLITE=true for offline mode."
     );
   }
 
   if (!serviceKey) {
     console.warn(
-      "[supabase] SUPABASE_SERVICE_ROLE_KEY missing — using anon key for server client."
+      "[supabase] SUPABASE_SERVICE_ROLE_KEY missing - using anon key for server client."
     );
   }
 

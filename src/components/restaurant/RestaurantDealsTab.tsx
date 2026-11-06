@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { Loader2, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useShop } from "@/context/ShopContext";
@@ -75,7 +76,8 @@ export function RestaurantDealsTab({ onAddDeal }: Props) {
   if (deals.length === 0) {
     return (
       <div className="text-center py-12 text-slate-500 text-sm">
-        No active deals. Create combos in <strong>Deals & Sizes</strong> menu.
+        No active deals. Create combos in <Link href="/dashboard/restaurant/deals" className="text-orange-600 font-semibold">Deals</Link> or manage menu in{" "}
+        <Link href="/dashboard/restaurant/menu" className="text-blue-600 font-semibold">Menu Management</Link>.
       </div>
     );
   }
@@ -110,9 +112,9 @@ export function RestaurantDealsTab({ onAddDeal }: Props) {
               </ul>
             </div>
             <div className="text-right shrink-0 ml-2">
-              <span className="text-xs line-through text-slate-400 block">Rs {Number(deal.original_price).toLocaleString()}</span>
-              <span className="text-lg font-black text-orange-700">Rs {Number(deal.deal_price).toLocaleString()}</span>
-              <span className="text-[9px] font-bold text-orange-600 block">SAVE {dealSavingsPercent(Number(deal.original_price), Number(deal.deal_price))}%</span>
+              <div className="text-xs line-through text-slate-400 block">Rs {Number(deal.original_price).toLocaleString()}</div>
+              <div className="text-lg font-black text-orange-700">Rs {Number(deal.deal_price).toLocaleString()}</div>
+              <div className="text-[9px] font-bold text-orange-600 block">SAVE {dealSavingsPercent(Number(deal.original_price), Number(deal.deal_price))}%</div>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1 text-[10px] font-bold text-orange-700">

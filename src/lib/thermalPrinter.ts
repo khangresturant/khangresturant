@@ -8,6 +8,8 @@ export interface PrintReceiptOptions {
   receiptHtml: string;
   settings: Partial<ReceiptSettings>;
   title?: string;
+  /** Windows printer name; empty = try default via API, then browser dialog */
+  targetPrinterName?: string;
   onSuccess?: () => void;
   onError?: (err: any) => void;
 }
@@ -286,18 +288,62 @@ export function buildThermalPrintHtml(receiptInnerHtml: string, settings: Partia
 }
 
 /**
- * Opens the system print dialog (uses Windows **default printer** when you click Print).
- * Browsers cannot skip the dialog for security — set your thermal printer as default in Windows.
+ * Silent print on local Windows (named printer) when possible; otherwise iframe print dialog.
  */
-export function printReceiptDirect({
+export async function printThermalReceipt({
   receiptHtml,
   settings,
   title = "Receipt",
+  targetPrinterName,
   onSuccess,
-  onError
-}: PrintReceiptOptions): void {
+  onError,
+}: PrintReceiptOptions): Promise<void> {
+  const fullHtml = buildThermalPrintHtml(receiptHtml, settings, title);
+  const printer = targetPrinterName?.trim();
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/restaurant/thermal-print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          html: fullHtml,
+          printerName: printer || undefined,
+          title,
+        }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        useBrowser?: boolean;
+        error?: string;
+        printer?: string;
+      };
+      if (data.ok) {
+        onSuccess?.();
+        return;
+      }
+      if (data.useBrowser && data.error) {
+        console.warn("Thermal silent print fallback:", data.error);
+      }
+    } catch (fetchErr) {
+      console.warn("Thermal API print unavailable:", fetchErr);
+    }
+  }
+
+  printReceiptViaIframe(fullHtml, title, onSuccess, onError, printer);
+}
+
+function printReceiptViaIframe(
+  fullHtml: string,
+  title: string,
+  onSuccess?: () => void,
+  onError?: (err: any) => void,
+  hintPrinter?: string
+): void {
   try {
-    let iframe = document.getElementById("theaccounts-thermal-print-frame") as HTMLIFrameElement;
+    let iframe = document.getElementById(
+      "theaccounts-thermal-print-frame"
+    ) as HTMLIFrameElement;
     if (!iframe) {
       iframe = document.createElement("iframe");
       iframe.id = "theaccounts-thermal-print-frame";
@@ -314,13 +360,13 @@ export function printReceiptDirect({
       document.body.appendChild(iframe);
     }
 
-    const fullHtml = buildThermalPrintHtml(receiptHtml, settings, title);
-
     const win = iframe.contentWindow;
     const doc = iframe.contentDocument || win?.document;
     if (!doc || !win) {
       throw new Error(
-        "Print frame blocked. Allow pop-ups for this site or refresh and try again."
+        hintPrinter
+          ? `Print frame blocked. Choose printer "${hintPrinter}" in the dialog.`
+          : "Print frame blocked. Allow pop-ups for this site or refresh and try again."
       );
     }
 
@@ -339,7 +385,6 @@ export function printReceiptDirect({
       }
     };
 
-    // Wait for layout/fonts so default printer dialog gets full receipt
     if (win.document.readyState === "complete") {
       window.setTimeout(invokePrint, 350);
     } else {
@@ -349,4 +394,12 @@ export function printReceiptDirect({
     console.error("Thermal Direct Printing Error:", err);
     onError?.(err);
   }
+}
+
+/**
+ * Opens the system print dialog (uses Windows **default printer** when you click Print).
+ * When `targetPrinterName` is set, local Windows API is tried first for silent routing.
+ */
+export function printReceiptDirect(options: PrintReceiptOptions): void {
+  void printThermalReceipt(options);
 }

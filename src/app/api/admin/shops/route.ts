@@ -64,17 +64,17 @@ export async function GET() {
     if (shopsErr) throw shopsErr;
     if (profilesErr) throw profilesErr;
 
-    const ownersById = new Map((profiles || []).map((p) => [p.id, p]));
+    const ownersById = new Map((profiles || []).map((p: any) => [p.id, p]));
 
-    const enriched = (shops || []).map((shop) => {
+    const enriched = (shops || []).map((shop: any) => {
       const owner =
         (shop.owner_id && ownersById.get(shop.owner_id)) ||
         (profiles || []).find(
-          (p) =>
+          (p: any) =>
             p.shop_id === shop.id &&
             ["owner", "superadmin", "admin", "manager"].includes(String(p.role || "").toLowerCase())
         ) ||
-        (profiles || []).find((p) => p.shop_id === shop.id);
+        (profiles || []).find((p: any) => p.shop_id === shop.id);
 
       return {
         ...shop,

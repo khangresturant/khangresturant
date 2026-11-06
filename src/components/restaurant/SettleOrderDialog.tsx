@@ -10,7 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { settleRestaurantOrder } from "@/lib/restaurant-orders";
+import {
+  isDeliveryService,
+  pickAccountForPayment,
+  RESTAURANT_PAYMENT_MODES,
+  type RestaurantPaymentMode,
+} from "@/lib/restaurant-riders";
 import { printRestaurantPaidReceipt } from "@/lib/restaurant-receipt-print";
+import { mergeRestaurantPrintProfile } from "@/lib/restaurant-print-profile";
 import { DEFAULT_RECEIPT_SETTINGS, type ReceiptSettings } from "@/components/ReceiptTemplate";
 
 export type SettleOrderData = {
@@ -27,7 +34,22 @@ export type SettleOrderData = {
   service_type: string | null;
   tableName?: string;
   customer_name?: string | null;
-  invoice_items: { product_id: string; quantity: number; unit_price: number }[];
+  customer_phone?: string | null;
+  customer_address?: string | null;
+  waiterName?: string | null;
+  riderName?: string | null;
+  riderPhone?: string | null;
+  special_instructions?: string | null;
+  delivery_fee?: number | null;
+  additional_charges?: number | null;
+  invoice_items: {
+    product_id: string;
+    quantity: number;
+    unit_price: number;
+    menu_size_id?: string | null;
+    menu_size_name?: string | null;
+    packing_name?: string | null;
+  }[];
   /** Display names for thermal receipt (cart / invoice lines). */
   line_items?: { name: string; quantity: number; unit_price: number }[];
 };
@@ -61,14 +83,14 @@ export function SettleOrderDialog({
   const supabase = createClient();
   const isEn = language === "en";
 
-  const [paymentMode, setPaymentMode] = useState<"cash" | "card" | "credit">("cash");
+  const [paymentMode, setPaymentMode] = useState<RestaurantPaymentMode>("cash");
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("walkin");
   const [discountVal, setDiscountVal] = useState(0);
   const [taxRateVal, setTaxRateVal] = useState(0);
   const [receivedAmount, setReceivedAmount] = useState(0);
   const [cashAccounts, setCashAccounts] = useState<{ id: string; name: string; current_balance: number }[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; name: string; current_balance?: number }[]>([]);
+  const [customers, setCustomers] = useState<{ id: string; name: string; phone?: string | null; current_balance?: number }[]>([]);
   const [activeSession, setActiveSession] = useState<{ id: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -77,13 +99,15 @@ export function SettleOrderDialog({
     (async () => {
       const [accRes, custRes, sessRes] = await Promise.all([
         supabase.from("cash_accounts").select("id, name, current_balance").eq("shop_id", shopId),
-        supabase.from("parties").select("id, name, current_balance").eq("shop_id", shopId).eq("type", "customer"),
+        supabase.from("parties").select("id, name, phone, current_balance").eq("shop_id", shopId).eq("type", "customer"),
         supabase.from("register_sessions").select("id").eq("shop_id", shopId).eq("status", "open").limit(1).maybeSingle(),
       ]);
       setCashAccounts(accRes.data || []);
       setCustomers(custRes.data || []);
       setActiveSession(sessRes.data);
-      if (accRes.data?.[0]) setSelectedAccountId(accRes.data[0].id);
+      if (accRes.data?.length) {
+        setSelectedAccountId(pickAccountForPayment(accRes.data, "cash"));
+      }
     })();
   }, [open, shopId, supabase]);
 
@@ -94,6 +118,9 @@ export function SettleOrderDialog({
     setReceivedAmount(Number(order.total_amount) || 0);
     setSelectedCustomerId(order.party_id || "walkin");
     setPaymentMode("cash");
+    if (cashAccounts.length) {
+      setSelectedAccountId(pickAccountForPayment(cashAccounts, "cash"));
+    }
   }, [order]);
 
   const subtotal = useMemo(
@@ -108,6 +135,14 @@ export function SettleOrderDialog({
     if (!order || !shopId) return;
     if (paymentMode === "credit" && selectedCustomerId === "walkin") {
       toast.error(isEn ? "Select a customer for credit sales" : "ادھار کے لیے گاہک منتخب کریں");
+      return;
+    }
+    if (isDeliveryService(order.service_type) && !order.rider_id && !order.riderName) {
+      toast.error(
+        isEn
+          ? "Assign a rider on this delivery order before payment."
+          : "ڈیلیوری ادائیگی سے پہلے رائیڈر لگائیں۔"
+      );
       return;
     }
     setSubmitting(true);
@@ -132,17 +167,25 @@ export function SettleOrderDialog({
 
       if (printThermalReceipt) {
         let settings = receiptSettingsProp;
-        if (!settings && shopId) {
-          const { data: printRow } = await supabase
-            .from("print_settings")
-            .select("receipt_design_settings")
-            .eq("shop_id", shopId)
-            .maybeSingle();
-          settings = (printRow?.receipt_design_settings as Partial<ReceiptSettings>) || DEFAULT_RECEIPT_SETTINGS;
+        let companyRow: Record<string, unknown> | null = null;
+        if (shopId) {
+          const [{ data: printRow }, { data: company }] = await Promise.all([
+            supabase
+              .from("print_settings")
+              .select("receipt_page_size, receipt_font, receipt_font_size, receipt_design_settings")
+              .eq("shop_id", shopId)
+              .maybeSingle(),
+            supabase.from("company_details").select("*").eq("shop_id", shopId).maybeSingle(),
+          ]);
+          companyRow = (company as Record<string, unknown>) || null;
+          if (!settings) {
+            settings = mergeRestaurantPrintProfile(companyRow, printRow as Record<string, unknown>);
+          }
         }
+        const selectedParty = customers.find((c) => c.id === selectedCustomerId);
         const customer =
           order.customer_name ||
-          customers.find((c) => c.id === selectedCustomerId)?.name ||
+          selectedParty?.name ||
           (selectedCustomerId === "walkin" ? "Walk-in Guest" : null);
         const lines =
           order.line_items?.length
@@ -159,6 +202,14 @@ export function SettleOrderDialog({
             tableName: order.tableName || null,
             serviceType: order.service_type,
             customerName: customer,
+            customerPhone: order.customer_phone || selectedParty?.phone || null,
+            customerAddress: order.customer_address || null,
+            waiterName: order.waiterName || null,
+            riderName: order.riderName || null,
+            riderPhone: order.riderPhone || null,
+            specialInstructions: order.special_instructions || null,
+            deliveryFee: order.delivery_fee || 0,
+            additionalCharges: order.additional_charges || 0,
             paymentMode,
             items: lines,
             subtotal,
@@ -175,13 +226,14 @@ export function SettleOrderDialog({
               address: shopAddress,
               email: shopEmail,
             },
+            companyRow,
           },
           {
             onError: (msg) => {
               toast.error(
                 isEn
                   ? `${msg} (Windows: Settings → Printers → set thermal as default)`
-                  : `${msg} — Windows میں تھرمل پرنٹر ڈیفالٹ بنائیں`
+                  : `${msg} - Windows میں تھرمل پرنٹر ڈیفالٹ بنائیں`
               );
             },
           }
@@ -192,8 +244,8 @@ export function SettleOrderDialog({
 
       toast.success(
         isEn
-          ? "Payment done — check thermal printer / print dialog."
-          : "ادائیگی مکمل — تھرمل رسید پرنٹ کریں۔"
+          ? "Payment done - check thermal printer / print dialog."
+          : "ادائیگی مکمل - تھرمل رسید پرنٹ کریں۔"
       );
       onSettled();
       onClose();
@@ -233,23 +285,38 @@ export function SettleOrderDialog({
         </div>
 
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div className="grid grid-cols-3 gap-2">
-            {(["cash", "card", "credit"] as const).map((mode) => (
+          <div className="grid grid-cols-5 gap-1.5">
+            {RESTAURANT_PAYMENT_MODES.map((mode) => (
               <button
-                key={mode}
+                key={mode.id}
                 type="button"
                 onClick={() => {
-                  setPaymentMode(mode);
-                  setReceivedAmount(mode === "credit" ? 0 : netTotal);
+                  setPaymentMode(mode.id);
+                  setReceivedAmount(mode.id === "credit" ? 0 : netTotal);
+                  if (mode.id !== "credit" && cashAccounts.length) {
+                    setSelectedAccountId(pickAccountForPayment(cashAccounts, mode.id));
+                  }
                 }}
-                className={`py-2 text-xs font-bold rounded-lg border capitalize ${
-                  paymentMode === mode ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200"
+                className={`py-2 text-[10px] font-bold rounded-lg border ${
+                  paymentMode === mode.id ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-200"
                 }`}
               >
-                {mode}
+                {isEn ? mode.label : mode.labelUr}
               </button>
             ))}
           </div>
+          {isDeliveryService(order.service_type) && (
+            <p className="text-[10px] text-slate-600">
+              {isEn ? "Rider:" : "رائیڈر:"}{" "}
+              <strong>
+                {order.riderName
+                  ? `${order.riderName}${order.riderPhone ? ` · ${order.riderPhone}` : ""}`
+                  : isEn
+                    ? "Not assigned"
+                    : "غیر مقرر"}
+              </strong>
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -264,7 +331,19 @@ export function SettleOrderDialog({
 
           {paymentMode !== "credit" && (
             <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase">Cash / Bank Account</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase">
+                {paymentMode === "cash"
+                  ? isEn
+                    ? "Cash account"
+                    : "نقد اکاؤنٹ"
+                  : paymentMode === "online"
+                    ? isEn
+                      ? "Online / wallet account"
+                      : "آن لائن اکاؤنٹ"
+                    : isEn
+                      ? "Bank account"
+                      : "بینک اکاؤنٹ"}
+              </label>
               <select
                 value={selectedAccountId}
                 onChange={(e) => setSelectedAccountId(e.target.value)}
@@ -300,8 +379,8 @@ export function SettleOrderDialog({
           )}
 
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex justify-between font-bold text-sm">
-            <span>{isEn ? "Net payable" : "کل رقم"}</span>
-            <span className="font-mono text-blue-700">Rs {netTotal.toLocaleString()}</span>
+            <div>{isEn ? "Net payable" : "کل رقم"}</div>
+            <div className="font-mono text-blue-700">Rs {netTotal.toLocaleString()}</div>
           </div>
           {paymentMode === "credit" && remainingDue > 0 && (
             <p className="text-xs text-amber-700 font-semibold">Credit due: Rs {remainingDue.toLocaleString()}</p>
@@ -317,7 +396,7 @@ export function SettleOrderDialog({
             ) : isEn ? (
               "Confirm payment & print thermal receipt"
             ) : (
-              "ادائیگی کریں — تھرمل رسید"
+              "ادائیگی کریں - تھرمل رسید"
             )}
           </Button>
         </div>

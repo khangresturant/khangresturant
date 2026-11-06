@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       .select("current_balance")
       .eq("shop_id", shopId);
     if (cashErr) throw cashErr;
-    const cashTotal = (cashData || []).reduce((sum, item) => sum + Number(item.current_balance || 0), 0);
+    const cashTotal = (cashData || []).reduce((sum: number, item: any) => sum + Number(item.current_balance || 0), 0);
 
     // 2. Accounts Receivable (Customer positive balances)
     const { data: customerData, error: custErr } = await supabase
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       .eq("shop_id", shopId)
       .eq("type", "customer");
     if (custErr) throw custErr;
-    const receivables = (customerData || []).reduce((sum, item) => sum + Number(item.current_balance || 0), 0);
+    const receivables = (customerData || []).reduce((sum: number, item: any) => sum + Number(item.current_balance || 0), 0);
 
     // 3. Accounts Payable (Supplier positive balances, since we store supplier balances as positive amounts we owe them)
     const { data: supplierData, error: suppErr } = await supabase
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       .eq("shop_id", shopId)
       .eq("type", "supplier");
     if (suppErr) throw suppErr;
-    const payables = (supplierData || []).reduce((sum, item) => sum + Number(item.current_balance || 0), 0);
+    const payables = (supplierData || []).reduce((sum: number, item: any) => sum + Number(item.current_balance || 0), 0);
 
     // 4. Inventory Valuation
     const { data: productsData, error: prodErr } = await supabase
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       .eq("shop_id", shopId)
       .gt("current_stock", 0);
     if (prodErr) throw prodErr;
-    const productsValuation = (productsData || []).reduce((sum, item) => sum + (Number(item.current_stock || 0) * Number(item.purchase_price_single || 0)), 0);
+    const productsValuation = (productsData || []).reduce((sum: number, item: any) => sum + (Number(item.current_stock || 0) * Number(item.purchase_price_single || 0)), 0);
 
     const { data: variantsData, error: varErr } = await supabase
       .from("product_variants")
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       .eq("shop_id", shopId)
       .gt("stock_quantity", 0);
     if (varErr) throw varErr;
-    const variantsValuation = (variantsData || []).reduce((sum, item) => sum + (Number(item.stock_quantity || 0) * Number(item.purchase_price || 0)), 0);
+    const variantsValuation = (variantsData || []).reduce((sum: number, item: any) => sum + (Number(item.stock_quantity || 0) * Number(item.purchase_price || 0)), 0);
 
     const inventoryValuation = productsValuation + variantsValuation;
 
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
         .eq("status", "available");
 
       if (showroomVehicles && showroomVehicles.length > 0) {
-        showroomStockValuation = showroomVehicles.reduce((sum, v) => sum + Number(v.purchase_cost || 0), 0);
+        showroomStockValuation = showroomVehicles.reduce((sum: number, v: any) => sum + Number(v.purchase_cost || 0), 0);
       }
 
       // 5.2 Active Installment Agreements Portfolio Receivables
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
         .in("status", ["active", "overdue"]);
 
       if (activeInstallments && activeInstallments.length > 0) {
-        showroomInstallmentsReceivable = activeInstallments.reduce((sum, i) => {
+        showroomInstallmentsReceivable = activeInstallments.reduce((sum: number, i: any) => {
           const rem = i.remaining_balance !== null && i.remaining_balance !== undefined
             ? Number(i.remaining_balance)
             : Math.max(0, Number(i.total_price || 0) - Number(i.total_paid || 0));
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
         .eq("shop_id", shopId);
 
       if (showroomInvestors && showroomInvestors.length > 0) {
-        showroomInvestorPayables = showroomInvestors.reduce((sum, inv) => sum + Number(inv.current_balance || 0), 0);
+        showroomInvestorPayables = showroomInvestors.reduce((sum: number, inv: any) => sum + Number(inv.current_balance || 0), 0);
       }
     } catch (showroomErr) {
       console.warn("Showroom balance sheet integration skipped:", showroomErr);
@@ -130,7 +130,7 @@ export async function GET(req: NextRequest) {
       .eq("shop_id", shopId);
     let fixedAssetsValuation = 0;
     if (!assetErr && assetsData) {
-      fixedAssetsValuation = assetsData.reduce((sum, item) => sum + Number(item.current_value || 0), 0);
+      fixedAssetsValuation = assetsData.reduce((sum: number, item: any) => sum + Number(item.current_value || 0), 0);
     }
 
     const totalCombinedInventory = inventoryValuation + showroomStockValuation;

@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Layers, Plus, Trash2, Save, Loader2, Info, Search, 
@@ -12,6 +14,11 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  isSupabaseMissingColumnError,
+  recipeRowsRequireMenuSizeColumn,
+} from "@/lib/restaurant-ops";
+import { isLocalSqliteEnabled } from "@/lib/config";
 
 type Product = {
   id: string;
@@ -26,15 +33,24 @@ type RecipeItem = {
   id?: string;
   ingredient_product_id: string;
   quantity: number;
+  menu_size_id?: string | null;
   ingredientName?: string;
   ingredientUnit?: string | null;
   ingredientCost?: number;
+};
+
+type MenuSizeRow = {
+  id: string;
+  size_name: string;
+  price: number;
 };
 
 export default function RecipesPage() {
   const { shopId } = useShop();
   const { t, language } = useLanguage();
   const supabase = createClient();
+  const searchParams = useSearchParams();
+  const productFromUrl = searchParams.get("product");
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -55,6 +71,35 @@ export default function RecipesPage() {
   // New Ingredient selector state
   const [selectedIngId, setSelectedIngId] = useState("");
   const [ingQuantity, setIngQuantity] = useState<number>(1);
+  const [menuSizes, setMenuSizes] = useState<MenuSizeRow[]>([]);
+  /** null = Standard/base recipe (no size row) */
+  const [selectedRecipeSizeId, setSelectedRecipeSizeId] = useState<string | null>(null);
+  const [allRecipeRows, setAllRecipeRows] = useState<RecipeItem[]>([]);
+  const [menuSizeColumnReady, setMenuSizeColumnReady] = useState(true);
+
+  const migrationHint =
+    "Run Restaurant → Setup / Migration in Supabase SQL Editor (RESTAURANT_RECIPE_COST_SQL). After adding menu_size_id, reload the Supabase API schema if your project uses schema cache reload.";
+
+  useEffect(() => {
+    if (isLocalSqliteEnabled()) {
+      setMenuSizeColumnReady(true);
+      return;
+    }
+    if (!shopId) return;
+    let cancelled = false;
+    (async () => {
+      const { error } = await supabase.from("product_recipes").select("menu_size_id").limit(1);
+      if (cancelled) return;
+      if (error && isSupabaseMissingColumnError(error.message, "menu_size_id")) {
+        setMenuSizeColumnReady(false);
+      } else {
+        setMenuSizeColumnReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [shopId, supabase]);
 
   const loadData = async () => {
     if (!shopId) return;
@@ -76,7 +121,10 @@ export default function RecipesPage() {
       setIngredients(rawIngs);
 
       if (finished.length > 0) {
-        setSelectedParentId(finished[0].id);
+        const preferred = productFromUrl && finished.some((p: Product) => p.id === productFromUrl)
+          ? productFromUrl
+          : finished[0].id;
+        setSelectedParentId(preferred);
       }
     } catch (err: any) {
       toast.error("Failed to load products: " + err.message);
@@ -99,6 +147,7 @@ export default function RecipesPage() {
           id,
           ingredient_product_id,
           quantity,
+          menu_size_id,
           ingredients:products!product_recipes_ingredient_product_id_fkey (
             name,
             unit,
@@ -111,46 +160,73 @@ export default function RecipesPage() {
       if (error) {
         const fallback = await supabase
           .from("product_recipes")
-          .select("id, ingredient_product_id, quantity")
+          .select("id, ingredient_product_id, quantity, menu_size_id")
           .eq("parent_product_id", parentId);
-        if (fallback.error) throw fallback.error;
-        rows = (fallback.data || []).map((r: any) => {
-          const ing = ingredients.find((p) => p.id === r.ingredient_product_id);
-          return {
-            ...r,
-            ingredients: ing
-              ? {
-                  name: ing.name,
-                  unit: ing.unit,
-                  purchase_price_single: ing.purchase_price_single,
-                }
-              : null,
-          };
-        });
+        if (fallback.error) {
+          const fb2 = await supabase
+            .from("product_recipes")
+            .select("id, ingredient_product_id, quantity")
+            .eq("parent_product_id", parentId);
+          if (fb2.error) throw fb2.error;
+          rows = (fb2.data || []).map((r: any) => ({ ...r, menu_size_id: null }));
+        } else {
+          rows = fallback.data;
+        }
       }
 
       const formatted: RecipeItem[] = (rows || []).map((r: any) => ({
         id: r.id,
         ingredient_product_id: r.ingredient_product_id,
         quantity: Number(r.quantity),
-        ingredientName: r.ingredients?.name || "Unknown Ingredient",
-        ingredientUnit: r.ingredients?.unit || "unit",
-        ingredientCost: Number(r.ingredients?.purchase_price_single || 0),
+        menu_size_id: r.menu_size_id ?? null,
+        ingredientName: r.ingredients?.name || ingredients.find((p) => p.id === r.ingredient_product_id)?.name || "Unknown Ingredient",
+        ingredientUnit: r.ingredients?.unit || ingredients.find((p) => p.id === r.ingredient_product_id)?.unit || "unit",
+        ingredientCost: Number(
+          r.ingredients?.purchase_price_single ??
+            ingredients.find((p) => p.id === r.ingredient_product_id)?.purchase_price_single ??
+            0
+        ),
       }));
 
-      setRecipeItems(formatted);
+      setAllRecipeRows(formatted);
     } catch (err: any) {
       toast.error("Failed to load recipe: " + err.message);
+      setAllRecipeRows([]);
     }
   };
 
   useEffect(() => {
     if (selectedParentId) {
       loadRecipe(selectedParentId);
+      loadMenuSizes(selectedParentId);
     } else {
       setRecipeItems([]);
+      setAllRecipeRows([]);
+      setMenuSizes([]);
     }
   }, [selectedParentId]);
+
+  const loadMenuSizes = async (parentId: string) => {
+    if (!shopId) return;
+    try {
+      const { data } = await supabase
+        .from("restaurant_menu_sizes")
+        .select("id, size_name, price")
+        .eq("shop_id", shopId)
+        .eq("product_id", parentId)
+        .eq("is_available", true)
+        .order("sort_order", { ascending: true });
+      setMenuSizes((data || []) as MenuSizeRow[]);
+    } catch {
+      setMenuSizes([]);
+    }
+  };
+
+  useEffect(() => {
+    setRecipeItems(
+      allRecipeRows.filter((r) => (r.menu_size_id || null) === (selectedRecipeSizeId || null))
+    );
+  }, [allRecipeRows, selectedRecipeSizeId]);
 
   const handleAddIngredient = () => {
     if (!selectedIngId) {
@@ -162,7 +238,11 @@ export default function RecipesPage() {
       return;
     }
 
-    const exists = recipeItems.find(it => it.ingredient_product_id === selectedIngId);
+    const exists = recipeItems.find(
+      (it) =>
+        it.ingredient_product_id === selectedIngId &&
+        (it.menu_size_id || null) === (selectedRecipeSizeId || null)
+    );
     if (exists) {
       toast.info("Ingredient already added. Quantities can be adjusted below.");
       return;
@@ -171,15 +251,16 @@ export default function RecipesPage() {
     const ingProduct = ingredients.find(p => p.id === selectedIngId);
     if (!ingProduct) return;
 
-    setRecipeItems(prev => [
+    setAllRecipeRows((prev) => [
       ...prev,
       {
         ingredient_product_id: selectedIngId,
         quantity: ingQuantity,
+        menu_size_id: selectedRecipeSizeId,
         ingredientName: ingProduct.name,
         ingredientUnit: ingProduct.unit,
-        ingredientCost: ingProduct.purchase_price_single
-      }
+        ingredientCost: ingProduct.purchase_price_single,
+      },
     ]);
 
     setSelectedIngId("");
@@ -188,16 +269,41 @@ export default function RecipesPage() {
   };
 
   const handleRemoveItem = (index: number) => {
-    setRecipeItems(prev => prev.filter((_, i) => i !== index));
+    const target = recipeItems[index];
+    if (!target) return;
+    setAllRecipeRows((prev) =>
+      prev.filter(
+        (r) =>
+          !(
+            r.ingredient_product_id === target.ingredient_product_id &&
+            (r.menu_size_id || null) === (target.menu_size_id || null)
+          )
+      )
+    );
   };
 
   const handleUpdateQty = (index: number, newQty: number) => {
     if (newQty <= 0) return;
-    setRecipeItems(prev => prev.map((item, i) => i === index ? { ...item, quantity: newQty } : item));
+    const target = recipeItems[index];
+    if (!target) return;
+    setAllRecipeRows((prev) =>
+      prev.map((item) =>
+        item.ingredient_product_id === target.ingredient_product_id &&
+        (item.menu_size_id || null) === (target.menu_size_id || null)
+          ? { ...item, quantity: newQty }
+          : item
+      )
+    );
   };
 
   const handleSaveRecipe = async () => {
     if (!selectedParentId) return;
+    const needsSizeColumn = recipeRowsRequireMenuSizeColumn(allRecipeRows);
+    if (needsSizeColumn && !menuSizeColumnReady) {
+      toast.error(migrationHint, { duration: 10000 });
+      return;
+    }
+
     setSaving(true);
     try {
       // 1. Delete previous recipe items
@@ -208,20 +314,59 @@ export default function RecipesPage() {
 
       if (delErr) throw delErr;
 
-      // 2. Insert new recipe items
-      if (recipeItems.length > 0) {
-        const { error: insErr } = await supabase
-          .from("product_recipes")
-          .insert(recipeItems.map(item => ({
-            parent_product_id: selectedParentId,
-            ingredient_product_id: item.ingredient_product_id,
-            quantity: item.quantity
-          })));
+      // 2. Insert new recipe items (all sizes kept in allRecipeRows)
+      if (allRecipeRows.length > 0) {
+        const payload = allRecipeRows.map((item) => ({
+          parent_product_id: selectedParentId,
+          ingredient_product_id: item.ingredient_product_id,
+          quantity: item.quantity,
+          menu_size_id: item.menu_size_id || null,
+        }));
 
-        if (insErr) throw insErr;
+        const insertLegacy = async () => {
+          const { error: insErr2 } = await supabase.from("product_recipes").insert(
+            allRecipeRows.map((item) => ({
+              parent_product_id: selectedParentId,
+              ingredient_product_id: item.ingredient_product_id,
+              quantity: item.quantity,
+            }))
+          );
+          if (insErr2) throw insErr2;
+        };
+
+        if (!menuSizeColumnReady) {
+          await insertLegacy();
+        } else {
+          const { error: insErr } = await supabase.from("product_recipes").insert(payload);
+
+          if (insErr) {
+            const msg = insErr.message || "";
+            if (isSupabaseMissingColumnError(msg, "menu_size_id")) {
+              setMenuSizeColumnReady(false);
+              if (needsSizeColumn) {
+                throw new Error(migrationHint);
+              }
+              await insertLegacy();
+            } else if (
+              msg.includes("product_recipes_parent_product_id_ingredient_product_id_key") ||
+              msg.includes("product_recipes_parent_ingredient_size_uniq") ||
+              msg.includes("duplicate key")
+            ) {
+              throw new Error(
+                "Database still uses the old recipe rule (one ingredient per dish only). Run Restaurant → Setup / Migration SQL - drop product_recipes_parent_product_id_ingredient_product_id_key and add per-size uniqueness."
+              );
+            } else {
+              throw insErr;
+            }
+          }
+        }
       }
 
-      toast.success("Recipe saved successfully!");
+      toast.success(
+        !menuSizeColumnReady
+          ? "Recipe saved (Standard/base only). Run Setup / Migration for per-size BOM."
+          : "Recipe saved successfully!"
+      );
       loadRecipe(selectedParentId);
     } catch (err: any) {
       toast.error("Failed to save recipe: " + err.message);
@@ -232,7 +377,10 @@ export default function RecipesPage() {
 
   // Calculations
   const selectedParent = finishedProducts.find(p => p.id === selectedParentId);
-  const salePrice = selectedParent?.sale_price_single || 0;
+  const selectedSize = menuSizes.find((s) => s.id === selectedRecipeSizeId);
+  const salePrice = selectedSize
+    ? Number(selectedSize.price)
+    : selectedParent?.sale_price_single || 0;
   
   // Total cost of all ingredients in recipe
   const totalCost = recipeItems.reduce((sum, item) => sum + (Number(item.ingredientCost || 0) * item.quantity), 0);
@@ -251,18 +399,28 @@ export default function RecipesPage() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      
-      {/* Title Header */}
-      <div>
-        <h2 className="text-lg font-black tracking-tight text-slate-800 flex items-center gap-1.5 font-nastaleeq">
-          <Layers className="text-blue-600" /> {language === "en" ? "Recipe & BOM Management" : "ریسیپی اور خام مال کی انوینٹری (BOM)"}
-        </h2>
-        <p className="text-slate-500 text-xs mt-0.5">
+      <div className="flex items-center justify-between text-xs text-slate-500 pb-1 border-b border-slate-100">
+        <p>
           {language === "en" 
-            ? "Map finished menu dishes to raw ingredients to calculate food cost margins and automatically decrement stock levels." 
-            : "مینو ڈشز کو خام مال کے ساتھ منسلک کریں تا کہ اصل کاسٹ معلوم ہو سکے اور فروخت پر اسٹاک خودکار وضع ہو سکے۔"}
+            ? "Map menu dishes to raw ingredients per size. Set sizes under Restaurant -> Deals & Sizes, then pick a size here for size-specific BOM." 
+            : "مینو ڈشز کو سائز کے حساب سے خام مال سے منسلک کریں۔ سائز Restaurant -> Deals & Sizes میں سیٹ کریں۔"}
         </p>
       </div>
+
+      {!menuSizeColumnReady && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center gap-2">
+          <div>
+            Per-size recipes need the <code className="font-mono">menu_size_id</code> column on{" "}
+            <code className="font-mono">product_recipes</code>. Run the recipe migration in Supabase, then reload the API schema if prompted.
+          </div>
+          <Link
+            href="/dashboard/restaurant/setup-migration"
+            className="shrink-0 font-bold text-blue-700 hover:underline"
+          >
+            Open Setup / Migration →
+          </Link>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 bg-white border border-slate-200 rounded-2xl shadow-sm">
@@ -301,8 +459,8 @@ export default function RecipesPage() {
                         : "hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors text-slate-700 font-semibold"
                     }`}
                   >
-                    <span className="text-xs truncate">{p.name}</span>
-                    <span className={`text-[10px] font-mono ${isSelected ? "text-blue-300" : "text-blue-600"}`}>Rs {p.sale_price_single}</span>
+                    <div className="text-xs truncate">{p.name}</div>
+                    <div className={`text-[10px] font-mono ${isSelected ? "text-blue-300" : "text-blue-600"}`}>Rs {p.sale_price_single}</div>
                   </button>
                 );
               })}
@@ -322,36 +480,70 @@ export default function RecipesPage() {
                 {/* Header Information */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3">
                   <div>
-                    <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full uppercase">
+                    <div className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full uppercase">
                       Selected Item
-                    </span>
+                    </div>
                     <h3 className="text-lg font-bold text-slate-800 mt-1">{selectedParent.name}</h3>
                   </div>
                   <div className="flex items-center gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-xs text-slate-500 font-bold uppercase">Sale Price:</span>
-                    <span className="text-sm font-black font-mono text-slate-800">Rs {salePrice}</span>
+                    <div className="text-xs text-slate-500 font-bold uppercase">Sale Price:</div>
+                    <div className="text-sm font-black font-mono text-slate-800">Rs {salePrice}</div>
                   </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-[10px] font-bold text-slate-500 uppercase">Recipe for size:</div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRecipeSizeId(null)}
+                    className={`text-xs px-3 py-1.5 rounded-full border font-bold ${
+                      selectedRecipeSizeId === null
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-white text-slate-600 border-slate-200"
+                    }`}
+                  >
+                    Standard / Base
+                  </button>
+                  {menuSizes.map((sz) => (
+                    <button
+                      key={sz.id}
+                      type="button"
+                      onClick={() => setSelectedRecipeSizeId(sz.id)}
+                      className={`text-xs px-3 py-1.5 rounded-full border font-bold ${
+                        selectedRecipeSizeId === sz.id
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-slate-600 border-slate-200"
+                      }`}
+                    >
+                      {sz.size_name} (Rs {Number(sz.price).toFixed(0)})
+                    </button>
+                  ))}
+                  {menuSizes.length === 0 && (
+                    <div className="text-[10px] text-slate-400">
+                      No extra sizes - only base recipe. Add sizes in Deals &amp; Sizes.
+                    </div>
+                  )}
                 </div>
 
                 {/* Profit Margin analysis cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-slate-50 p-3.5 border border-slate-150 rounded-2xl flex flex-col justify-between h-20 shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Estimated Recipe Cost</span>
-                    <span className="text-base font-black text-slate-800 font-mono">Rs {totalCost.toFixed(2)}</span>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase">Estimated Recipe Cost</div>
+                    <div className="text-base font-black text-slate-800 font-mono">Rs {totalCost.toFixed(2)}</div>
                   </div>
                   
                   <div className="bg-slate-50 p-3.5 border border-slate-150 rounded-2xl flex flex-col justify-between h-20 shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Estimated Net Profit</span>
-                    <span className={`text-base font-black font-mono ${profitMargin >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase">Estimated Net Profit</div>
+                    <div className={`text-base font-black font-mono ${profitMargin >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                       Rs {profitMargin.toFixed(2)}
-                    </span>
+                    </div>
                   </div>
 
                   <div className="bg-slate-50 p-3.5 border border-slate-150 rounded-2xl flex flex-col justify-between h-20 shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Food Cost Profit Margin</span>
-                    <span className={`text-base font-black font-mono flex items-center gap-0.5 ${marginPercentage >= 40 ? "text-emerald-600" : marginPercentage >= 20 ? "text-amber-500" : "text-red-500"}`}>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase">Food Cost Profit Margin</div>
+                    <div className={`text-base font-black font-mono flex items-center gap-0.5 ${marginPercentage >= 40 ? "text-emerald-600" : marginPercentage >= 20 ? "text-amber-500" : "text-red-500"}`}>
                       <Percent size={15} /> {marginPercentage.toFixed(1)}%
-                    </span>
+                    </div>
                   </div>
                 </div>
 
@@ -411,9 +603,9 @@ export default function RecipesPage() {
                     <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
                       {language === "en" ? "Recipe Ingredients List" : "ریسیپی کے اجزاء کی تفصیل"}
                     </h4>
-                    <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-semibold font-mono">
+                    <div className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-semibold font-mono">
                       Ingredients Count: {recipeItems.length}
-                    </span>
+                    </div>
                   </div>
 
                   {recipeItems.length === 0 ? (
@@ -449,7 +641,7 @@ export default function RecipesPage() {
                                       onChange={e => handleUpdateQty(index, parseFloat(e.target.value) || 0)}
                                       className="w-16 h-7 text-center text-xs font-bold border-slate-200 rounded-md p-1 font-mono"
                                     />
-                                    <span className="text-[10px] text-slate-500 font-semibold">{item.ingredientUnit || "unit"}</span>
+                                    <div className="text-[10px] text-slate-500 font-semibold">{item.ingredientUnit || "unit"}</div>
                                   </div>
                                 </td>
                                 <td className="p-3 text-right font-extrabold text-slate-800 font-mono">Rs {subCost.toFixed(2)}</td>

@@ -1,6 +1,7 @@
 export const FLAME9_LOCAL_SHOP_ID = "flame9-shop-local";
 export const FLAME9_LOCAL_USER_ID = "flame9-admin-local";
 export const FLAME9_STAFF_USER_ID = "flame9-staff-local";
+export const FLAME9_RIDER_USER_ID = "flame9-rider-local";
 
 export const FLAME9_STATION_IDS = {
   grill: "st-grill",
@@ -43,6 +44,7 @@ export function getFlame9SeedData(tableName: string): unknown[] {
           id: userId,
           shop_id: shopId,
           name: FLAME9_LOCAL_LOGINS.admin.name,
+          email: FLAME9_LOCAL_LOGINS.admin.email,
           role: "superadmin",
           permissions: {
             panels: {
@@ -75,6 +77,7 @@ export function getFlame9SeedData(tableName: string): unknown[] {
           id: FLAME9_STAFF_USER_ID,
           shop_id: shopId,
           name: FLAME9_LOCAL_LOGINS.staff.name,
+          email: FLAME9_LOCAL_LOGINS.staff.email,
           role: "staff",
           permissions: {
             panels: {
@@ -96,6 +99,18 @@ export function getFlame9SeedData(tableName: string): unknown[] {
               backup: false,
             },
             actions: { edit_bill: false, delete_bill: false, edit_account: false, delete_account: false },
+          },
+        },
+        {
+          id: FLAME9_RIDER_USER_ID,
+          shop_id: shopId,
+          name: "Ali Rider",
+          email: "rider@flame9.pizza",
+          role: "rider",
+          phone: "0300-1112233",
+          permissions: {
+            panels: { dashboard: true, pos: true, sales: true },
+            actions: { edit_bill: false, delete_bill: false },
           },
         },
       ];
@@ -120,6 +135,8 @@ export function getFlame9SeedData(tableName: string): unknown[] {
           category_id: "cat-pizza",
           kitchen_station_id: FLAME9_STATION_IDS.oven,
           is_ingredient: false,
+          not_discounted: false,
+          show_in_restaurant_pos: true,
         },
         {
           id: "prod-pepperoni",
@@ -133,6 +150,8 @@ export function getFlame9SeedData(tableName: string): unknown[] {
           category_id: "cat-pizza",
           kitchen_station_id: FLAME9_STATION_IDS.oven,
           is_ingredient: false,
+          not_discounted: false,
+          show_in_restaurant_pos: true,
         },
         {
           id: "prod-latte",
@@ -146,6 +165,8 @@ export function getFlame9SeedData(tableName: string): unknown[] {
           category_id: "cat-cafe",
           kitchen_station_id: FLAME9_STATION_IDS.bar,
           is_ingredient: false,
+          not_discounted: false,
+          show_in_restaurant_pos: true,
         },
         {
           id: "ing-dough",
@@ -242,6 +263,7 @@ export function getFlame9SeedData(tableName: string): unknown[] {
       return [
         { id: "acc-cash-flame9", shop_id: shopId, name: "Cash in Hand", current_balance: 25000 },
         { id: "acc-bank-flame9", shop_id: shopId, name: "Bank Account", current_balance: 150000 },
+        { id: "acc-online-flame9", shop_id: shopId, name: "Online / JazzCash", current_balance: 12000 },
       ];
     case "register_sessions":
       return [
@@ -255,6 +277,10 @@ export function getFlame9SeedData(tableName: string): unknown[] {
         },
       ];
     case "invoice_items":
+      return [];
+    case "invoices":
+      return [];
+    case "payment_submissions":
       return [];
     case "account_transactions":
       return [];
@@ -271,6 +297,7 @@ export function getFlame9SeedData(tableName: string): unknown[] {
     case "company_details":
       return [
         {
+          id: shopId,
           shop_id: shopId,
           name: "Flame 9 Pizza House & Café",
           phone: "",
@@ -280,7 +307,16 @@ export function getFlame9SeedData(tableName: string): unknown[] {
         },
       ];
     case "print_settings":
-      return [{ shop_id: shopId, receipt_design_settings: { activeLanguages: ["en", "ur"], billingLanguage: "en" } }];
+      return [
+        {
+          id: `print-${shopId}`,
+          shop_id: shopId,
+          receipt_page_size: "MM80",
+          receipt_font: "monospace",
+          receipt_font_size: 11,
+          receipt_design_settings: { activeLanguages: ["en", "ur"], billingLanguage: "en" },
+        },
+      ];
     case "restaurant_stations":
       return [
         { id: FLAME9_STATION_IDS.grill, shop_id: shopId, name: "Grill", kitchen_hub: "Main Kitchen", sort_order: 1, is_active: true },
@@ -315,6 +351,14 @@ export function getFlame9SeedData(tableName: string): unknown[] {
         { id: "sz-lat-m", shop_id: shopId, product_id: "prod-latte", size_name: "Medium", price: 450, sort_order: 2, is_available: true, crust_options: "Regular" },
         { id: "sz-lat-l", shop_id: shopId, product_id: "prod-latte", size_name: "Large", price: 550, sort_order: 3, is_available: true, crust_options: "Regular" },
       ];
+    case "restaurant_reservations":
+      return [];
+    case "restaurant_deals":
+      return [];
+    case "restaurant_deal_items":
+      return [];
+    case "restaurant_waiter_calls":
+      return [];
     default:
       return [];
   }
@@ -334,10 +378,15 @@ export const FLAME9_SQLITE_TABLES = [
   "kitchen_order_items",
   "restaurant_modifiers",
   "restaurant_menu_sizes",
+  "restaurant_reservations",
+  "restaurant_deals",
+  "restaurant_deal_items",
+  "restaurant_waiter_calls",
   "company_details",
   "print_settings",
   "invoices",
   "invoice_items",
+  "payment_submissions",
   "register_sessions",
   "account_transactions",
   "credit_transactions",

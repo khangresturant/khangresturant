@@ -72,8 +72,12 @@ export default function PublicReceiptPage() {
       if (itemsError) throw itemsError;
 
       // Map invoice items to the format expected by ReceiptTemplate
-      const formattedItems = (itemsData || []).map((item: any) => ({
-        name: item.products?.name || item.custom_name || "Item",
+      const formattedItems = (itemsData || []).map((item: any) => {
+        const baseName = item.products?.name || item.custom_name || "Item";
+        const size = item.packing_name?.trim();
+        const displayName = size && !baseName.includes(size) ? `${baseName} (${size})` : baseName;
+        return {
+        name: displayName,
         quantity: Number(item.quantity),
         price: Number(item.unit_price),
         subtotal: item.subtotal !== undefined && item.subtotal !== null ? Number(item.subtotal) : undefined,
@@ -86,7 +90,8 @@ export default function PublicReceiptPage() {
         shelfLocation: item.shelf_location || undefined,
         note: item.products?.note || undefined,
         translated_names: item.products?.translated_names || undefined
-      }));
+      };
+      });
 
       // 2b. Fetch EMI schedules if payment_mode is emi or exists
       let emiSchedules: any[] = [];
@@ -102,6 +107,7 @@ export default function PublicReceiptPage() {
       const partyObj = (invoiceData as any).party;
       const fullInvoice = {
         ...invoiceData,
+        order_number: (invoiceData as any).order_number || null,
         customer_name: invoiceData.customer_name || partyObj?.name || "Walk-in Customer",
         customer_phone: invoiceData.customer_phone || partyObj?.phone || "",
         customer_address: partyObj?.address || "",
@@ -188,7 +194,7 @@ export default function PublicReceiptPage() {
         ? new Date(invoice.created_at).toLocaleDateString("en-PK")
         : new Date().toLocaleDateString("en-PK");
       const cName = invoice.customer_name || "Walk-in Customer";
-      const cPhone = invoice.customer_phone || "—";
+      const cPhone = invoice.customer_phone || "-";
 
       // Header
       doc.setFillColor(15, 23, 42);
@@ -331,7 +337,11 @@ export default function PublicReceiptPage() {
           <CheckCircle2 className="text-emerald-500 shrink-0" size={18} />
           <div>
             <h4 className="font-extrabold text-emerald-400 text-xs">Verified Digital Invoice (تصدیق شدہ بل)</h4>
-            <p className="text-[10.5px] text-slate-400 leading-snug">Invoice #{invoice.id?.slice(0, 8).toUpperCase()}</p>
+            <p className="text-[10.5px] text-slate-400 leading-snug">
+              {invoice.order_number
+                ? `Order #${invoice.order_number}`
+                : `Invoice #${invoice.id?.slice(0, 8).toUpperCase()}`}
+            </p>
           </div>
         </div>
         <button
@@ -363,7 +373,7 @@ export default function PublicReceiptPage() {
           ) : (
             <Download className="w-4 h-4" />
           )}
-          <span>Download PDF Bill (پی ڈی ایف بل ڈاؤن لوڈ کریں)</span>
+          <div>Download PDF Bill (پی ڈی ایف بل ڈاؤن لوڈ کریں)</div>
         </Button>
 
         <div className="flex gap-2.5">
@@ -385,7 +395,7 @@ export default function PublicReceiptPage() {
 
       {/* Brand Footer */}
       <div className="text-center text-[10.5px] text-slate-500 print:hidden pt-2">
-        <p>This invoice is encrypted and hosted securely by <span className="font-bold text-slate-400">The Accounts ERP</span>.</p>
+        <p>This invoice is encrypted and hosted securely by <div className="font-bold text-slate-400">The Accounts ERP</div>.</p>
         <p className="mt-0.5 font-medium text-slate-600">© 2026 The Accounts. All rights reserved.</p>
       </div>
 

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, ShoppingCart, UserPlus, Trash2, Plus, Minus, 
@@ -20,6 +21,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/context/LanguageContext";
 import { ReceiptTemplate, DEFAULT_RECEIPT_SETTINGS } from "@/components/ReceiptTemplate";
+import {
+  companyRowToShopDetails,
+  mergeRestaurantPrintProfile,
+} from "@/lib/restaurant-print-profile";
+import { filterRiderStaff, riderLabel, staffPhone } from "@/lib/restaurant-riders";
+import {
+  printRestaurantGuestBill,
+  printRestaurantKOTSlip,
+  mapDbInvoiceItemsToReceiptLines,
+  type RestaurantReceiptLine,
+} from "@/lib/restaurant-receipt-print";
 import { printReceiptDirect } from "@/lib/thermalPrinter";
 import {
   type RestaurantOrderStatus,
@@ -29,6 +41,8 @@ import {
   markBillPrinted,
   generateDailyOrderNumber,
   normalizeOrderStatus,
+  applyRestaurantOrderCostAndStock,
+  invoiceLinesForCost,
 } from "@/lib/restaurant-orders";
 import { fetchRestaurantModifiers } from "@/lib/restaurant-modifiers";
 import {
@@ -41,6 +55,11 @@ import {
   type RestaurantStation,
 } from "@/lib/restaurant-ops";
 import { dispatchKitchenTicket } from "@/lib/restaurant-kitchen";
+import { computeCartIngredientCost, restoreStockForInvoiceLines } from "@/lib/restaurant-recipe-cost";
+import {
+  cartDiscountableSubtotal,
+  computeRestaurantOrderDiscount,
+} from "@/lib/restaurant-discount";
 import {
   buildCustomizedLineName,
   buildKitchenRemarks,
@@ -72,6 +91,8 @@ type DBProduct = {
   kitchen_station_id?: string | null;
   sell_by_weight?: boolean;
   is_ingredient?: boolean;
+  not_discounted?: boolean;
+  show_in_restaurant_pos?: boolean;
 };
 
 type Party = {
@@ -95,14 +116,19 @@ type CartItem = {
   quantity: number;
   remarks: string; // Waiter's chef remarks
   sizeLabel?: string;
+  menuSizeId?: string | null;
   crust?: string;
   addOns?: CartAddOnLine[];
+  notDiscounted?: boolean;
+  isDeal?: boolean;
 };
 
 export default function RestaurantPOSPage() {
   const { shopId, userId, shopName, shopLogo, activeClosingBook, defaultTaxRate, defaultTaxType } = useShop();
   const { t, language } = useLanguage();
   const supabase = createClient();
+  const searchParams = useSearchParams();
+  const reservationDeepLinkRef = useRef(false);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -170,6 +196,12 @@ export default function RestaurantPOSPage() {
   const [orderSpecialInstructions, setOrderSpecialInstructions] = useState("");
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [printKitchenReceipt, setPrintKitchenReceipt] = useState(true);
+
+  useEffect(() => {
+    if (receiptSettings.restaurantPrintKitchenOnKot === false) {
+      setPrintKitchenReceipt(false);
+    }
+  }, [receiptSettings.restaurantPrintKitchenOnKot]);
   const [leftPosTab, setLeftPosTab] = useState<"menu" | "deals" | "history">("menu");
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [loadingRecentOrders, setLoadingRecentOrders] = useState(false);
@@ -207,13 +239,49 @@ export default function RestaurantPOSPage() {
 
   // Calculations
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const percentDiscountAmount = (cartSubtotal * discountPercent) / 100;
-  const effectiveDiscount = Math.max(discount, percentDiscountAmount);
+  const discountableSubtotal = cartDiscountableSubtotal(
+    cart.map((item) => ({
+      unitPrice: item.price,
+      quantity: item.quantity,
+      notDiscounted: item.notDiscounted,
+    }))
+  );
+  const effectiveDiscount = computeRestaurantOrderDiscount(
+    discountableSubtotal,
+    discount,
+    discountPercent
+  );
   const taxAmount = taxType === "flat" ? taxRate : (cartSubtotal * taxRate) / 100;
   const netTotal = Math.max(
     0,
     cartSubtotal + taxAmount - effectiveDiscount + deliveryFee + additionalCharges + tipAmount
   );
+
+  const [estimatedIngredientCost, setEstimatedIngredientCost] = useState(0);
+  useEffect(() => {
+    if (!shopId || cart.length === 0) {
+      setEstimatedIngredientCost(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const cost = await computeCartIngredientCost(
+        supabase,
+        cart.map((c) => ({
+          productId: c.productId,
+          quantity: c.quantity,
+          menuSizeId: c.menuSizeId,
+          menuSizeName: c.sizeLabel,
+        }))
+      );
+      if (!cancelled) setEstimatedIngredientCost(cost);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cart, shopId, supabase]);
+
+  const estimatedProfit = Math.max(0, netTotal - estimatedIngredientCost);
 
   const activeOrderInvoiceId =
     posMode === "dining" ? selectedTable?.active_invoice_id ?? null : takeawayInvoiceId;
@@ -242,10 +310,10 @@ export default function RestaurantPOSPage() {
           .eq("shop_id", shopId)
           .order("name", { ascending: true }),
 
-        // 2. Products (no kitchen_station_id — column may be missing until P1 SQL)
+        // 2. Products (no kitchen_station_id - column may be missing until P1 SQL)
         supabase
           .from("products")
-          .select("id, name, unit, sale_price_single, purchase_price_single, current_stock, category_id, is_ingredient, kitchen_station_id")
+          .select("id, name, unit, sale_price_single, purchase_price_single, current_stock, category_id, is_ingredient, kitchen_station_id, not_discounted, show_in_restaurant_pos")
           .eq("shop_id", shopId)
           .order("name", { ascending: true }),
 
@@ -288,7 +356,7 @@ export default function RestaurantPOSPage() {
         // 8. Staff Profiles
         supabase
           .from("user_profiles")
-          .select("id, name, role")
+          .select("id, name, role, phone, permissions")
           .eq("shop_id", shopId)
           .order("name", { ascending: true })
       ]);
@@ -303,7 +371,7 @@ export default function RestaurantPOSPage() {
       if (typeof navigator !== "undefined" && navigator.onLine && shopId) {
         const queued = loadOfflineTakeawayQueue(shopId);
         if (queued.length > 0) {
-          toast.message(`${queued.length} offline takeaway draft(s) ready — open cart and process when staffed`);
+          toast.message(`${queued.length} offline takeaway draft(s) ready - open cart and process when staffed`);
         }
       }
 
@@ -328,7 +396,20 @@ export default function RestaurantPOSPage() {
       // --- Process Products with fallback ---
       let productsData = productsRes.data;
       if (productsRes.error) {
-        if (productsRes.error.message.includes("is_ingredient") || productsRes.error.hint?.includes("is_ingredient")) {
+        const msg = productsRes.error.message || "";
+        if (msg.includes("not_discounted") || msg.includes("show_in_restaurant")) {
+          const fallback = await supabase
+            .from("products")
+            .select("id, name, unit, sale_price_single, purchase_price_single, current_stock, category_id, is_ingredient, kitchen_station_id")
+            .eq("shop_id", shopId)
+            .order("name", { ascending: true });
+          if (fallback.error) throw fallback.error;
+          productsData = (fallback.data || []).map((p: any) => ({
+            ...p,
+            not_discounted: false,
+            show_in_restaurant_pos: true,
+          }));
+        } else if (msg.includes("is_ingredient") || productsRes.error.hint?.includes("is_ingredient")) {
           const fallback = await supabase
             .from("products")
             .select("id, name, unit, sale_price_single, purchase_price_single, current_stock, category_id")
@@ -342,7 +423,10 @@ export default function RestaurantPOSPage() {
       }
       setProducts(
         (productsData || []).filter(
-          (p: any) => p.is_ingredient !== true && String(p.is_ingredient) !== "true"
+          (p: any) =>
+            p.is_ingredient !== true &&
+            String(p.is_ingredient) !== "true" &&
+            p.show_in_restaurant_pos !== false
         )
       );
 
@@ -363,9 +447,18 @@ export default function RestaurantPOSPage() {
         setSelectedAccountId(cashInHand ? cashInHand.id : accData[0].id);
       }
 
-      // --- Process Print Settings ---
+      // --- Process Print Settings + company printers (POSRESTURANT: KOT vs customer) ---
       if (!printRes.error && printRes.data) {
-        setReceiptSettings(printRes.data);
+        setReceiptSettings(
+          mergeRestaurantPrintProfile(
+            companyRes.data as Record<string, unknown> | null,
+            printRes.data as Record<string, unknown>
+          )
+        );
+      } else if (!companyRes.error && companyRes.data) {
+        setReceiptSettings(
+          mergeRestaurantPrintProfile(companyRes.data as Record<string, unknown>, null)
+        );
       }
 
       // --- Process Company Details ---
@@ -444,9 +537,12 @@ export default function RestaurantPOSPage() {
             discount_percentage,
             waiter_id,
             invoice_items (
+              id,
               product_id,
               quantity,
               unit_price,
+              packing_name,
+              menu_size_id,
               products ( name, purchase_price_single )
             )
           `)
@@ -461,7 +557,9 @@ export default function RestaurantPOSPage() {
             price: Number(it.unit_price),
             purchasePrice: Number(it.products?.purchase_price_single || 0),
             quantity: Number(it.quantity),
-            remarks: it.remarks || ""
+            remarks: it.remarks || "",
+            sizeLabel: it.packing_name || undefined,
+            menuSizeId: it.menu_size_id || undefined,
           }));
 
           setCart(loadedCart);
@@ -486,6 +584,26 @@ export default function RestaurantPOSPage() {
     }
   };
 
+  // Reservations → Seat & POS deep link (?table=&guest=&phone=)
+  useEffect(() => {
+    if (!shopId || loading || reservationDeepLinkRef.current) return;
+    const tableId = searchParams.get("table");
+    if (!tableId || tables.length === 0) return;
+    const table = tables.find((t) => t.id === tableId);
+    if (!table) return;
+
+    reservationDeepLinkRef.current = true;
+    setPosMode("dining");
+    const guest = searchParams.get("guest");
+    const phone = searchParams.get("phone");
+
+    void (async () => {
+      await handleSelectTable(table);
+      if (guest) setCustomerName(guest);
+      if (phone) setCustomerPhone(phone);
+    })();
+  }, [shopId, loading, tables, searchParams]);
+
   // Add Product to Cart (Default / Retail)
   const addToCart = (product: DBProduct) => {
     setCart(prev => {
@@ -503,7 +621,8 @@ export default function RestaurantPOSPage() {
           price: product.sale_price_single,
           purchasePrice: product.purchase_price_single,
           quantity: 1,
-          remarks: ""
+          remarks: "",
+          notDiscounted: !!product.not_discounted,
         }];
       }
     });
@@ -515,7 +634,7 @@ export default function RestaurantPOSPage() {
     displayName: string,
     customPrice: number,
     remarks: string,
-    meta?: { sizeLabel?: string; crust?: string; addOns?: CartAddOnLine[] }
+    meta?: { sizeLabel?: string; menuSizeId?: string | null; crust?: string; addOns?: CartAddOnLine[] }
   ) => {
     setCart(prev => {
       const uniqueId = `${product.id}-${Date.now()}`;
@@ -528,11 +647,24 @@ export default function RestaurantPOSPage() {
         quantity: 1,
         remarks: remarks,
         sizeLabel: meta?.sizeLabel,
+        menuSizeId: meta?.menuSizeId,
         crust: meta?.crust,
         addOns: meta?.addOns?.length ? meta.addOns : undefined,
+        notDiscounted: !!product.not_discounted,
       }];
     });
   };
+
+  const mapCartToInvoiceRows = (invoiceId: string) =>
+    cart.map((item) => ({
+      invoice_id: invoiceId,
+      product_id: item.productId,
+      quantity: item.quantity,
+      unit_price: item.price,
+      subtotal: item.price * item.quantity,
+      packing_name: item.sizeLabel || null,
+      menu_size_id: item.menuSizeId || null,
+    }));
 
   const handleProductClick = async (product: DBProduct) => {
     const isBeverageOrDessert = categories.find(c => c.id === product.category_id)?.name.toLowerCase().includes("bever") ||
@@ -587,8 +719,17 @@ export default function RestaurantPOSPage() {
   const addDealToCart = (item: {
     cartItemId: string; productId: string; name: string; price: number;
     purchasePrice: number; quantity: number; remarks: string;
+    isDeal?: boolean;
   }) => {
-    setCart((prev) => [...prev, { ...item, cartItemId: item.cartItemId }]);
+    setCart((prev) => [
+      ...prev,
+      {
+        ...item,
+        cartItemId: item.cartItemId,
+        notDiscounted: false,
+        isDeal: true,
+      },
+    ]);
     toast.success("Deal added to order");
   };
 
@@ -621,8 +762,8 @@ export default function RestaurantPOSPage() {
     if (posMode === "dining" && !selectedTable) {
       toast.message(
         language === "en"
-          ? "Tip: select a table for seating — KOT can still go to kitchen."
-          : "ٹیبل منتخب کریں — KOT پھر بھی کچن میں جائے گا۔"
+          ? "Tip: select a table for seating - KOT can still go to kitchen."
+          : "ٹیبل منتخب کریں - KOT پھر بھی کچن میں جائے گا۔"
       );
     }
 
@@ -636,8 +777,8 @@ export default function RestaurantPOSPage() {
         return;
       }
       if (!selectedRiderId) {
-        toast.message("No rider selected", {
-          description: "You can still send KOT — assign a rider before settle.",
+        toast.message("No rider assigned yet", {
+          description: "KOT can go to kitchen - assign a rider before taking payment.",
         });
       }
     }
@@ -665,7 +806,7 @@ export default function RestaurantPOSPage() {
           notes: orderSpecialInstructions,
         });
         setOfflineQueueCount(loadOfflineTakeawayQueue(shopId).length);
-        toast.success("Takeaway saved offline — will sync when online");
+        toast.success("Takeaway saved offline - will sync when online");
         setCart([]);
         return;
       }
@@ -686,7 +827,8 @@ export default function RestaurantPOSPage() {
             product_id: item.productId,
             name: item.name,
             quantity: diffQty,
-            remarks: item.remarks
+            remarks: item.remarks,
+            sizeLabel: item.sizeLabel || null,
           };
         }
         return null;
@@ -718,7 +860,8 @@ export default function RestaurantPOSPage() {
             status: "draft",
             paid_amount: 0,
             payment_mode: "cash",
-            waiter_id: selectedWaiterId ? selectedWaiterId : null,
+            waiter_id: posMode === "dining" ? selectedWaiterId || null : null,
+            rider_id: posMode === "delivery" ? selectedRiderId || null : null,
             service_type: posMode,
             table_id: posMode === "dining" && selectedTable ? selectedTable.id : null,
             restaurant_order_status: "pending",
@@ -772,25 +915,45 @@ export default function RestaurantPOSPage() {
         kitchenHub: hub,
       });
 
-      setCurrentOrderStatus("preparing");
+      setCurrentOrderStatus("pending");
 
-      // 5. Sync all items to invoice_items
+      // 5. Sync all items to invoice_items + recipe cost / stock (POSRESTURANT)
       if (activeInvoiceId) {
-        // Clear previous items
+        const { data: prevInv } = await supabase
+          .from("invoices")
+          .select("stock_deducted, restaurant_order_status")
+          .eq("id", activeInvoiceId)
+          .maybeSingle();
+        const { data: prevItems } = await supabase
+          .from("invoice_items")
+          .select("product_id, quantity, packing_name, menu_size_id")
+          .eq("invoice_id", activeInvoiceId);
+
+        if (prevInv?.stock_deducted && (prevItems || []).length) {
+          await restoreStockForInvoiceLines(
+            supabase,
+            invoiceLinesForCost(
+              (prevItems || []).map((it: any) => ({
+                product_id: it.product_id,
+                quantity: Number(it.quantity),
+                packing_name: it.packing_name,
+                menu_size_id: it.menu_size_id,
+              }))
+            )
+          );
+        }
+
         await supabase.from("invoice_items").delete().eq("invoice_id", activeInvoiceId);
 
-        // Insert current items
-        const invoiceItems = cart.map(item => ({
-          invoice_id: activeInvoiceId,
-          product_id: item.productId,
-          quantity: item.quantity,
-          unit_price: item.price,
-          subtotal: item.price * item.quantity
-        }));
-
+        const invoiceItems = mapCartToInvoiceRows(activeInvoiceId);
         await supabase.from("invoice_items").insert(invoiceItems);
 
-        // Update invoice total
+        const keepStatus = normalizeOrderStatus(prevInv?.restaurant_order_status);
+        const nextStatus =
+          keepStatus && keepStatus !== "pending" && keepStatus !== "cancelled"
+            ? keepStatus
+            : "pending";
+
         await supabase
           .from("invoices")
           .update({
@@ -805,21 +968,62 @@ export default function RestaurantPOSPage() {
             delivery_fee: posMode === "delivery" ? deliveryFee : 0,
             additional_charges: additionalCharges + tipAmount,
             special_instructions: orderSpecialInstructions || null,
+            restaurant_order_status: nextStatus,
+            waiter_id: posMode === "dining" ? selectedWaiterId || null : null,
+            rider_id: posMode === "delivery" ? selectedRiderId || null : null,
           })
           .eq("id", activeInvoiceId);
+
+        await applyRestaurantOrderCostAndStock(
+          supabase,
+          activeInvoiceId,
+          invoiceLinesForCost(
+            invoiceItems.map((it) => ({
+              product_id: it.product_id,
+              quantity: it.quantity,
+              packing_name: it.packing_name,
+              menu_size_id: it.menu_size_id,
+            }))
+          ),
+          netTotal
+        );
       }
 
       // 6. Print KOT Slip
       if (printKitchenReceipt) {
-        printKOTSlip(kotItems);
+        printRestaurantKOTSlip(
+          {
+            orderNumber: orderNumber || undefined,
+            tableName: selectedTable?.name || null,
+            serviceType: posMode,
+            ...posGuestDetails(),
+            items: kotItems.map((it: any) => ({
+              name: it.name,
+              quantity: it.quantity,
+              sizeLabel: it.sizeLabel,
+              remarks: it.remarks,
+            })),
+            settings: receiptSettings,
+            shopDetails: companyRowToShopDetails(companyDetails, shopName),
+            companyRow: companyDetails,
+          },
+          {
+            onError: (msg) =>
+              toast.error(
+                language === "en"
+                  ? msg
+                  : `${msg} - Windows میں تھرمل پرنٹر ڈیفالٹ بنائیں`
+              ),
+          }
+        );
       }
 
       // 7. Sync local DBItems
       setDbItems(JSON.parse(JSON.stringify(cart)));
       toast.success(
         language === "en"
-          ? `KOT sent to kitchen — open Kitchen KDS (top bar) to see tickets.`
-          : "KOT کچن میں — اوپر Kitchen KDS کھولیں۔"
+          ? `KOT sent to kitchen - open Kitchen KDS (top bar) to see tickets.`
+          : "KOT کچن میں - اوپر Kitchen KDS کھولیں۔"
       );
     } catch (err: any) {
       toast.error("Failed to send KOT: " + err.message);
@@ -876,7 +1080,7 @@ export default function RestaurantPOSPage() {
         setCart((prev) => prev.filter((c) => !splitItemIds.includes(c.cartItemId)));
         setSplitItemIds([]);
         setIsSplitModalOpen(false);
-        toast.success(`Item split settled — Rs ${shareTotal.toLocaleString()}`);
+        toast.success(`Item split settled - Rs ${shareTotal.toLocaleString()}`);
       } catch (e: any) {
         toast.error(e.message || "Split failed");
       } finally {
@@ -974,85 +1178,38 @@ export default function RestaurantPOSPage() {
     }
   };
 
-  // Kitchen Slip Printer (Iframe print method)
-  const printKOTSlip = (items: any[]) => {
-    let iframe = document.getElementById("restaurant-kot-iframe") as HTMLIFrameElement;
-    if (!iframe) {
-      iframe = document.createElement("iframe");
-      iframe.id = "restaurant-kot-iframe";
-      iframe.style.position = "fixed";
-      iframe.style.right = "0";
-      iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "0";
-      document.body.appendChild(iframe);
-    }
-
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!iframeDoc) return;
-
-    const paperWidth = receiptSettings?.pageSize === "MM58" ? "58mm" : "80mm";
-
-    iframeDoc.open();
-    iframeDoc.write(`
-      <html>
-        <head>
-          <title>KOT Ticket</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-          <style>
-            @page { margin: 0; }
-            body {
-              width: ${paperWidth};
-              font-family: monospace;
-              padding: 10px;
-              font-size: 13px;
-              color: black;
-              background: white;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="text-center font-bold border-b border-dashed border-slate-400 pb-2 mb-2">
-            <h2 class="text-base uppercase tracking-wider">Kitchen Order Ticket</h2>
-            <p class="text-xs mt-0.5">${selectedTable?.name || "Takeaway"}</p>
-            <p class="text-[10px] font-normal mt-0.5">${new Date().toLocaleString()}</p>
-          </div>
-          <table class="w-full text-left mb-2">
-            <thead>
-              <tr class="border-b border-slate-300 font-bold text-xs uppercase">
-                <th class="py-1">Item</th>
-                <th class="py-1 text-right">Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items.map(it => `
-                <tr class="border-b border-slate-100 font-black">
-                  <td class="py-1.5">
-                    <div>${it.name}</div>
-                    ${it.remarks ? `<div class="text-[10px] text-slate-600 font-normal italic">Notes: ${it.remarks}</div>` : ""}
-                  </td>
-                  <td class="py-1.5 text-right font-mono">${it.quantity}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-          <div class="border-t border-dashed border-slate-400 pt-2 text-center text-[10px] font-bold">
-            ** KOT DISPATCHED **
-          </div>
-          <script>
-            window.onload = function() {
-              window.focus();
-              window.print();
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    iframeDoc.close();
+  const posGuestDetails = () => {
+    const party = customers.find((c) => c.id === selectedCustomerId);
+    return {
+      customerName: customerName.trim() || party?.name || null,
+      customerPhone: customerPhone.trim() || party?.phone || null,
+      customerAddress: customerAddress.trim() || null,
+      waiterName: staff.find((s) => s.id === selectedWaiterId)?.name || null,
+      riderName: staff.find((s) => s.id === selectedRiderId)?.name || null,
+      riderPhone: staffPhone(staff.find((s) => s.id === selectedRiderId)),
+      specialInstructions: orderSpecialInstructions.trim() || null,
+      deliveryFee: posMode === "delivery" ? deliveryFee : 0,
+      additionalCharges: additionalCharges + tipAmount,
+    };
   };
 
-  // Print Guest Bill (before settlement — no payment recorded)
+  const resolveActiveBillLines = async (invoiceId: string): Promise<RestaurantReceiptLine[]> => {
+    const local = cart.length > 0 ? cart : dbItems;
+    if (local.length > 0) {
+      return local.map((c) => ({
+        name: c.sizeLabel ? `${c.name} (${c.sizeLabel})` : c.name,
+        quantity: c.quantity,
+        unit_price: c.price,
+      }));
+    }
+    const { data } = await supabase
+      .from("invoice_items")
+      .select("quantity, unit_price, packing_name, custom_name, products(name)")
+      .eq("invoice_id", invoiceId);
+    return mapDbInvoiceItemsToReceiptLines(data || []);
+  };
+
+  // Print Guest Bill (before settlement - no payment recorded)
   const printGuestBill = async () => {
     const activeInvoiceId = posMode === "dining"
       ? (selectedTable?.active_invoice_id || null)
@@ -1071,39 +1228,43 @@ export default function RestaurantPOSPage() {
       await markBillPrinted(supabase, activeInvoiceId);
       setCurrentOrderStatus("bill_printed");
 
-      let iframe = document.getElementById("guest-bill-preview-iframe") as HTMLIFrameElement;
-      if (!iframe) {
-        iframe = document.createElement("iframe");
-        iframe.id = "guest-bill-preview-iframe";
-        iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
-        document.body.appendChild(iframe);
-      }
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) return;
+      const items = await resolveActiveBillLines(activeInvoiceId);
+      const subtotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
 
-      const paperWidth = receiptSettings?.pageSize === "MM58" ? "58mm" : "80mm";
-      doc.open();
-      doc.write(`
-        <html><head><title>Guest Bill</title>
-        <style>@page{margin:0}body{width:${paperWidth};font-family:monospace;padding:10px;font-size:12px}</style>
-        </head><body>
-        <div style="text-align:center;border-bottom:1px dashed #999;padding-bottom:8px;margin-bottom:8px">
-          <h2 style="margin:0;font-size:14px">${shopName || "Restaurant"}</h2>
-          <p style="margin:4px 0;font-size:10px">GUEST BILL (UNPAID)</p>
-          <p style="margin:0;font-size:10px">${selectedTable?.name || posMode.toUpperCase()} · ${new Date().toLocaleString()}</p>
-        </div>
-        <table style="width:100%;border-collapse:collapse">
-        ${cart.map(it => `<tr><td style="padding:3px 0">${it.quantity}x ${it.name}</td><td style="text-align:right">Rs ${(it.price * it.quantity).toLocaleString()}</td></tr>`).join("")}
-        </table>
-        <div style="border-top:1px dashed #999;margin-top:8px;padding-top:8px;font-weight:bold;display:flex;justify-content:space-between">
-          <span>NET PAYABLE</span><span>Rs ${netTotal.toLocaleString()}</span>
-        </div>
-        <p style="text-align:center;font-size:9px;margin-top:12px">** NOT A TAX INVOICE — PAY AT COUNTER **</p>
-        <script>window.onload=function(){window.focus();window.print()}</script>
-        </body></html>
-      `);
-      doc.close();
-      toast.success(language === "en" ? "Guest bill printed — mark paid in Order History." : "بل پرنٹ — Order History سے ادائیگی کریں۔");
+      printRestaurantGuestBill(
+        {
+          invoiceId: activeInvoiceId,
+          orderNumber: orderNumber,
+          tableName:
+            selectedTable?.name ||
+            (posMode === "dining" ? "Dine-In" : posMode === "delivery" ? "Delivery" : "Takeaway"),
+          serviceType: posMode,
+          ...posGuestDetails(),
+          items,
+          subtotal,
+          discount: effectiveDiscount,
+          taxRate: taxRate,
+          taxAmount: taxAmount,
+          netTotal,
+          settings: receiptSettings,
+          shopDetails: companyRowToShopDetails(companyDetails, shopName),
+          companyRow: companyDetails,
+        },
+        {
+          onError: (msg) =>
+            toast.error(
+              language === "en"
+                ? msg
+                : `${msg} - Windows میں تھرمل پرنٹر ڈیفالٹ بنائیں`
+            ),
+        }
+      );
+
+      toast.success(
+        language === "en"
+          ? "Guest bill sent to printer - settle payment when ready."
+          : "بل پرنٹ - ادائیگی کے لیے Settle کریں۔"
+      );
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -1118,7 +1279,7 @@ export default function RestaurantPOSPage() {
       settings: receiptSettings,
       title: `Guest Receipt #${lastInvoice.invoice?.id?.slice(0, 8).toUpperCase() || "Receipt"}`,
       onSuccess: () => toast.success("Printing guest receipt..."),
-      onError: (err) => toast.error("Printing failed: " + (err?.message || "Check printer"))
+      onError: (err) => toast.error("Printing failed: " + ((err as any)?.message || "Check printer"))
     });
   };
 
@@ -1128,6 +1289,7 @@ export default function RestaurantPOSPage() {
 
   const filteredProducts = products.filter(p => {
     if (p.is_ingredient) return false;
+    if (p.show_in_restaurant_pos === false) return false;
     if (p.category_id && rawCatIds.includes(p.category_id)) return false;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategoryId === "all" || p.category_id === selectedCategoryId;
@@ -1153,8 +1315,8 @@ export default function RestaurantPOSPage() {
     if (!activeInvoiceId) {
       toast.error(
         language === "en"
-          ? "Send KOT to kitchen first — payment comes after the guest bill is printed."
-          : "پہلے KOT بھیجیں — ادائیگی بل پرنٹ کے بعد۔"
+          ? "Send KOT to kitchen first - payment comes after the guest bill is printed."
+          : "پہلے KOT بھیجیں - ادائیگی بل پرنٹ کے بعد۔"
       );
       return;
     }
@@ -1169,7 +1331,7 @@ export default function RestaurantPOSPage() {
       toast.error(
         language === "en"
           ? "This order has no kitchen ticket yet. Send KOT before taking payment."
-          : "کچن ٹکٹ نہیں — پہلے KOT بھیجیں۔"
+          : "کچن ٹکٹ نہیں - پہلے KOT بھیجیں۔"
       );
       return;
     }
@@ -1177,12 +1339,54 @@ export default function RestaurantPOSPage() {
     if (!canSettleOrder(currentOrderStatus)) {
       toast.error(
         language === "en"
-          ? "Flow: Send KOT → kitchen → Print Bill → then Settle & Pay (stock updates on payment)."
+          ? "Flow: Send KOT → kitchen Start/Ready → Settle when ready (stock deducted when KOT is sent)."
           : "ترتیب: KOT → کچن → بل پرنٹ → پھر ادائیگی۔"
       );
       return;
     }
 
+    if (posMode === "delivery" && !selectedRiderId) {
+      toast.error(
+        language === "en"
+          ? "Assign a rider before taking payment on a delivery order."
+          : "ڈیلیوری ادائیگی سے پہلے رائیڈر منتخب کریں۔"
+      );
+      setShowCustomerDetails(true);
+      return;
+    }
+
+    const receiptLines = await resolveActiveBillLines(activeInvoiceId);
+    if (!receiptLines.length) {
+      toast.error(language === "en" ? "No items on this bill." : "بل میں آئٹمز نہیں۔");
+      return;
+    }
+
+    const localCart = cart.length > 0 ? cart : dbItems;
+    let invoiceItemsForSettle: SettleOrderData["invoice_items"];
+    if (localCart.length > 0) {
+      invoiceItemsForSettle = localCart.map((c) => ({
+        product_id: c.productId,
+        quantity: c.quantity,
+        unit_price: c.price,
+        menu_size_id: c.menuSizeId || null,
+        menu_size_name: c.sizeLabel || null,
+        packing_name: c.sizeLabel || null,
+      }));
+    } else {
+      const { data: invItems } = await supabase
+        .from("invoice_items")
+        .select("product_id, quantity, unit_price, packing_name, menu_size_id")
+        .eq("invoice_id", activeInvoiceId);
+      invoiceItemsForSettle = (invItems || []).map((i: any) => ({
+        product_id: i.product_id,
+        quantity: Number(i.quantity),
+        unit_price: Number(i.unit_price),
+        menu_size_id: i.menu_size_id,
+        packing_name: i.packing_name,
+      }));
+    }
+
+    const guest = posGuestDetails();
     setSettleOrderData({
       id: activeInvoiceId,
       order_number: orderNumber || null,
@@ -1198,17 +1402,17 @@ export default function RestaurantPOSPage() {
       waiter_id: selectedWaiterId || null,
       rider_id: selectedRiderId || null,
       service_type: posMode,
-      invoice_items: cart.map((c) => ({
-        product_id: c.productId,
-        quantity: c.quantity,
-        unit_price: c.price,
-      })),
-      line_items: cart.map((c) => ({
-        name: c.name,
-        quantity: c.quantity,
-        unit_price: c.price,
-      })),
-      customer_name: customerName || null,
+      invoice_items: invoiceItemsForSettle,
+      line_items: receiptLines,
+      customer_name: guest.customerName,
+      customer_phone: guest.customerPhone,
+      customer_address: guest.customerAddress,
+      waiterName: guest.waiterName,
+      riderName: guest.riderName,
+      riderPhone: guest.riderPhone,
+      special_instructions: guest.specialInstructions,
+      delivery_fee: guest.deliveryFee,
+      additional_charges: guest.additionalCharges,
     });
     setIsSettleModalOpen(true);
   };
@@ -1324,9 +1528,9 @@ export default function RestaurantPOSPage() {
           ) : (
             <div className="flex items-center gap-2">
               <div className="h-6 w-6 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-extrabold text-[10px]">HX</span>
+                <div className="text-white font-extrabold text-[10px]">HX</div>
               </div>
-              <span className="font-extrabold text-xs tracking-tight text-white/90">Restaurant POS Desk</span>
+              <div className="font-extrabold text-xs tracking-tight text-white/90">Restaurant POS Desk</div>
             </div>
           )}
         </div>
@@ -1334,9 +1538,9 @@ export default function RestaurantPOSPage() {
         {/* Right side toolbar */}
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {orderNumber && (
-            <span className="text-[10px] font-mono font-bold bg-zinc-800 px-2 py-0.5 rounded text-amber-400">
+            <div className="text-[10px] font-mono font-bold bg-zinc-800 px-2 py-0.5 rounded text-amber-400">
               #{orderNumber}
-            </span>
+            </div>
           )}
           <Link href="/dashboard/restaurant/orders">
             <Button variant="ghost" className="text-zinc-300 hover:text-white text-[11px] h-7 px-2 font-bold hover:bg-zinc-900">
@@ -1363,6 +1567,11 @@ export default function RestaurantPOSPage() {
               <Receipt size={12} className="mr-1" /> Bills
             </Button>
           </Link>
+          <Link href="/dashboard/settings">
+            <Button variant="ghost" className="text-zinc-300 hover:text-white text-[11px] h-7 px-2 font-bold hover:bg-zinc-900">
+              <Printer size={12} className="mr-1" /> Receipt
+            </Button>
+          </Link>
           <Link href="/dashboard/restaurant/deals">
             <Button variant="ghost" className="text-zinc-300 hover:text-white text-[11px] h-7 px-2 font-bold hover:bg-zinc-900">
               <Tag size={12} className="mr-1" /> Deals
@@ -1371,9 +1580,9 @@ export default function RestaurantPOSPage() {
           <button onClick={() => setWaiterDialogOpen(true)} className="relative text-zinc-300 hover:text-white text-[11px] h-7 px-2 font-bold hover:bg-zinc-900 rounded-lg flex items-center cursor-pointer">
             <Bell size={12} className="mr-1" /> Calls
             {waiterBadgeCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+              <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
                 {waiterBadgeCount}
-              </span>
+              </div>
             )}
           </button>
           <Link href="/dashboard">
@@ -1410,6 +1619,7 @@ export default function RestaurantPOSPage() {
                 onClick={() => {
                   setPosMode("dining");
                   setTakeawayInvoiceId(null);
+                  setSelectedRiderId("");
                 }}
                 className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   posMode === "dining"
@@ -1423,6 +1633,8 @@ export default function RestaurantPOSPage() {
                 onClick={() => {
                   setPosMode("takeaway");
                   setSelectedTable(null);
+                  setSelectedRiderId("");
+                  setSelectedWaiterId("");
                 }}
                 className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   posMode === "takeaway"
@@ -1436,6 +1648,8 @@ export default function RestaurantPOSPage() {
                 onClick={() => {
                   setPosMode("delivery");
                   setSelectedTable(null);
+                  setSelectedWaiterId("");
+                  setShowCustomerDetails(true);
                 }}
                 className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   posMode === "delivery"
@@ -1461,11 +1675,11 @@ export default function RestaurantPOSPage() {
                   <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                     <div className="flex items-center gap-2">
                       <Coffee size={14} className="text-blue-600" />
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                      <div className="text-xs font-bold text-slate-800 uppercase tracking-wide">
                         {selectedTable ? `Selected: ${selectedTable.name}` : "Seating Tables"}
-                      </span>
+                      </div>
                       {selectedTable && (
-                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                        <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
                           selectedTable.status === "available"
                             ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                             : selectedTable.status === "occupied"
@@ -1473,7 +1687,7 @@ export default function RestaurantPOSPage() {
                               : "bg-amber-50 text-amber-800 border border-amber-200"
                         }`}>
                           {selectedTable.status}
-                        </span>
+                        </div>
                       )}
                     </div>
 
@@ -1550,13 +1764,13 @@ export default function RestaurantPOSPage() {
                                     : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
                             }`}
                           >
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${
+                            <div className={`w-2 h-2 rounded-full shrink-0 ${
                               isSelected ? "bg-white" : isOccupied ? "bg-rose-500" : isAvailable ? "bg-emerald-500" : "bg-amber-500"
                             }`} />
-                            <span>{table.name}</span>
-                            <span className={`text-[9px] font-normal ${isSelected ? "text-blue-100" : "text-slate-400"}`}>
+                            <div>{table.name}</div>
+                            <div className={`text-[9px] font-normal ${isSelected ? "text-blue-100" : "text-slate-400"}`}>
                               ({table.capacity}p)
-                            </span>
+                            </div>
                           </button>
                         );
                       })}
@@ -1661,32 +1875,32 @@ export default function RestaurantPOSPage() {
                           >
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-mono font-bold text-xs text-slate-900 bg-white border border-slate-200 px-1.5 py-0.5 rounded">
+                                <div className="font-mono font-bold text-xs text-slate-900 bg-white border border-slate-200 px-1.5 py-0.5 rounded">
                                   #{ord.order_number || ord.id.slice(0, 8).toUpperCase()}
-                                </span>
-                                <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                                </div>
+                                <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
                                   isPaid
                                     ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                                     : "bg-amber-50 text-amber-800 border border-amber-200"
                                 }`}>
                                   {ord.restaurant_order_status || ord.status}
-                                </span>
-                                <span className="text-[10px] font-medium text-slate-500">
+                                </div>
+                                <div className="text-[10px] font-medium text-slate-500">
                                   {ord.service_type === "dining" ? `🍽️ Table: ${ord.restaurant_tables?.name || ord.table_id || "Dine-In"}` : ord.service_type === "delivery" ? "🛵 Delivery" : "🥡 Takeaway"}
-                                </span>
+                                </div>
                               </div>
                               <p className="text-[11px] text-slate-600 truncate max-w-md mt-1">
                                 {itemsSummary || "No items"}
                               </p>
-                              <span className="text-[9px] text-slate-400">
+                              <div className="text-[9px] text-slate-400">
                                 {new Date(ord.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {ord.parties?.name || ord.customer_name || "Walk-in"}
-                              </span>
+                              </div>
                             </div>
 
                             <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-200">
-                              <span className="font-black text-slate-900 text-xs font-mono">
+                              <div className="font-black text-slate-900 text-xs font-mono">
                                 Rs {Number(ord.total_amount || 0).toLocaleString()}
-                              </span>
+                              </div>
                             </div>
                           </div>
                         );
@@ -1752,12 +1966,12 @@ export default function RestaurantPOSPage() {
                             >
                               <div>
                                 <div className="flex items-center justify-between gap-1 mb-1">
-                                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md truncate max-w-[100px]">
+                                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md truncate max-w-[100px]">
                                     {catName}
-                                  </span>
-                                  <span className="text-[9px] font-medium text-slate-400 font-mono">
+                                  </div>
+                                  <div className="text-[9px] font-medium text-slate-400 font-mono">
                                     Stock: {p.current_stock}
-                                  </span>
+                                  </div>
                                 </div>
                                 <h4 className="font-bold text-slate-900 text-xs line-clamp-2 leading-snug group-hover:text-blue-600 transition-colors">
                                   {p.name}
@@ -1765,12 +1979,12 @@ export default function RestaurantPOSPage() {
                               </div>
 
                               <div className="flex justify-between items-center w-full pt-1 border-t border-slate-100">
-                                <span className="text-xs font-black text-blue-700 font-mono">
+                                <div className="text-xs font-black text-blue-700 font-mono">
                                   Rs {Number(p.sale_price_single).toLocaleString()}
-                                </span>
-                                <span className="bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white p-1 rounded-lg transition-colors flex items-center justify-center">
+                                </div>
+                                <div className="bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white p-1 rounded-lg transition-colors flex items-center justify-center">
                                   <Plus size={13} />
-                                </span>
+                                </div>
                               </div>
                             </motion.div>
                           );
@@ -1791,14 +2005,14 @@ export default function RestaurantPOSPage() {
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full shadow-lg flex items-center gap-2 px-5 py-3 h-12 border border-blue-500/20"
               >
                 <ShoppingCart size={18} />
-                <span>View Cart ({totalCartItemCount})</span>
-                <span className="font-mono bg-blue-700 px-2 py-0.5 rounded-full text-[10px]">Rs {cartSubtotal}</span>
+                <div>View Cart ({totalCartItemCount})</div>
+                <div className="font-mono bg-blue-700 px-2 py-0.5 rounded-full text-[10px]">Rs {cartSubtotal}</div>
               </Button>
             </div>
           )}
         </div>
 
-        {/* Right Sidebar Cart Panel — Fixed Height & Dedicated Scroll */}
+        {/* Right Sidebar Cart Panel - Fixed Height & Dedicated Scroll */}
         <div className={`w-full md:w-[410px] h-full flex flex-col bg-white border-l border-slate-200 shadow-xl overflow-hidden shrink-0 ${showMobileCart ? "flex" : "hidden md:flex"}`}>
           {/* Cart Header */}
           <div className="p-3 border-b border-slate-200 shrink-0 bg-slate-900 text-white flex justify-between items-center">
@@ -1818,9 +2032,9 @@ export default function RestaurantPOSPage() {
                 <h3 className="font-black text-white text-xs tracking-wide">
                   {posMode === "dining" ? (selectedTable ? `Table: ${selectedTable.name}` : "Dine-In Cart") : posMode === "delivery" ? "Delivery Cart" : "Takeaway Cart"}
                 </h3>
-                <span className="text-[10px] text-slate-300 font-semibold">
+                <div className="text-[10px] text-slate-300 font-semibold">
                   {totalCartItemCount} {totalCartItemCount === 1 ? "dish" : "dishes"} selected
-                </span>
+                </div>
               </div>
             </div>
 
@@ -1851,13 +2065,20 @@ export default function RestaurantPOSPage() {
           <div className="p-2 border-b border-slate-200 shrink-0 bg-slate-50/80">
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5 truncate max-w-[240px]">
-                <span className="font-bold text-slate-800 truncate">
+                <div className="font-bold text-slate-800 truncate">
                   👤 {customerName || (selectedCustomerId === "walkin" ? "Walk-in Guest" : customers.find(c => c.id === selectedCustomerId)?.name || "Guest")}
-                </span>
+                </div>
                 {posMode === "dining" && selectedWaiterId && (
-                  <span className="text-[10px] text-slate-500 truncate">
+                  <div className="text-[10px] text-slate-500 truncate">
                     · 👨‍🍳 {staff.find(s => s.id === selectedWaiterId)?.name || "Waiter"}
-                  </span>
+                  </div>
+                )}
+                {posMode === "delivery" && (
+                  <div className={`text-[10px] truncate ${selectedRiderId ? "text-emerald-700" : "text-amber-700 font-bold"}`}>
+                    · 🛵 {selectedRiderId
+                      ? riderLabel(staff.find((s) => s.id === selectedRiderId))
+                      : "No rider"}
+                  </div>
                 )}
               </div>
               <button
@@ -1873,10 +2094,17 @@ export default function RestaurantPOSPage() {
               <div className="mt-2 pt-2 border-t border-slate-200 space-y-1.5 animate-in fade-in duration-200">
                 <div className="grid grid-cols-2 gap-1.5">
                   <div>
-                    <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Guest / Khata</span>
+                    <div className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Guest / Khata</div>
                     <select
                       value={selectedCustomerId}
-                      onChange={(e) => setSelectedCustomerId(e.target.value)}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setSelectedCustomerId(id);
+                        if (id === "walkin") return;
+                        const party = customers.find((c) => c.id === id);
+                        if (party?.name && !customerName.trim()) setCustomerName(party.name);
+                        if (party?.phone && !customerPhone.trim()) setCustomerPhone(party.phone);
+                      }}
                       className="w-full bg-white border border-slate-200 h-7 rounded-lg px-1.5 text-[11px] focus:outline-none cursor-pointer"
                     >
                       <option value="walkin">Walk-in Guest</option>
@@ -1888,7 +2116,7 @@ export default function RestaurantPOSPage() {
 
                   {posMode === "dining" && (
                     <div>
-                      <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Waiter</span>
+                      <div className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Waiter</div>
                       <select
                         value={selectedWaiterId}
                         onChange={(e) => setSelectedWaiterId(e.target.value)}
@@ -1904,15 +2132,19 @@ export default function RestaurantPOSPage() {
 
                   {posMode === "delivery" && (
                     <div>
-                      <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Rider</span>
+                      <div className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">
+                        Rider (required before pay)
+                      </div>
                       <select
                         value={selectedRiderId}
                         onChange={(e) => setSelectedRiderId(e.target.value)}
                         className="w-full bg-white border border-slate-200 h-7 rounded-lg px-1.5 text-[11px] focus:outline-none cursor-pointer"
                       >
-                        <option value="">No Rider Assigned</option>
-                        {staff.map(s => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
+                        <option value="">Select delivery rider…</option>
+                        {filterRiderStaff(staff).map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {riderLabel(s) || s.name}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -1936,7 +2168,7 @@ export default function RestaurantPOSPage() {
             )}
           </div>
 
-          {/* Cart Item Rows — Primary Scrollable Area */}
+          {/* Cart Item Rows - Primary Scrollable Area */}
           <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5 bg-slate-50/40">
             {cart.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
@@ -1960,15 +2192,15 @@ export default function RestaurantPOSPage() {
                     className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm relative"
                   >
                     {isNew && (
-                      <span className="absolute top-2 right-2 text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded">
+                      <div className="absolute top-2 right-2 text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded">
                         NEW
-                      </span>
+                      </div>
                     )}
 
                     <div className="flex justify-between items-start gap-1 pr-7">
                       <div className="min-w-0">
-                        <span className="text-[10px] font-bold text-slate-400 font-mono mr-1">#{idx + 1}</span>
-                        <span className="font-bold text-slate-900 text-xs">{item.name}</span>
+                        <div className="text-[10px] font-bold text-slate-400 font-mono mr-1">#{idx + 1}</div>
+                        <div className="font-bold text-slate-900 text-xs">{item.name}</div>
                         {item.addOns && item.addOns.length > 0 && (
                           <ul className="mt-1 space-y-0.5 pl-1">
                             {item.addOns.map((a) => (
@@ -1976,25 +2208,25 @@ export default function RestaurantPOSPage() {
                                 key={`${item.cartItemId}-${a.name}`}
                                 className="flex justify-between gap-2 text-[10px] text-emerald-800 font-semibold"
                               >
-                                <span className="truncate">+ {a.name}</span>
-                                <span className="shrink-0 font-mono">
+                                <div className="truncate">+ {a.name}</div>
+                                <div className="shrink-0 font-mono">
                                   {a.priceAdd > 0 ? `Rs ${a.priceAdd}` : "Free"}
-                                </span>
+                                </div>
                               </li>
                             ))}
                           </ul>
                         )}
                       </div>
-                      <span className="font-black text-slate-900 text-xs font-mono shrink-0">
+                      <div className="font-black text-slate-900 text-xs font-mono shrink-0">
                         Rs {(item.price * item.quantity).toLocaleString()}
-                      </span>
+                      </div>
                     </div>
 
                     {/* Quantity controls & Unit Price */}
                     <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100">
-                      <span className="text-[10px] text-slate-500 font-mono font-medium">
+                      <div className="text-[10px] text-slate-500 font-mono font-medium">
                         Rs {item.price.toLocaleString()} each
-                      </span>
+                      </div>
                       
                       <div className="flex items-center gap-1.5">
                         <div className="flex items-center border border-slate-200 bg-slate-50 rounded-lg p-0.5 shadow-inner">
@@ -2004,7 +2236,7 @@ export default function RestaurantPOSPage() {
                           >
                             <Minus size={11} />
                           </button>
-                          <span className="w-7 text-center text-xs font-black font-mono text-slate-900">{item.quantity}</span>
+                          <div className="w-7 text-center text-xs font-black font-mono text-slate-900">{item.quantity}</div>
                           <button
                             onClick={() => updateCartQty(item.cartItemId, item.quantity + 1)}
                             className="p-1 hover:bg-white hover:shadow-sm rounded text-slate-700 cursor-pointer"
@@ -2042,12 +2274,24 @@ export default function RestaurantPOSPage() {
           {/* Pricing Summary & Checkout Action Buttons */}
           <div className="border-t border-slate-200 p-3 space-y-1.5 bg-white shrink-0 shadow-lg">
             <div className="flex justify-between text-xs font-bold text-slate-700">
-              <span>Subtotal:</span>
-              <span className="font-mono">Rs {cartSubtotal.toLocaleString()}</span>
+              <div>Subtotal:</div>
+              <div className="font-mono">Rs {cartSubtotal.toLocaleString()}</div>
             </div>
+            {cart.length > 0 && (
+              <>
+                <div className="flex justify-between text-[11px] text-slate-500">
+                  <div>Ingredient cost (est.):</div>
+                  <div className="font-mono">Rs {estimatedIngredientCost.toFixed(2)}</div>
+                </div>
+                <div className="flex justify-between text-[11px] font-semibold text-emerald-700">
+                  <div>Est. profit:</div>
+                  <div className="font-mono">Rs {estimatedProfit.toFixed(2)}</div>
+                </div>
+              </>
+            )}
 
             <div className="flex justify-between items-center text-xs text-slate-600">
-              <span className="font-medium">Discount (Rs):</span>
+              <div className="font-medium">Discount (Rs):</div>
               <input
                 type="number"
                 value={discount || ""}
@@ -2059,7 +2303,7 @@ export default function RestaurantPOSPage() {
 
             {posMode === "delivery" && (
               <div className="flex justify-between items-center text-xs text-slate-600">
-                <span className="font-medium">Delivery Fee:</span>
+                <div className="font-medium">Delivery Fee:</div>
                 <input
                   type="number"
                   value={deliveryFee || ""}
@@ -2071,7 +2315,7 @@ export default function RestaurantPOSPage() {
             )}
 
             <div className="flex justify-between items-center text-xs text-slate-600">
-              <span className="font-medium">Tax (%):</span>
+              <div className="font-medium">Tax (%):</div>
               <div className="flex items-center gap-1">
                 <input
                   type="number"
@@ -2080,13 +2324,13 @@ export default function RestaurantPOSPage() {
                   placeholder="0"
                   className="w-12 bg-slate-50 border border-slate-200 h-6 text-right rounded px-1 text-xs font-bold text-slate-800 font-mono focus:outline-none"
                 />
-                <span className="text-[10px] font-bold text-slate-500">%</span>
+                <div className="text-[10px] font-bold text-slate-500">%</div>
               </div>
             </div>
 
             <div className="flex justify-between text-sm font-black text-slate-900 border-t border-slate-200 pt-1.5">
-              <span>Net Payable:</span>
-              <span className="font-mono text-blue-700 text-base">Rs {netTotal.toLocaleString()}</span>
+              <div>Net Payable:</div>
+              <div className="font-mono text-blue-700 text-base">Rs {netTotal.toLocaleString()}</div>
             </div>
 
             {/* Action Buttons Grid */}
@@ -2095,13 +2339,44 @@ export default function RestaurantPOSPage() {
                 ? "KOT → kitchen → optional table slip → Pay = thermal payment receipt"
                 : "KOT → کچن → (اختیاری سلپ) → ادائیگی = تھرمل رسید"}
               {currentOrderStatus && (
-                <span className="ml-1 font-semibold text-slate-600">
+                <div className="ml-1 font-semibold text-slate-600">
                   ·{" "}
                   {RESTAURANT_ORDER_STATUS_LABELS[currentOrderStatus]?.en ||
                     currentOrderStatus}
-                </span>
+                </div>
               )}
             </p>
+            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5">
+              <label className="flex items-center gap-1.5 cursor-pointer font-semibold">
+                <input
+                  type="checkbox"
+                  checked={printKitchenReceipt}
+                  onChange={(e) => setPrintKitchenReceipt(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Print KOT slip
+              </label>
+              <div className="text-slate-400">|</div>
+              <div>
+                Kitchen:{" "}
+                <strong className="font-mono">
+                  {receiptSettings.kitchenPrinterName?.trim() || "Windows default"}
+                </strong>
+              </div>
+              <div className="text-slate-400">·</div>
+              <div>
+                Customer:{" "}
+                <strong className="font-mono">
+                  {receiptSettings.customerPrinterName?.trim() || "Windows default"}
+                </strong>
+              </div>
+              <Link
+                href="/dashboard/settings"
+                className="text-blue-600 hover:underline ml-auto"
+              >
+                Business Details
+              </Link>
+            </div>
             <div className="grid grid-cols-2 gap-1.5 pt-1">
               <Button
                 onClick={sendKOT}
@@ -2136,8 +2411,8 @@ export default function RestaurantPOSPage() {
               <DollarSign size={16} />
               {orderFlowSettleReady
                 ? language === "en"
-                  ? `Pay Rs ${netTotal.toLocaleString()} — thermal receipt`
-                  : `ادائیگی Rs ${netTotal.toLocaleString()} — تھرمل رسید`
+                  ? `Pay Rs ${netTotal.toLocaleString()} - thermal receipt`
+                  : `ادائیگی Rs ${netTotal.toLocaleString()} - تھرمل رسید`
                 : language === "en"
                   ? "Pay & thermal receipt (print table slip first)"
                   : "ادائیگی + تھرمل (پہلے ٹیبل سلپ)"}
@@ -2216,9 +2491,9 @@ export default function RestaurantPOSPage() {
                       }`}
                     >
                       {v.name}
-                      <span className="block text-[9px] font-mono opacity-80">
+                      <div className="block text-[9px] font-mono opacity-80">
                         Rs {(v.absolutePrice || customizingProduct.sale_price_single + v.priceAdd).toLocaleString()}
-                      </span>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -2296,10 +2571,10 @@ export default function RestaurantPOSPage() {
                             : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
                         }`}
                       >
-                        <span>{addOn.name}</span>
-                        <span className="text-[10px] text-blue-600">
+                        <div>{addOn.name}</div>
+                        <div className="text-[10px] text-blue-600">
                           {addOn.priceAdd > 0 ? `+Rs ${addOn.priceAdd}` : "Free"}
-                        </span>
+                        </div>
                       </button>
                     );
                   })}
@@ -2312,8 +2587,8 @@ export default function RestaurantPOSPage() {
                     <p className="text-[10px] font-bold text-blue-900 uppercase">Selected add-ons</p>
                     {selectedAddOns.map((a) => (
                       <div key={a.name} className="flex justify-between text-[11px] text-blue-800 font-semibold">
-                        <span>+ {a.name}</span>
-                        <span>{a.priceAdd > 0 ? `Rs ${a.priceAdd}` : "Free"}</span>
+                        <div>+ {a.name}</div>
+                        <div>{a.priceAdd > 0 ? `Rs ${a.priceAdd}` : "Free"}</div>
                       </div>
                     ))}
                   </div>
@@ -2387,8 +2662,13 @@ export default function RestaurantPOSPage() {
                       specialInstructions
                     );
 
+                    const matchedSize =
+                      productSizes.find((s) => s.size_name === selectedVariation.name) ||
+                      productSizes[0];
+
                     addCustomizedToCart(customizingProduct, fullName, finalPrice, remarksStr, {
                       sizeLabel: selectedVariation.name,
+                      menuSizeId: matchedSize?.id || null,
                       crust: selectedCrust,
                       addOns: [...selectedAddOns],
                     });
@@ -2508,7 +2788,7 @@ export default function RestaurantPOSPage() {
 
               <h3 className="font-black text-slate-800 text-sm mb-3">Restaurant Table Bill Splitting</h3>
               <p className="text-[10.5px] text-slate-450 font-semibold mb-4 leading-normal">
-                Split Rs {netTotal.toLocaleString()} — equal seats or by selected cart items.
+                Split Rs {netTotal.toLocaleString()} - equal seats or by selected cart items.
               </p>
 
               <div className="space-y-4 text-xs font-bold text-slate-655">
@@ -2563,7 +2843,7 @@ export default function RestaurantPOSPage() {
                           on ? "bg-violet-50 border-violet-300" : "bg-white"
                         }`}
                       >
-                        {c.name} ×{c.quantity} — Rs {(c.price * c.quantity).toLocaleString()}
+                        {c.name} ×{c.quantity} - Rs {(c.price * c.quantity).toLocaleString()}
                       </button>
                     );
                   })}
@@ -2572,10 +2852,10 @@ export default function RestaurantPOSPage() {
 
                 <div className="bg-slate-50 border border-slate-150 p-4 rounded-2xl">
                   <div className="flex justify-between items-center text-xs font-black">
-                    <span className="text-slate-500">
+                    <div className="text-slate-500">
                       {splitMode === "equal" ? "Per Share Payment:" : "Selected items:"}
-                    </span>
-                    <span className="text-blue-700 text-sm">
+                    </div>
+                    <div className="text-blue-700 text-sm">
                       Rs{" "}
                       {splitMode === "equal"
                         ? Math.round(netTotal / splitCount).toLocaleString()
@@ -2583,7 +2863,7 @@ export default function RestaurantPOSPage() {
                             .filter((c) => splitItemIds.includes(c.cartItemId))
                             .reduce((s, c) => s + c.price * c.quantity, 0)
                             .toLocaleString()}
-                    </span>
+                    </div>
                   </div>
                 </div>
 
@@ -2608,12 +2888,7 @@ export default function RestaurantPOSPage() {
         onClose={() => setIsSettleModalOpen(false)}
         onSettled={handleSettled}
         receiptSettings={receiptSettings}
-        shopDetails={{
-          name: companyDetails?.name || shopName || "Flame 9 Pizza House & Café",
-          phone: companyDetails?.phone,
-          address: companyDetails?.address,
-          email: companyDetails?.email,
-        }}
+        shopDetails={companyRowToShopDetails(companyDetails, shopName)}
       />
 
       <WaiterNotificationsDialog

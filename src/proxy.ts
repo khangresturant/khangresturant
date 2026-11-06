@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isSuperAdmin } from "@/lib/auth/roles";
+import { usesLocalDatabase } from "@/lib/config";
 
 /**
  * Next.js 16 Proxy (formerly middleware).
@@ -19,6 +20,10 @@ export async function proxy(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
+  if (usesLocalDatabase()) {
+    return response;
+  }
+
   if (!url || !anonKey) {
     return response;
   }
@@ -30,7 +35,12 @@ export async function proxy(request: NextRequest) {
   const isLoginPage = pathname === "/login";
   const isAuthPage = isLoginPage || isRegisterPage;
 
-  /** Flame 9 local SQLite + mock auth uses sessionStorage, not Supabase cookies. */
+  /** Local SQLite uses cookie/session auth, not Supabase JWT cookies. */
+  if (usesLocalDatabase() && (isDashboard || isAdmin || isAuthPage)) {
+    return response;
+  }
+
+  // Legacy mock-only flag (kept for compatibility)
   const isLocalFlame9Mode =
     process.env.NEXT_PUBLIC_USE_MOCK === "true" ||
     process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE === "true" ||

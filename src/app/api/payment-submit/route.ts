@@ -13,11 +13,12 @@ import {
 import { notifySubscriptionActivated } from "@/lib/subscription/notify-subscription-email";
 import { buildPlanPriceMap } from "@/lib/billing/plan-prices";
 import { mergeRemotePlansWithDefaults } from "@/lib/billing/plan-display";
+import { getPublicAppUrl } from "@/lib/app-url";
 import path from "path";
 import fs from "fs";
 
-const ADMIN_EMAIL = process.env.SMTP_USER || "contact@muhammadusman.me";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://theaccounts.cloud";
+const ADMIN_EMAIL = process.env.SMTP_USER || "admin@local.cafe";
+const APP_URL = getPublicAppUrl();
 const SCREENSHOTS_DIR = path.join(process.cwd(), "public", "payment-screenshots");
 
 // Ensure screenshots directory exists
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
     const shopName = shopData?.name || shopId;
     const gatewayLabel = { jazzcash: "JazzCash", easypaisa: "EasyPaisa", bank: "Bank Transfer", safepay: "Safepay" }[gateway] || gateway;
 
-    // Email Admin — new payment notification (amount from submission = admin plan price at checkout)
+    // Email Admin - new payment notification (amount from submission = admin plan price at checkout)
     const totalCost = Number(amount) || 0;
     const currentCredits = Number(shopData?.referral_credits || 0);
     const creditsRemaining = Math.max(0, currentCredits - creditsApplied);
@@ -133,7 +134,7 @@ export async function POST(request: NextRequest) {
               </tr>
               <tr>
                 <td style="padding: 8px 0; color: #64748b; font-weight: 600; text-align: left;">Transaction Ref</td>
-                <td style="padding: 8px 0; text-align: right; font-family: monospace; color: #e2e8f0;">${transactionRef || "—"}</td>
+                <td style="padding: 8px 0; text-align: right; font-family: monospace; color: #e2e8f0;">${transactionRef || "-"}</td>
               </tr>
             </table>
 
@@ -188,7 +189,7 @@ export async function POST(request: NextRequest) {
 
     const adminEmails = [ADMIN_EMAIL, "usman.dev.core@gmail.com"];
     for (const email of adminEmails) {
-      await sendEmail(email, `💰 New Payment Submitted — ${shopName}`, adminHtml);
+      await sendEmail(email, `💰 New Payment Submitted - ${shopName}`, adminHtml);
     }
 
     // Get owner email for user confirmation
@@ -493,8 +494,8 @@ export async function PATCH(request: NextRequest) {
         if (isApproved && adminNotifyEmail !== userEmail) {
           await sendEmail(
             adminNotifyEmail,
-            `🎉 Payment Approved — ${shopName}`,
-            `<p style="font-family:sans-serif;">Payment approved for <strong>${shopName}</strong> — ${submission.plan_id} plan activated.</p>`
+            `🎉 Payment Approved - ${shopName}`,
+            `<p style="font-family:sans-serif;">Payment approved for <strong>${shopName}</strong> - ${submission.plan_id} plan activated.</p>`
           );
         }
       }

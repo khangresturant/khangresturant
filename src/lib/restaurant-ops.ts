@@ -137,12 +137,68 @@ DROP POLICY IF EXISTS "restaurant_reservations_all" ON restaurant_reservations;
 CREATE POLICY "restaurant_reservations_all" ON restaurant_reservations FOR ALL TO authenticated USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "restaurant_qr_orders_all" ON restaurant_qr_orders;
 CREATE POLICY "restaurant_qr_orders_all" ON restaurant_qr_orders FOR ALL TO authenticated USING (true) WITH CHECK (true);
--- Public insert for QR (anon) — enable if using anon key on public page
+-- Public insert for QR (anon) - enable if using anon key on public page
 DROP POLICY IF EXISTS "restaurant_qr_orders_insert_anon" ON restaurant_qr_orders;
 CREATE POLICY "restaurant_qr_orders_insert_anon" ON restaurant_qr_orders FOR INSERT TO anon WITH CHECK (true);
 DROP POLICY IF EXISTS "restaurant_qr_orders_select_anon" ON restaurant_qr_orders;
 CREATE POLICY "restaurant_qr_orders_select_anon" ON restaurant_qr_orders FOR SELECT TO anon USING (true);
 `;
+
+/** POSRESTURANT-style per-size recipes + order COGS (run after extended restaurant schema). */
+export const RESTAURANT_RECIPE_COST_SQL = `
+ALTER TABLE product_recipes ADD COLUMN IF NOT EXISTS menu_size_id UUID REFERENCES restaurant_menu_sizes(id) ON DELETE SET NULL;
+ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS menu_size_id UUID REFERENCES restaurant_menu_sizes(id) ON DELETE SET NULL;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cost_amount NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS profit_amount NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stock_deducted BOOLEAN DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_product_recipes_menu_size ON product_recipes(menu_size_id);
+CREATE INDEX IF NOT EXISTS idx_product_recipes_parent_size ON product_recipes(parent_product_id, menu_size_id);
+
+-- One BOM line per dish + ingredient + size (Standard/base uses NULL menu_size_id)
+ALTER TABLE product_recipes DROP CONSTRAINT IF EXISTS product_recipes_parent_product_id_ingredient_product_id_key;
+DROP INDEX IF EXISTS product_recipes_parent_ingredient_size_uniq;
+CREATE UNIQUE INDEX product_recipes_parent_ingredient_size_uniq ON product_recipes (
+  parent_product_id,
+  ingredient_product_id,
+  COALESCE(menu_size_id, '00000000-0000-0000-0000-000000000000'::uuid)
+);
+
+ALTER TABLE products ADD COLUMN IF NOT EXISTS not_discounted BOOLEAN DEFAULT false;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS show_in_restaurant_pos BOOLEAN DEFAULT true;
+`;
+
+/** PostgREST / Postgres when a column is missing or not yet in the schema cache. */
+export function isSupabaseMissingColumnError(message: string, column: string): boolean {
+  const m = (message || "").toLowerCase();
+  const col = column.toLowerCase();
+  if (!m.includes(col)) return false;
+  return (
+    m.includes("does not exist") ||
+    m.includes("schema cache") ||
+    m.includes("could not find")
+  );
+}
+
+/** True when saved rows need product_recipes.menu_size_id (per-size BOM). */
+export function recipeRowsRequireMenuSizeColumn(
+  rows: { ingredient_product_id: string; menu_size_id?: string | null }[]
+): boolean {
+  if (rows.some((r) => r.menu_size_id)) return true;
+  const sizesByIngredient = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const sizeKey = r.menu_size_id ?? "__base__";
+    let set = sizesByIngredient.get(r.ingredient_product_id);
+    if (!set) {
+      set = new Set();
+      sizesByIngredient.set(r.ingredient_product_id, set);
+    }
+    set.add(sizeKey);
+  }
+  for (const set of sizesByIngredient.values()) {
+    if (set.size > 1) return true;
+  }
+  return false;
+}
 
 const OFFLINE_TAKEAWAY_KEY = "restaurant_offline_takeaway_queue";
 

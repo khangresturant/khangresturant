@@ -2,6 +2,10 @@
 
 import { isLocalSqliteEnabled } from "./config";
 import {
+  persistLocalAuthCookie,
+  clearLocalAuthCookie,
+} from "./local-sqlite/local-auth";
+import {
   FLAME9_LOCAL_LOGINS,
   FLAME9_LOCAL_SHOP_ID,
   FLAME9_LOCAL_USER_ID,
@@ -10,20 +14,43 @@ import {
 } from "./local-sqlite/seed-data";
 
 const useFlame9 = process.env.NEXT_PUBLIC_BRAND === "flame9";
-const shopId = useFlame9 ? FLAME9_LOCAL_SHOP_ID : "mock-shop-id";
-const defaultUserId = useFlame9 ? FLAME9_LOCAL_USER_ID : "mock-user-id";
+const shopId =
+  useFlame9 || isLocalSqliteEnabled() ? FLAME9_LOCAL_SHOP_ID : "mock-shop-id";
+const defaultUserId =
+  useFlame9 || isLocalSqliteEnabled() ? FLAME9_LOCAL_USER_ID : "mock-user-id";
 const MOCK_SESSION_KEY = "mock_auth_session";
 
+/** Browser uses relative URL; server API routes hit the local Next app. */
+function localSqliteFetchPrefix(): string {
+  if (typeof window !== "undefined") return "";
+  return (process.env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
+}
+
+async function fetchLocalSqliteTable(tableName: string): Promise<any[] | null> {
+  const prefix = localSqliteFetchPrefix();
+  const res = await fetch(
+    `${prefix}/api/local-sqlite?table=${encodeURIComponent(tableName)}`,
+    { cache: "no-store" }
+  );
+  if (!res.ok) return null;
+  const json = await res.json();
+  return Array.isArray(json.rows) ? json.rows : null;
+}
+
+async function postLocalSqliteTable(tableName: string, rows: any[]): Promise<void> {
+  const prefix = localSqliteFetchPrefix();
+  await fetch(`${prefix}/api/local-sqlite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ table: tableName, rows }),
+  });
+}
+
 async function loadTable(tableName: string): Promise<any[]> {
-  if (typeof window === "undefined") return getSeedData(tableName);
   if (isLocalSqliteEnabled()) {
     try {
-      const res = await fetch(`/api/local-sqlite?table=${encodeURIComponent(tableName)}`, {
-        cache: "no-store",
-      });
-      const json = await res.json();
-      if (Array.isArray(json.rows)) return json.rows;
-      console.warn("[mock] SQLite API returned no rows for", tableName, json);
+      const rows = await fetchLocalSqliteTable(tableName);
+      if (rows) return rows;
     } catch (e) {
       console.warn("[mock] SQLite API fetch failed for", tableName, e);
     }
@@ -34,6 +61,9 @@ async function loadTable(tableName: string): Promise<any[]> {
     }
     return [];
   }
+  if (typeof window === "undefined") {
+    return getSeedData(tableName);
+  }
   const data = localStorage.getItem(`mock_db_${tableName}`);
   if (data) return JSON.parse(data);
   const seed = getSeedData(tableName);
@@ -42,15 +72,11 @@ async function loadTable(tableName: string): Promise<any[]> {
 }
 
 async function saveTable(tableName: string, rows: any[]) {
-  if (typeof window === "undefined") return;
   if (isLocalSqliteEnabled()) {
-    await fetch("/api/local-sqlite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ table: tableName, rows }),
-    });
+    await postLocalSqliteTable(tableName, rows);
     return;
   }
+  if (typeof window === "undefined") return;
   localStorage.setItem(`mock_db_${tableName}`, JSON.stringify(rows));
 }
 
@@ -67,12 +93,12 @@ function getSessionUser(): { id: string; email: string } | null {
   }
   return {
     id: defaultUserId,
-    email: "superadmin@theaccounts.cloud",
+    email: "admin@local.cafe",
   };
 }
 
 function getSeedData(tableName: string) {
-  if (useFlame9) {
+  if (useFlame9 || isLocalSqliteEnabled()) {
     return getFlame9SeedData(tableName) as any[];
   }
   if (typeof window === "undefined") return [];
@@ -247,13 +273,23 @@ class MockQueryBuilder {
     return this;
   }
 
-  gte(column: string, value: any) {
-    this.filters.push((row) => row[column] >= value);
+  lt(column: string, value: any) {
+    this.filters.push((row) => row[column] < value);
     return this;
   }
 
-  lt(column: string, value: any) {
-    this.filters.push((row) => row[column] < value);
+  neq(column: string, value: any) {
+    this.filters.push((row) => row[column] !== value);
+    return this;
+  }
+
+  gt(column: string, value: any) {
+    this.filters.push((row) => row[column] > value);
+    return this;
+  }
+
+  gte(column: string, value: any) {
+    this.filters.push((row) => row[column] >= value);
     return this;
   }
 
@@ -340,9 +376,18 @@ class MockQueryBuilder {
         resultData = resultData.map((row: any) => ({ ...row, ...this.payload }));
       } else if (this.isDelete) {
         const currentData = await loadTable(this.tableName);
-        const matchingIds = new Set(resultData.map((r: any) => r.id));
-        
-        this.rows = currentData.filter((row: any) => !matchingIds.has(row.id));
+        const matchingIds = new Set(resultData.map((r: any) => r.id).filter(Boolean));
+        if (matchingIds.size > 0) {
+          this.rows = currentData.filter((row: any) => !matchingIds.has(row.id));
+        } else {
+          const matchFiltered = (row: any) => {
+            for (const filter of this.filters) {
+              if (!filter(row)) return false;
+            }
+            return true;
+          };
+          this.rows = currentData.filter((row: any) => !matchFiltered(row));
+        }
         await saveTable(this.tableName, this.rows);
         resultData = [];
       } else {
@@ -442,6 +487,15 @@ class MockQueryBuilder {
           }));
         }
 
+        if (this.tableName === "restaurant_reservations") {
+          const tables = await loadTable("restaurant_tables");
+          resultData = resultData.map((r: any) => ({
+            ...r,
+            restaurant_tables:
+              tables.find((t: any) => t.id === r.table_id) || null,
+          }));
+        }
+
         if (this.tableName === "product_recipes") {
           const products = await loadTable("products");
           resultData = resultData.map((r: any) => {
@@ -510,6 +564,7 @@ export const mockSupabase = {
         const user = { id, email: match.email };
         if (typeof window !== "undefined") {
           sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(user));
+          persistLocalAuthCookie(user);
         }
         return { data: { user }, error: null };
       }
@@ -525,6 +580,7 @@ export const mockSupabase = {
     signOut: async () => {
       if (typeof window !== "undefined") {
         sessionStorage.removeItem(MOCK_SESSION_KEY);
+        clearLocalAuthCookie();
       }
       return { error: null };
     },

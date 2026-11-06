@@ -62,7 +62,7 @@ export function ensureFlame9KitchenBootstrap(): void {
   patchProductsFromSeed();
 }
 
-/** Ingredients, recipes, cash register — merged into existing DBs without wiping data. */
+/** Ingredients, recipes, cash register - merged into existing DBs without wiping data. */
 export function ensureFlame9InventoryBootstrap(): void {
   if (inventoryBootstrapDone) return;
   inventoryBootstrapDone = true;
@@ -75,6 +75,11 @@ export function ensureFlame9InventoryBootstrap(): void {
     "register_sessions",
     "restaurant_modifiers",
     "restaurant_menu_sizes",
+    "restaurant_reservations",
+    "restaurant_deals",
+    "restaurant_deal_items",
+    "restaurant_waiter_calls",
+    "payment_submissions",
   ]) {
     if (tableIsEmpty(t)) {
       const seed = getFlame9SeedData(t);
