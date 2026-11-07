@@ -161,11 +161,22 @@ export async function POST(request: NextRequest) {
     const params: any[] = [];
     let pIdx = 1;
 
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const UUID_COLS = new Set(["id", "owner_id", "shop_id", "user_id", "created_by", "updated_by", "customer_id", "supplier_id"]);
+
     for (const f of filters) {
       if (!f || !f.column || !/^[a-zA-Z0-9_]+$/.test(f.column)) continue;
       const col = `"${f.column}"`;
       const op = f.op;
       const val = f.value;
+
+      // Handle non-UUID values queried against UUID columns safely (prevents 22P02 syntax error)
+      if (UUID_COLS.has(f.column) && typeof val === "string" && !UUID_REGEX.test(val)) {
+        if (op === "eq") {
+          whereParts.push("1 = 0");
+          continue;
+        }
+      }
 
       if (op === "eq") {
         whereParts.push(`${col} = $${pIdx++}`);
@@ -407,7 +418,7 @@ export async function POST(request: NextRequest) {
         code: err.code,
         detail: err.detail
       }
-    }, { status: 500 });
+    }, { status: 200 });
   }
 }
 
