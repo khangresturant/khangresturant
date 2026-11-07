@@ -461,7 +461,8 @@ export default function LoginPage() {
               </div>
               */}
 
-              {/* Register link */}
+              {/* Register link - Commented out as requested */}
+              {/*
               <div className="mt-6 pt-4 border-t border-slate-100 text-center">
                 <p className="text-xs text-slate-500">
                   Don&apos;t have a business account?{" "}
@@ -470,6 +471,7 @@ export default function LoginPage() {
                   </Link>
                 </p>
               </div>
+              */}
 
               {/* Bottom Copyright */}
               <div className="mt-6 pt-3 text-center text-xs text-slate-400">
