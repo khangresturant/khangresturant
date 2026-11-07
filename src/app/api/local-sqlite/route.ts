@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSqlitePath, writeTableRows } from "@/lib/local-sqlite/database";
 import { ensureTableSeeded, resetFlame9Database } from "@/lib/local-sqlite/seed";
+import { neon } from "@neondatabase/serverless";
 
 export const runtime = "nodejs";
 
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
   const info = request.nextUrl.searchParams.get("info");
   if (info === "1") {
     return NextResponse.json({
-      engine: "sqlite",
+      engine: process.env.DATABASE_URL ? "neon-postgres" : "sqlite",
       path: getSqlitePath(),
       useLocal: process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE !== "false",
     });
@@ -18,6 +19,17 @@ export async function GET(request: NextRequest) {
   if (!table) {
     return NextResponse.json({ error: "table query param required" }, { status: 400 });
   }
+
+  if (process.env.DATABASE_URL && /^[a-zA-Z0-9_]+$/.test(table)) {
+    try {
+      const sql = neon(process.env.DATABASE_URL);
+      const rows = await sql.query(`SELECT * FROM public."${table}"`);
+      return NextResponse.json({ table, rows });
+    } catch {
+      // Fallback to local SQLite if Neon query fails
+    }
+  }
+
   try {
     const rows = ensureTableSeeded(table);
     return NextResponse.json({ table, rows });

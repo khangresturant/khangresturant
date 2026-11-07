@@ -222,6 +222,7 @@ class MockQueryBuilder {
   tableName: string;
   rows: any[] = [];
   filters: ((row: any) => boolean)[] = [];
+  rawFilters: { column: string; op: string; value: any }[] = [];
   isSingle = false;
   isMaybeSingle = false;
   isInsert = false;
@@ -250,26 +251,43 @@ class MockQueryBuilder {
   }
 
   eq(column: string, value: any) {
+    this.rawFilters.push({ column, op: "eq", value });
     this.filters.push(row => row[column] === value);
     return this;
   }
 
   neq(column: string, value: any) {
+    this.rawFilters.push({ column, op: "neq", value });
     this.filters.push(row => row[column] !== value);
     return this;
   }
 
   gt(column: string, value: any) {
+    this.rawFilters.push({ column, op: "gt", value });
     this.filters.push(row => row[column] > value);
     return this;
   }
 
+  gte(column: string, value: any) {
+    this.rawFilters.push({ column, op: "gte", value });
+    this.filters.push(row => row[column] >= value);
+    return this;
+  }
+
+  lt(column: string, value: any) {
+    this.rawFilters.push({ column, op: "lt", value });
+    this.filters.push(row => row[column] < value);
+    return this;
+  }
+
   lte(column: string, value: any) {
+    this.rawFilters.push({ column, op: "lte", value });
     this.filters.push(row => row[column] <= value);
     return this;
   }
 
   is(column: string, value: any) {
+    this.rawFilters.push({ column, op: "is", value });
     if (value === null) {
       this.filters.push(row => row[column] === null || row[column] === undefined);
     } else {
@@ -279,6 +297,7 @@ class MockQueryBuilder {
   }
 
   in(column: string, values: any[]) {
+    this.rawFilters.push({ column, op: "in", value: values });
     if (!values?.length) {
       this.filters.push(() => false);
     } else {
@@ -289,33 +308,17 @@ class MockQueryBuilder {
   }
 
   not(column: string, op: string, value: any) {
-    if (op === "is" && value === null) {
-      this.filters.push(
-        (row) => row[column] !== null && row[column] !== undefined
-      );
+    if (op === "is") {
+      this.rawFilters.push({ column, op: "not_is", value });
+      if (value === null) {
+        this.filters.push((row) => row[column] !== null && row[column] !== undefined);
+      } else {
+        this.filters.push((row) => row[column] !== value);
+      }
     } else if (op === "eq") {
+      this.rawFilters.push({ column, op: "neq", value });
       this.filters.push((row) => row[column] !== value);
     }
-    return this;
-  }
-
-  lt(column: string, value: any) {
-    this.filters.push((row) => row[column] < value);
-    return this;
-  }
-
-  neq(column: string, value: any) {
-    this.filters.push((row) => row[column] !== value);
-    return this;
-  }
-
-  gt(column: string, value: any) {
-    this.filters.push((row) => row[column] > value);
-    return this;
-  }
-
-  gte(column: string, value: any) {
-    this.filters.push((row) => row[column] >= value);
     return this;
   }
 
@@ -371,6 +374,48 @@ class MockQueryBuilder {
   }
 
   async then(resolve: any, reject: any) {
+    // 1. Try querying Neon Database directly via /api/neon-query
+    if (typeof window !== "undefined") {
+      try {
+        const operation = this.isInsert
+          ? "insert"
+          : this.isUpsert
+          ? "upsert"
+          : this.isUpdate
+          ? "update"
+          : this.isDelete
+          ? "delete"
+          : "select";
+
+        const res = await fetch("/api/neon-query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            table: this.tableName,
+            operation,
+            payload: this.payload,
+            onConflict: this.upsertConflict,
+            filters: this.rawFilters,
+            order: this.sortField ? { column: this.sortField, ascending: this.sortAscending } : null,
+            limit: this.limitCount,
+            single: this.isSingle,
+            maybeSingle: this.isMaybeSingle,
+            countOnly: this.headCount,
+          }),
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json && !json.error) {
+            resolve(json);
+            return;
+          }
+        }
+      } catch (neonErr) {
+        // Fallback to local memory/sqlite if network fails
+      }
+    }
+
     try {
       this.rows = await loadTable(this.tableName);
       let resultData: any = [...this.rows];
@@ -621,6 +666,24 @@ export const mockSupabase = {
     },
     signInWithPassword: async ({ email, password }: { email: string; password: string }) => {
       const normalized = email.trim().toLowerCase();
+      if (typeof window !== "undefined") {
+        try {
+          const res = await fetch("/api/neon-query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ operation: "auth_signin", email: normalized, password }),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.data?.user) {
+              sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(json.data.user));
+              persistLocalAuthCookie(json.data.user);
+              return json;
+            }
+            if (json.error) return json;
+          }
+        } catch (e) {}
+      }
       if (useFlame9 || isLocalSqliteEnabled()) {
         const accounts = [FLAME9_LOCAL_LOGINS.admin, FLAME9_LOCAL_LOGINS.staff];
         const match = accounts.find((a) => a.email === normalized && a.password === password);
@@ -641,8 +704,31 @@ export const mockSupabase = {
       }
       return { data: { user }, error: null };
     },
-    signUp: async ({ email }: { email: string }) => {
-      return { data: { user: { id: defaultUserId, email } }, error: null };
+    signUp: async ({ email, password }: { email: string; password?: string }) => {
+      const normalized = email.trim().toLowerCase();
+      if (typeof window !== "undefined") {
+        try {
+          const res = await fetch("/api/neon-query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              operation: "auth_signup",
+              email: normalized,
+              password: password || "Password123!",
+            }),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.data?.user) {
+              sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(json.data.user));
+              persistLocalAuthCookie(json.data.user);
+              return json;
+            }
+            if (json.error) return json;
+          }
+        } catch (e) {}
+      }
+      return { data: { user: { id: defaultUserId, email: normalized } }, error: null };
     },
     signOut: async () => {
       if (typeof window !== "undefined") {
@@ -656,6 +742,19 @@ export const mockSupabase = {
     return new MockQueryBuilder(tableName);
   },
   rpc: async (fn: string, args: Record<string, unknown> = {}) => {
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch("/api/neon-query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operation: "rpc", fn, args }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json && !json.error) return json;
+        }
+      } catch (e) {}
+    }
     try {
       if (fn === "decrement_product_stock") {
         const pId = String(args.p_id ?? "");
