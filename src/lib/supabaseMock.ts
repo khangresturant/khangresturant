@@ -406,10 +406,13 @@ class MockQueryBuilder {
 
         if (res.ok) {
           const json = await res.json();
-          if (json && !json.error) {
-            resolve(json);
+          if (json.error) {
+            console.error("[neon-query error]", json.error);
+            resolve({ data: null, error: json.error });
             return;
           }
+          resolve(json);
+          return;
         }
       } catch (neonErr) {
         // Fallback to local memory/sqlite if network fails
@@ -676,9 +679,10 @@ export const mockSupabase = {
           if (res.ok) {
             const json = await res.json();
             if (json.data?.user) {
+              const session = { user: json.data.user, access_token: "neon_token_" + json.data.user.id };
               sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(json.data.user));
               persistLocalAuthCookie(json.data.user);
-              return json;
+              return { data: { user: json.data.user, session }, error: null };
             }
             if (json.error) return json;
           }
@@ -692,17 +696,19 @@ export const mockSupabase = {
         }
         const id = match.role === "superadmin" ? FLAME9_LOCAL_USER_ID : FLAME9_STAFF_USER_ID;
         const user = { id, email: match.email };
+        const session = { user, access_token: "mock_token" };
         if (typeof window !== "undefined") {
           sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(user));
           persistLocalAuthCookie(user);
         }
-        return { data: { user }, error: null };
+        return { data: { user, session }, error: null };
       }
       const user = { id: defaultUserId, email: normalized };
+      const session = { user, access_token: "mock_token" };
       if (typeof window !== "undefined") {
         sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(user));
       }
-      return { data: { user }, error: null };
+      return { data: { user, session }, error: null };
     },
     signUp: async ({ email, password }: { email: string; password?: string }) => {
       const normalized = email.trim().toLowerCase();
@@ -720,15 +726,16 @@ export const mockSupabase = {
           if (res.ok) {
             const json = await res.json();
             if (json.data?.user) {
+              const session = { user: json.data.user, access_token: "neon_token_" + json.data.user.id };
               sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(json.data.user));
               persistLocalAuthCookie(json.data.user);
-              return json;
+              return { data: { user: json.data.user, session }, error: null };
             }
             if (json.error) return json;
           }
         } catch (e) {}
       }
-      return { data: { user: { id: defaultUserId, email: normalized } }, error: null };
+      return { data: { user: { id: defaultUserId, email: normalized }, session: { user: { id: defaultUserId, email: normalized }, access_token: "mock_token" } }, error: null };
     },
     signOut: async () => {
       if (typeof window !== "undefined") {
