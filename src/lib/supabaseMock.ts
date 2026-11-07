@@ -225,6 +225,8 @@ class MockQueryBuilder {
   isSingle = false;
   isMaybeSingle = false;
   isInsert = false;
+  isUpsert = false;
+  upsertConflict: string | null = null;
   isUpdate = false;
   isDelete = false;
   payload: any = null;
@@ -249,6 +251,30 @@ class MockQueryBuilder {
 
   eq(column: string, value: any) {
     this.filters.push(row => row[column] === value);
+    return this;
+  }
+
+  neq(column: string, value: any) {
+    this.filters.push(row => row[column] !== value);
+    return this;
+  }
+
+  gt(column: string, value: any) {
+    this.filters.push(row => row[column] > value);
+    return this;
+  }
+
+  lte(column: string, value: any) {
+    this.filters.push(row => row[column] <= value);
+    return this;
+  }
+
+  is(column: string, value: any) {
+    if (value === null) {
+      this.filters.push(row => row[column] === null || row[column] === undefined);
+    } else {
+      this.filters.push(row => row[column] === value);
+    }
     return this;
   }
 
@@ -316,6 +342,13 @@ class MockQueryBuilder {
     return this;
   }
 
+  upsert(payload: any, options?: { onConflict?: string }) {
+    this.isUpsert = true;
+    this.payload = payload;
+    this.upsertConflict = options?.onConflict || null;
+    return this;
+  }
+
   update(payload: any) {
     this.isUpdate = true;
     this.payload = payload;
@@ -362,6 +395,40 @@ class MockQueryBuilder {
         await saveTable(this.tableName, this.rows);
         
         resultData = newItems;
+      } else if (this.isUpsert) {
+        const itemsToUpsert = Array.isArray(this.payload) ? this.payload : [this.payload];
+        const currentData = await loadTable(this.tableName);
+        const conflictFields = (this.upsertConflict || "id").split(",").map((s: string) => s.trim());
+
+        const nextData = [...currentData];
+        const returnedItems: any[] = [];
+
+        for (const item of itemsToUpsert) {
+          const matchIdx = nextData.findIndex((row: any) =>
+            conflictFields.every((field: string) => row[field] !== undefined && String(row[field]) === String(item[field]))
+          );
+
+          if (matchIdx >= 0) {
+            nextData[matchIdx] = {
+              ...nextData[matchIdx],
+              ...item,
+              updated_at: new Date().toISOString()
+            };
+            returnedItems.push(nextData[matchIdx]);
+          } else {
+            const newItem = {
+              id: item.id || Math.random().toString(36).substring(2, 11),
+              created_at: new Date().toISOString(),
+              ...item
+            };
+            nextData.push(newItem);
+            returnedItems.push(newItem);
+          }
+        }
+
+        this.rows = nextData;
+        await saveTable(this.tableName, this.rows);
+        resultData = returnedItems;
       } else if (this.isUpdate) {
         const currentData = await loadTable(this.tableName);
         const matchingIds = new Set(resultData.map((r: any) => r.id));

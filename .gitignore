@@ -64,3 +64,4 @@ run_migration.js
 # local Flame 9 database
 /data/*.sqlite
 /data/*.sqlite-*
+.neon

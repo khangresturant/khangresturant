@@ -1,3 +1,4 @@
+"use client";
 import Link from "next/link";
 import { ArrowRight, ScanLine, MessageCircle, BookOpen } from "lucide-react";
 import { MockupBanner, MockupFooter } from "@/components/landing/mockups/MockupChrome";

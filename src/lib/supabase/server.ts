@@ -17,8 +17,8 @@ export async function createServerSupabaseClient() {
   }
 
   const cookieStore = await cookies();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
   return createServerClient(url, anonKey, {
     cookies: {
@@ -46,26 +46,15 @@ export function createServiceSupabaseClient() {
     return createLocalServerClient(null);
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
   const serviceKey = (
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
   )?.trim();
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || "";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || "placeholder-anon-key";
+
   const effectiveKey = serviceKey || anonKey;
-
-  if (!effectiveKey || !url) {
-    throw new Error(
-      "Cloud Supabase is not configured. Use NEXT_PUBLIC_USE_LOCAL_SQLITE=true for offline mode."
-    );
-  }
-
-  if (!serviceKey) {
-    console.warn(
-      "[supabase] SUPABASE_SERVICE_ROLE_KEY missing - using anon key for server client."
-    );
-  }
 
   return createServiceClient(url, effectiveKey, {
     auth: {

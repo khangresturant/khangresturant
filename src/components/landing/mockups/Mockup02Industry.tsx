@@ -1,3 +1,4 @@
+"use client";
 import Link from "next/link";
 import { ArrowRight, Pill, ChefHat, Store, Scissors, Smartphone, Leaf, Fuel } from "lucide-react";
 import { MockupBanner, MockupFooter, MockupNav } from "@/components/landing/mockups/MockupChrome";

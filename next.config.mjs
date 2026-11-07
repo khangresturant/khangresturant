@@ -1,7 +1,11 @@
-import type { NextConfig } from "next";
 import path from "path";
+import { fileURLToPath } from "url";
 
-const nextConfig: any = {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   serverExternalPackages: ["better-sqlite3"],
   turbopack: {
     root: path.resolve(__dirname),
@@ -30,3 +34,4 @@ const nextConfig: any = {
 };
 
 export default nextConfig;
+

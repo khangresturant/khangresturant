@@ -1,3 +1,4 @@
+"use client";
 import Link from "next/link";
 import { ArrowRight, ShoppingCart, Package, Users, BarChart3 } from "lucide-react";
 import { MockupBanner, MockupFooter, MockupNav } from "@/components/landing/mockups/MockupChrome";
