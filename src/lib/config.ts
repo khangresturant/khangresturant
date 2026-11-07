@@ -38,22 +38,23 @@ export function getGoogleOAuthClientId(): string {
   return process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 }
 
+// =============================================================================
+// ONLY NEON POSTGRESQL DATABASE IS ACTIVE. ALL OTHER DATABASES ARE DISABLED.
+// =============================================================================
+export function isNeonDatabaseOnly(): boolean {
+  return true;
+}
+
 export function isMockSupabaseEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_USE_MOCK === "true";
+  return false;
 }
 
-/** Local file DB via better-sqlite3 + /api/local-sqlite (default when no cloud URL). */
+/** Local file DB via better-sqlite3 + /api/local-sqlite (Permanently DISABLED). */
 export function isLocalSqliteEnabled(): boolean {
-  if (process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE === "false") return false;
-  if (process.env.NEXT_PUBLIC_USE_LOCAL_SQLITE === "true") return true;
-  return !process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  return false;
 }
 
-/** Browser app uses mock Supabase + SQLite file instead of cloud PostgREST. */
+/** Browser app uses mock Supabase + SQLite file (Permanently DISABLED). */
 export function usesLocalDatabase(): boolean {
-  return (
-    isMockSupabaseEnabled() ||
-    isLocalSqliteEnabled() ||
-    (process.env.NEXT_PUBLIC_BRAND || "").toLowerCase() === "flame9"
-  );
+  return false;
 }

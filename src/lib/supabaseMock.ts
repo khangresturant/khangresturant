@@ -414,9 +414,49 @@ class MockQueryBuilder {
           resolve(json);
           return;
         }
-      } catch (neonErr) {
-        // Fallback to local memory/sqlite if network fails
+      } catch (neonErr: any) {
+        console.error("[Neon DB Connection Error]:", neonErr);
+        resolve({ data: null, error: { message: neonErr?.message || "Neon DB connection failed" } });
+        return;
       }
+    }
+
+    // Server-side fallback: directly query neon-query API
+    const prefix = (process.env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
+    try {
+      const operation = this.isInsert
+        ? "insert"
+        : this.isUpsert
+        ? "upsert"
+        : this.isUpdate
+        ? "update"
+        : this.isDelete
+        ? "delete"
+        : "select";
+
+      const res = await fetch(`${prefix}/api/neon-query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          table: this.tableName,
+          operation,
+          payload: this.payload,
+          onConflict: this.upsertConflict,
+          filters: this.rawFilters,
+          order: this.sortField ? { column: this.sortField, ascending: this.sortAscending } : null,
+          limit: this.limitCount,
+          single: this.isSingle,
+          maybeSingle: this.isMaybeSingle,
+          countOnly: this.headCount,
+        }),
+      });
+
+      const json = await res.json();
+      resolve(json);
+      return;
+    } catch (e: any) {
+      resolve({ data: null, error: { message: e?.message || "Server Neon query failed" } });
+      return;
     }
 
     try {
@@ -688,27 +728,7 @@ export const mockSupabase = {
           }
         } catch (e) {}
       }
-      if (useFlame9 || isLocalSqliteEnabled()) {
-        const accounts = [FLAME9_LOCAL_LOGINS.admin, FLAME9_LOCAL_LOGINS.staff];
-        const match = accounts.find((a) => a.email === normalized && a.password === password);
-        if (!match) {
-          return { data: { user: null }, error: { message: "Invalid login credentials" } };
-        }
-        const id = match.role === "superadmin" ? FLAME9_LOCAL_USER_ID : FLAME9_STAFF_USER_ID;
-        const user = { id, email: match.email };
-        const session = { user, access_token: "mock_token" };
-        if (typeof window !== "undefined") {
-          sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(user));
-          persistLocalAuthCookie(user);
-        }
-        return { data: { user, session }, error: null };
-      }
-      const user = { id: defaultUserId, email: normalized };
-      const session = { user, access_token: "mock_token" };
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(user));
-      }
-      return { data: { user, session }, error: null };
+      return { data: { user: null }, error: { message: "Invalid login credentials on Neon DB" } };
     },
     signUp: async ({ email, password }: { email: string; password?: string }) => {
       const normalized = email.trim().toLowerCase();
@@ -733,9 +753,11 @@ export const mockSupabase = {
             }
             if (json.error) return json;
           }
-        } catch (e) {}
+        } catch (e: any) {
+          return { data: { user: null }, error: { message: e?.message || "Registration failed on Neon DB" } };
+        }
       }
-      return { data: { user: { id: defaultUserId, email: normalized }, session: { user: { id: defaultUserId, email: normalized }, access_token: "mock_token" } }, error: null };
+      return { data: { user: null }, error: { message: "Registration failed on Neon DB" } };
     },
     signOut: async () => {
       if (typeof window !== "undefined") {
