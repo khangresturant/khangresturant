@@ -438,7 +438,8 @@ export default function LoginPage() {
                 </motion.button>
               </form>
 
-              {/* Quick Demo Access */}
+              {/* Quick Demo Access - Commented out as requested */}
+              {/*
               <div className="mt-6 pt-4 border-t border-slate-100 text-center">
                 <p className="text-xs text-slate-500 mb-2">Need quick demo access?</p>
                 <motion.button
@@ -457,6 +458,17 @@ export default function LoginPage() {
                 >
                   Autofill Restaurant Demo Login
                 </motion.button>
+              </div>
+              */}
+
+              {/* Register link */}
+              <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+                <p className="text-xs text-slate-500">
+                  Don&apos;t have a business account?{" "}
+                  <Link href="/register" className="font-semibold text-slate-900 hover:underline">
+                    Register your restaurant
+                  </Link>
+                </p>
               </div>
 
               {/* Bottom Copyright */}
