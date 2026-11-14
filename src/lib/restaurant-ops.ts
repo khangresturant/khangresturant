@@ -158,7 +158,7 @@ CREATE INDEX IF NOT EXISTS idx_product_recipes_parent_size ON product_recipes(pa
 -- One BOM line per dish + ingredient + size (Standard/base uses NULL menu_size_id)
 ALTER TABLE product_recipes DROP CONSTRAINT IF EXISTS product_recipes_parent_product_id_ingredient_product_id_key;
 DROP INDEX IF EXISTS product_recipes_parent_ingredient_size_uniq;
-CREATE UNIQUE INDEX product_recipes_parent_ingredient_size_uniq ON product_recipes (
+CREATE UNIQUE INDEX IF NOT EXISTS product_recipes_parent_ingredient_size_uniq ON product_recipes (
   parent_product_id,
   ingredient_product_id,
   COALESCE(menu_size_id, '00000000-0000-0000-0000-000000000000'::uuid)

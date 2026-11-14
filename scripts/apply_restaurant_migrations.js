@@ -36,7 +36,7 @@ async function applyMigrations() {
   console.log("Connected successfully!");
 
   try {
-    console.log("Starting migration transaction...");
+    console.log("Starting unified migration transaction...");
     await client.query("BEGIN;");
 
     // 1. Dual thermal printer support on company_details
@@ -48,46 +48,87 @@ async function applyMigrations() {
     `);
 
     // 2. Product discount exemption & restaurant POS visibility on products
-    console.log("2. Migrating products (discount exemption & restaurant visibility)...");
+    console.log("2. Migrating products (discount exemption, restaurant visibility, kitchen station)...");
     await client.query(`
       ALTER TABLE products ADD COLUMN IF NOT EXISTS not_discounted BOOLEAN DEFAULT false;
       ALTER TABLE products ADD COLUMN IF NOT EXISTS show_in_restaurant_pos BOOLEAN DEFAULT true;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS kitchen_station_id UUID;
     `);
 
     // 3. Restaurant order COGS & stock deduction on invoices
-    console.log("3. Migrating invoices (cost_amount, profit_amount, stock_deducted)...");
+    console.log("3. Migrating invoices (cost_amount, profit_amount, stock_deducted, edit_history, is_edited, tip_amount)...");
     await client.query(`
       ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cost_amount NUMERIC(15, 2) DEFAULT 0;
       ALTER TABLE invoices ADD COLUMN IF NOT EXISTS profit_amount NUMERIC(15, 2) DEFAULT 0;
       ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stock_deducted BOOLEAN DEFAULT false;
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT false;
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS edit_history JSONB;
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS tip_amount NUMERIC(15, 2) DEFAULT 0;
     `);
 
-    // 4. Per-size recipe BOM costing & order line sizing on invoice_items
-    console.log("4. Migrating invoice_items (menu_size_id)...");
+    // 4. Per-size recipe BOM costing, order line sizing & purchase_price on invoice_items
+    console.log("4. Migrating invoice_items (menu_size_id, purchase_price)...");
     await client.query(`
       ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS menu_size_id UUID REFERENCES restaurant_menu_sizes(id) ON DELETE SET NULL;
+      ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(15, 4);
       CREATE INDEX IF NOT EXISTS idx_invoice_items_menu_size ON invoice_items(menu_size_id);
     `);
 
-    // 5. Per-size recipes on product_recipes
-    console.log("5. Migrating product_recipes (menu_size_id & unique index per size)...");
+    // 5. Deal slots and allowed products on restaurant_deal_items
+    console.log("5. Migrating restaurant_deal_items (slot_label, allowed_product_ids)...");
+    await client.query(`
+      ALTER TABLE restaurant_deal_items ADD COLUMN IF NOT EXISTS slot_label VARCHAR(120);
+      ALTER TABLE restaurant_deal_items ADD COLUMN IF NOT EXISTS allowed_product_ids JSONB;
+    `);
+
+    // 6. Per-size recipes on product_recipes
+    console.log("6. Migrating product_recipes (menu_size_id & unique index per size)...");
     await client.query(`
       ALTER TABLE product_recipes ADD COLUMN IF NOT EXISTS menu_size_id UUID REFERENCES restaurant_menu_sizes(id) ON DELETE SET NULL;
       CREATE INDEX IF NOT EXISTS idx_product_recipes_menu_size ON product_recipes(menu_size_id);
       CREATE INDEX IF NOT EXISTS idx_product_recipes_parent_size ON product_recipes(parent_product_id, menu_size_id);
       
-      -- Replace legacy single-ingredient constraint with per-size unique index
       ALTER TABLE product_recipes DROP CONSTRAINT IF EXISTS product_recipes_parent_product_id_ingredient_product_id_key;
-      DROP INDEX IF EXISTS product_recipes_parent_ingredient_size_uniq;
-      CREATE UNIQUE INDEX product_recipes_parent_ingredient_size_uniq ON product_recipes (
+      CREATE UNIQUE INDEX IF NOT EXISTS product_recipes_parent_ingredient_size_uniq ON product_recipes (
         parent_product_id,
         ingredient_product_id,
         COALESCE(menu_size_id, '00000000-0000-0000-0000-000000000000'::uuid)
       );
     `);
 
-    // 6. Reload PostgREST schema cache
-    console.log("6. Reloading PostgREST schema cache...");
+    // 7. Product batches sale_price
+    console.log("7. Migrating product_batches (sale_price)...");
+    await client.query(`
+      ALTER TABLE product_batches ADD COLUMN IF NOT EXISTS sale_price NUMERIC(15, 2);
+    `);
+
+    // 8. Restaurant tables table_number, floor_name, section_name
+    console.log("8. Migrating restaurant_tables (table_number, floor_name, section_name)...");
+    await client.query(`
+      ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS table_number VARCHAR(50);
+      ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS floor_name VARCHAR(50) DEFAULT 'Ground';
+      ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS section_name VARCHAR(50);
+    `);
+
+    // 9. Purchase orders party_id compatibility
+    console.log("9. Migrating purchase_orders (party_id)...");
+    await client.query(`
+      ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS party_id UUID REFERENCES parties(id) ON DELETE SET NULL;
+      UPDATE purchase_orders SET party_id = supplier_id WHERE party_id IS NULL AND supplier_id IS NOT NULL;
+    `);
+
+    // 10. Kitchen orders routing & waiter/rider assignment
+    console.log("10. Migrating kitchen_orders (invoice_id, waiter_id, rider_id, station_id, kitchen_hub)...");
+    await client.query(`
+      ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS invoice_id UUID REFERENCES invoices(id) ON DELETE SET NULL;
+      ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS waiter_id UUID;
+      ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS rider_id UUID;
+      ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS station_id UUID REFERENCES restaurant_stations(id) ON DELETE SET NULL;
+      ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS kitchen_hub VARCHAR(100);
+    `);
+
+    // 11. Reload PostgREST schema cache
+    console.log("11. Reloading PostgREST schema cache...");
     await client.query("NOTIFY pgrst, 'reload schema';");
 
     await client.query("COMMIT;");

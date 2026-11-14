@@ -1,10 +1,10 @@
 # Supabase PostgreSQL Database Schema Documentation
 
 > **System:** The Accounts / Cafe Master ERP Database Architecture
-> **Generated At:** 2026-11-07T07:42:29.467Z
+> **Generated At:** 2026-11-14T13:48:26.750Z
 > **Database Version:** PostgreSQL 17.6
-> **Total Tables:** 98
-> **Total Foreign Key Relationships:** 207
+> **Total Tables:** 100
+> **Total Foreign Key Relationships:** 212
 
 ## Table of Contents
 
@@ -20,6 +20,7 @@
 - [10. Specialized Vertical: Showroom, Automobile & EMI](#10-specialized-vertical-showroom-automobile-emi)
 - [11. Specialized Vertical: Tailoring & Boutique](#11-specialized-vertical-tailoring-boutique)
 - [12. Specialized Vertical: Fuel Station & Utilities](#12-specialized-vertical-fuel-station-utilities)
+- [13. Additional Tables](#13-additional-tables)
 - [Complete Foreign Key Relationships Matrix](#complete-foreign-key-relationships-matrix)
 
 ## Entity Relationship Overview (Core Architecture)
@@ -158,6 +159,8 @@ Multi-tenant shop management, user authentication profiles, shop memberships, co
 - [`showroom_parties.shop_id`](#table-showroom_parties) -> `id`
 - [`showroom_rentals.shop_id`](#table-showroom_rentals) -> `id`
 - [`showroom_sales.shop_id`](#table-showroom_sales) -> `id`
+- [`showroom_vehicle_expenses.shop_id`](#table-showroom_vehicle_expenses) -> `id`
+- [`software_licenses.shop_id`](#table-software_licenses) -> `id`
 - [`stitching_orders.shop_id`](#table-stitching_orders) -> `id`
 - [`stock.shop_id`](#table-stock) -> `id`
 - [`stock_adjustments.shop_id`](#table-stock_adjustments) -> `id`
@@ -271,6 +274,7 @@ Restaurant tables, floors/sections, KDS kitchen orders, dual kitchen stations, m
 | **`created_at`** | `timestamp with time zone` | Yes | `now()` | - |
 | **`floor_name`** | `varchar(50)` | Yes | `'Ground'` | - |
 | **`section_name`** | `varchar(50)` | Yes | - | - |
+| **`table_number`** | `varchar(50)` | Yes | - | - |
 
 **Foreign Keys Outgoing:**
 - `active_invoice_id` references [`invoices.id`](#table-invoices) (ON DELETE SET NULL, ON UPDATE NO ACTION)
@@ -369,6 +373,8 @@ Restaurant tables, floors/sections, KDS kitchen orders, dual kitchen stations, m
 | **`quantity`** | `numeric(15,2)` | No | `1` | - |
 | **`size_name`** | `varchar(30)` | Yes | - | - |
 | **`created_at`** | `timestamp with time zone` | Yes | `now()` | - |
+| **`slot_label`** | `varchar(120)` | Yes | - | - |
+| **`allowed_product_ids`** | `jsonb` | Yes | - | - |
 
 **Foreign Keys Outgoing:**
 - `deal_id` references [`restaurant_deals.id`](#table-restaurant_deals) (ON DELETE CASCADE, ON UPDATE NO ACTION)
@@ -637,6 +643,7 @@ Products, size-based BOM recipe costing, barcodes, batches, IMEIs, variants, cat
 | **`stock_quantity`** | `double precision` | Yes | `0` | - |
 | **`purchase_price`** | `double precision` | Yes | `0` | - |
 | **`created_at`** | `timestamp with time zone` | Yes | `now()` | - |
+| **`sale_price`** | `numeric(15,2)` | Yes | - | - |
 
 **Foreign Keys Outgoing:**
 - `product_id` references [`products.id`](#table-products) (ON DELETE CASCADE, ON UPDATE NO ACTION)
@@ -1074,6 +1081,7 @@ Sales invoices, invoice line items, retail sales, returns, customer/supplier par
 - [`installment_plans.customer_id`](#table-installment_plans) -> `id`
 - [`invoices.party_id`](#table-invoices) -> `id`
 - [`pending_payments.customer_id`](#table-pending_payments) -> `id`
+- [`purchase_orders.party_id`](#table-purchase_orders) -> `id`
 - [`purchase_orders.supplier_id`](#table-purchase_orders) -> `id`
 - [`repair_tickets.party_id`](#table-repair_tickets) -> `id`
 - [`returns.party_id`](#table-returns) -> `id`
@@ -1186,6 +1194,7 @@ Double-entry bookkeeping, chart of accounts, bank/cash balances, journal entries
 - [`invoices.account_id`](#table-invoices) -> `id`
 - [`post_dated_cheques.account_id`](#table-post_dated_cheques) -> `id`
 - [`purchase_orders.account_id`](#table-purchase_orders) -> `id`
+- [`showroom_vehicle_expenses.cash_account_id`](#table-showroom_vehicle_expenses) -> `id`
 
 ---
 
@@ -1524,10 +1533,12 @@ Purchase orders from vendors, line-item receiving, and supplier expiry claims.
 | **`tax_rate`** | `numeric(5,2)` | Yes | `0` | - |
 | **`closing_book_id`** | `uuid` | Yes | - | FK -> `closing_books.id` (ON DELETE SET NULL) |
 | **`supplier_name`** | `text` | Yes | - | - |
+| **`party_id`** | `uuid` | Yes | - | FK -> `parties.id` (ON DELETE SET NULL) |
 
 **Foreign Keys Outgoing:**
 - `account_id` references [`cash_accounts.id`](#table-cash_accounts) (ON DELETE NO ACTION, ON UPDATE NO ACTION)
 - `closing_book_id` references [`closing_books.id`](#table-closing_books) (ON DELETE SET NULL, ON UPDATE NO ACTION)
+- `party_id` references [`parties.id`](#table-parties) (ON DELETE SET NULL, ON UPDATE NO ACTION)
 - `shop_id` references [`shops.id`](#table-shops) (ON DELETE NO ACTION, ON UPDATE NO ACTION)
 - `supplier_id` references [`parties.id`](#table-parties) (ON DELETE SET NULL, ON UPDATE NO ACTION)
 
@@ -2040,6 +2051,7 @@ Showroom vehicle inventory, vehicle sales, rentals, external investor financing,
 - [`showroom_installments.vehicle_id`](#table-showroom_installments) -> `id`
 - [`showroom_rentals.vehicle_id`](#table-showroom_rentals) -> `id`
 - [`showroom_sales.vehicle_id`](#table-showroom_sales) -> `id`
+- [`showroom_vehicle_expenses.vehicle_id`](#table-showroom_vehicle_expenses) -> `id`
 
 ---
 
@@ -2682,9 +2694,57 @@ Underground fuel tanks, dispensing pumps, meter shift closing readings, dimensio
 
 ---
 
+## 13. Additional Tables
+
+Additional platform and utility tables.
+
+### Table: `showroom_vehicle_expenses`
+
+| Column | Type | Nullable | Default | Key / Relation |
+|---|---|:---:|---|---|
+| **`id`** | `uuid` | No | `gen_random_uuid()` | `PK`  |
+| **`shop_id`** | `uuid` | No | - | FK -> `shops.id` (ON DELETE CASCADE) |
+| **`vehicle_id`** | `uuid` | Yes | - | FK -> `showroom_vehicles.id` (ON DELETE CASCADE) |
+| **`category`** | `text` | No | `'Maintenance & Repair'` | - |
+| **`description`** | `text` | Yes | - | - |
+| **`amount`** | `numeric(14,2)` | No | `0` | - |
+| **`expense_date`** | `date` | No | `CURRENT_DATE` | - |
+| **`payment_mode`** | `text` | Yes | `'cash'` | - |
+| **`cash_account_id`** | `uuid` | Yes | - | FK -> `cash_accounts.id` (ON DELETE SET NULL) |
+| **`created_at`** | `timestamp with time zone` | No | `now()` | - |
+
+**Foreign Keys Outgoing:**
+- `cash_account_id` references [`cash_accounts.id`](#table-cash_accounts) (ON DELETE SET NULL, ON UPDATE NO ACTION)
+- `shop_id` references [`shops.id`](#table-shops) (ON DELETE CASCADE, ON UPDATE NO ACTION)
+- `vehicle_id` references [`showroom_vehicles.id`](#table-showroom_vehicles) (ON DELETE CASCADE, ON UPDATE NO ACTION)
+
+---
+
+### Table: `software_licenses`
+
+| Column | Type | Nullable | Default | Key / Relation |
+|---|---|:---:|---|---|
+| **`id`** | `uuid` | No | `gen_random_uuid()` | `PK`  |
+| **`user_id`** | `uuid` | Yes | - | - |
+| **`shop_id`** | `uuid` | Yes | - | FK -> `shops.id` (ON DELETE SET NULL) |
+| **`software_slug`** | `text` | No | - | - |
+| **`software_name`** | `text` | No | - | - |
+| **`license_key`** | `text` | No | - | - |
+| **`status`** | `text` | No | `'active'` | - |
+| **`max_devices`** | `integer` | No | `1` | - |
+| **`activated_hwids`** | `ARRAY` | No | `'{}'[]` | - |
+| **`download_url`** | `text` | Yes | `''` | - |
+| **`purchased_at`** | `timestamp with time zone` | No | `now()` | - |
+| **`updated_at`** | `timestamp with time zone` | No | `now()` | - |
+
+**Foreign Keys Outgoing:**
+- `shop_id` references [`shops.id`](#table-shops) (ON DELETE SET NULL, ON UPDATE NO ACTION)
+
+---
+
 ## Complete Foreign Key Relationships Matrix
 
-Total relationships defined in database: **207**.
+Total relationships defined in database: **212**.
 
 | Source Table | Source Column | Target Table | Target Column | On Delete | On Update | Constraint Name |
 |---|---|---|---|:---:|:---:|---|
@@ -2805,6 +2865,7 @@ Total relationships defined in database: **207**.
 | `purchase_order_items` | `variant_id` | `product_variants` | `id` | NO ACTION | NO ACTION | `purchase_order_items_variant_id_fkey` |
 | `purchase_orders` | `account_id` | `cash_accounts` | `id` | NO ACTION | NO ACTION | `purchase_orders_account_id_fkey` |
 | `purchase_orders` | `closing_book_id` | `closing_books` | `id` | SET NULL | NO ACTION | `purchase_orders_closing_book_id_fkey` |
+| `purchase_orders` | `party_id` | `parties` | `id` | SET NULL | NO ACTION | `purchase_orders_party_id_fkey` |
 | `purchase_orders` | `shop_id` | `shops` | `id` | NO ACTION | NO ACTION | `purchase_orders_shop_id_fkey` |
 | `purchase_orders` | `supplier_id` | `parties` | `id` | SET NULL | NO ACTION | `purchase_orders_supplier_id_fkey` |
 | `referral_transactions` | `referred_shop_id` | `shops` | `id` | SET NULL | NO ACTION | `referral_transactions_referred_shop_id_fkey` |
@@ -2861,9 +2922,13 @@ Total relationships defined in database: **207**.
 | `showroom_sales` | `buyer_party_id` | `showroom_parties` | `id` | SET NULL | NO ACTION | `showroom_sales_buyer_party_id_fkey` |
 | `showroom_sales` | `shop_id` | `shops` | `id` | CASCADE | NO ACTION | `showroom_sales_shop_id_fkey` |
 | `showroom_sales` | `vehicle_id` | `showroom_vehicles` | `id` | SET NULL | NO ACTION | `showroom_sales_vehicle_id_fkey` |
+| `showroom_vehicle_expenses` | `cash_account_id` | `cash_accounts` | `id` | SET NULL | NO ACTION | `showroom_vehicle_expenses_cash_account_id_fkey` |
+| `showroom_vehicle_expenses` | `shop_id` | `shops` | `id` | CASCADE | NO ACTION | `showroom_vehicle_expenses_shop_id_fkey` |
+| `showroom_vehicle_expenses` | `vehicle_id` | `showroom_vehicles` | `id` | CASCADE | NO ACTION | `showroom_vehicle_expenses_vehicle_id_fkey` |
 | `showroom_vehicles` | `buyer_party_id` | `showroom_parties` | `id` | SET NULL | NO ACTION | `showroom_vehicles_buyer_party_id_fkey` |
 | `showroom_vehicles` | `investor_id` | `showroom_investors` | `id` | SET NULL | NO ACTION | `showroom_vehicles_investor_id_fkey` |
 | `showroom_vehicles` | `purchase_party_id` | `showroom_parties` | `id` | SET NULL | NO ACTION | `showroom_vehicles_purchase_party_id_fkey` |
+| `software_licenses` | `shop_id` | `shops` | `id` | SET NULL | NO ACTION | `software_licenses_shop_id_fkey` |
 | `stitching_orders` | `customer_id` | `parties` | `id` | CASCADE | NO ACTION | `stitching_orders_customer_id_fkey` |
 | `stitching_orders` | `invoice_id` | `invoices` | `id` | SET NULL | NO ACTION | `stitching_orders_invoice_id_fkey` |
 | `stitching_orders` | `karigar_id` | `karigars` | `id` | NO ACTION | NO ACTION | `stitching_orders_karigar_id_fkey` |
