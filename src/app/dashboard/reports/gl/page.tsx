@@ -19,6 +19,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { SubscriptionBlocker } from "@/components/dashboard/SubscriptionBlocker";
 import { fetchShowroomProductFlow } from "@/lib/showroom-accounting";
+import { CHART_OF_ACCOUNTS, glNetBalance, type CoaAccountType } from "@/lib/general-ledger";
 
 type GLTab = "trial" | "pl" | "balance" | "product_flow" | "money_flow" | "account_statement";
 
@@ -40,48 +41,7 @@ interface EnrichedParty {
   created_at?: string;
 }
 
-const GL_ACCOUNT_TEMPLATES = [
-  // 1. Assets
-  { code: "1001", name: "Cash & Bank Accounts", type: "Asset" as const },
-  { code: "1002", name: "Accounts Receivable (Customers)", type: "Asset" as const },
-  { code: "1003", name: "Stock / Inventory Asset", type: "Asset" as const },
-  { code: "1004", name: "Employee Advances / Deductions", type: "Asset" as const },
-  { code: "1200", name: "Prepaid Expenses & Advances", type: "Asset" as const },
-  { code: "1400", name: "Fixed Assets (General)", type: "Asset" as const },
-  { code: "1410", name: "Fixed Assets: Land & Buildings", type: "Asset" as const },
-  { code: "1420", name: "Fixed Assets: Machinery & Equipment", type: "Asset" as const },
-  { code: "1430", name: "Fixed Assets: Office Furniture & Fixtures", type: "Asset" as const },
-  { code: "1440", name: "Fixed Assets: Vehicles & Computers", type: "Asset" as const },
-  
-  // 2. Liabilities
-  { code: "2001", name: "Accounts Payable (Suppliers)", type: "Liability" as const },
-  { code: "2002", name: "Accrued Salaries Payable", type: "Liability" as const },
-  { code: "2100", name: "Bank Loans & Overdrafts", type: "Liability" as const },
-  { code: "2201", name: "Accrued Expenses Payable (Rent/Utilities)", type: "Liability" as const },
-  { code: "2300", name: "Tax Payable (GST, VAT, WHT)", type: "Liability" as const },
-  
-  // 3. Equity
-  { code: "3100", name: "Owner's Capital Account", type: "Equity" as const },
-  { code: "3200", name: "Owner's Drawings Account", type: "Equity" as const },
-  { code: "3300", name: "Retained Earnings & Reserves", type: "Equity" as const },
-  
-  // 4. Revenue
-  { code: "4001", name: "Sales Revenue", type: "Revenue" as const },
-  { code: "4002", name: "Discount Received", type: "Revenue" as const },
-  { code: "4100", name: "Service Revenue (Stitching/Repairs)", type: "Revenue" as const },
-  { code: "4300", name: "Other Operating Income", type: "Revenue" as const },
-  
-  // 5. Expenses
-  { code: "5001", name: "Cost of Goods / Purchases", type: "Expense" as const },
-  { code: "5002", name: "Discount Allowed", type: "Expense" as const },
-  { code: "5003", name: "Operating Expenses (General)", type: "Expense" as const },
-  { code: "5004", name: "Salaries & Wages Expense", type: "Expense" as const },
-  { code: "5100", name: "Rent & Lease Expense", type: "Expense" as const },
-  { code: "5200", name: "Utilities Expense (Electricity, Net)", type: "Expense" as const },
-  { code: "5300", name: "Marketing & Advertising Expense", type: "Expense" as const },
-  { code: "5400", name: "Office Supplies & Maintenance", type: "Expense" as const },
-  { code: "5500", name: "Depreciation Expense", type: "Expense" as const }
-];
+const GL_ACCOUNT_TEMPLATES = CHART_OF_ACCOUNTS;
 
 export default function GeneralLedgerPage() {
   const { shopId, shopName, allowReports, selectedCurrency, industryType } = useShop();
@@ -606,11 +566,7 @@ export default function GeneralLedgerPage() {
 
     Object.keys(summary).forEach((code) => {
       const acc = summary[code];
-      if (acc.type === "Asset" || acc.type === "Expense") {
-        acc.balance = acc.debit - acc.credit;
-      } else {
-        acc.balance = acc.credit - acc.debit;
-      }
+      acc.balance = glNetBalance(acc.type as CoaAccountType, acc.debit, acc.credit);
     });
 
     // Dynamic Retained Earnings & Net Profit Calculation:
@@ -728,7 +684,7 @@ export default function GeneralLedgerPage() {
         summaryMap[p.id] = {
           partyId: p.id,
           name: p.name,
-          phone: p.phone || "—",
+          phone: p.phone || "-",
           totalBilled: 0,
           totalPaid: 0,
           balance: currBal,
@@ -763,7 +719,7 @@ export default function GeneralLedgerPage() {
             summaryMap[targetKey] = {
               partyId: targetKey,
               name: pName,
-              phone: entry.partyPhone || "—",
+              phone: entry.partyPhone || "-",
               totalBilled: 0,
               totalPaid: 0,
               balance: 0,
@@ -772,7 +728,7 @@ export default function GeneralLedgerPage() {
           }
 
           summaryMap[targetKey].txCount += 1;
-          if (entry.partyPhone && (!summaryMap[targetKey].phone || summaryMap[targetKey].phone === "—")) {
+          if (entry.partyPhone && (!summaryMap[targetKey].phone || summaryMap[targetKey].phone === "-")) {
             summaryMap[targetKey].phone = entry.partyPhone;
           }
           if (entry.partyName && (summaryMap[targetKey].name.startsWith("Customer") || summaryMap[targetKey].name.startsWith("Showroom"))) {
@@ -902,7 +858,7 @@ export default function GeneralLedgerPage() {
     } else if (activeTab === "product_flow") {
       tableHeaders = ["Date", "Product", "Party / Customer", "Type", "Qty In", "Qty Out", "Value", "Ref"];
       filteredProductFlow().forEach(f => {
-        tableRows.push([f.date, f.productName, f.partyName || "—", f.type, f.qtyIn > 0 ? `+${f.qtyIn}` : "-", f.qtyOut > 0 ? `-${f.qtyOut}` : "-", `${currSym} ${f.value.toLocaleString()}`, f.ref]);
+        tableRows.push([f.date, f.productName, f.partyName || "-", f.type, f.qtyIn > 0 ? `+${f.qtyIn}` : "-", f.qtyOut > 0 ? `-${f.qtyOut}` : "-", `${currSym} ${f.value.toLocaleString()}`, f.ref]);
       });
     } else if (activeTab === "money_flow") {
       tableHeaders = ["Date", "Party / Payee", "Description", "Debit (In)", "Credit (Out)", "Cash Balance"];
@@ -917,7 +873,7 @@ export default function GeneralLedgerPage() {
           tableRows.push([
             f.date,
             f.partyName || "Walk-in",
-            f.billRef || f.ref_id?.substring(0, 8) || "—",
+            f.billRef || f.ref_id?.substring(0, 8) || "-",
             f.narration || "Sale / Payment",
             f.debit > 0 ? `${currSym} ${f.debit.toLocaleString()}` : "-",
             f.credit > 0 ? `${currSym} ${f.credit.toLocaleString()}` : "-",
@@ -930,7 +886,7 @@ export default function GeneralLedgerPage() {
           tableRows.push([
             f.date,
             f.partyName ? `${f.partyName} • ${f.narration}` : f.narration,
-            f.billRef || f.ref_id?.substring(0, 8) || "—",
+            f.billRef || f.ref_id?.substring(0, 8) || "-",
             f.debit > 0 ? `${currSym} ${f.debit.toLocaleString()}` : "-",
             f.credit > 0 ? `${currSym} ${f.credit.toLocaleString()}` : "-",
             `${currSym} ${f.balance.toLocaleString()}`
@@ -1034,7 +990,7 @@ export default function GeneralLedgerPage() {
     const tableRows = debtors.map((d, index) => [
       String(index + 1),
       d.name,
-      d.phone || "—",
+      d.phone || "-",
       `${currSym} ${d.balance.toLocaleString()}`,
       "________________",
       "________________"
@@ -1322,7 +1278,7 @@ export default function GeneralLedgerPage() {
                   id: line.id,
                   date: entry.entry_date,
                   partyName: targetParty.name,
-                  partyPhone: targetParty.phone || "—",
+                  partyPhone: targetParty.phone || "-",
                   partyId: targetParty.id,
                   billRef: entry.billRef || (entry.ref_id ? `Bill #${entry.ref_id.substring(0,8).toUpperCase()}` : "Tx"),
                   narration: entry.cleanNarration || (isReceivable ? "Credit Sale / Invoice" : "Purchase"),
@@ -1351,7 +1307,7 @@ export default function GeneralLedgerPage() {
                   id: `inv_${inv.id}`,
                   date: dateStr,
                   partyName: targetParty.name,
-                  partyPhone: targetParty.phone || "—",
+                  partyPhone: targetParty.phone || "-",
                   partyId: targetParty.id,
                   billRef: inv.invoice_number ? `Inv #${inv.invoice_number}` : `Bill #${inv.id.substring(0, 8).toUpperCase()}`,
                   narration: `POS Credit Sale (${inv.status || "Completed"})`,
@@ -1378,7 +1334,7 @@ export default function GeneralLedgerPage() {
                 id: `ct_${ct.id}`,
                 date: dateStr,
                 partyName: targetParty.name,
-                partyPhone: targetParty.phone || "—",
+                partyPhone: targetParty.phone || "-",
                 partyId: targetParty.id,
                 billRef: "Receipt",
                 narration: ct.remarks || (isPayment ? "Customer Payment Received (کھاتہ وصولی)" : "Manual Khata Debit (نیا ادھار)"),
@@ -1405,7 +1361,7 @@ export default function GeneralLedgerPage() {
                 id: `po_${po.id}`,
                 date: dateStr,
                 partyName: targetParty.name,
-                partyPhone: targetParty.phone || "—",
+                partyPhone: targetParty.phone || "-",
                 partyId: targetParty.id,
                 billRef: po.invoice_number ? `PO #${po.invoice_number}` : `PO #${po.id.substring(0, 8).toUpperCase()}`,
                 narration: `Purchase Order (${po.status || "Completed"})`,
@@ -1444,7 +1400,7 @@ export default function GeneralLedgerPage() {
             id: `opening_${targetParty.id}`,
             date: targetParty.created_at ? targetParty.created_at.split("T")[0] : "Initial",
             partyName: targetParty.name,
-            partyPhone: targetParty.phone || "—",
+            partyPhone: targetParty.phone || "-",
             partyId: targetParty.id,
             billRef: "Opening Khata",
             narration: "سابقہ کھاتہ ادھار (Opening / Starting Khata Balance)",
@@ -1558,7 +1514,7 @@ export default function GeneralLedgerPage() {
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-2xl text-xs font-semibold text-slate-600">
             <Calendar size={14} className="text-slate-400" />
-            <span>Range:</span>
+            <div>Range:</div>
             <input 
               type="date" 
               value={startDate} 
@@ -1566,7 +1522,7 @@ export default function GeneralLedgerPage() {
               className="bg-transparent border-none outline-none font-bold text-slate-800 animate-none cursor-pointer" 
               placeholder="From Beginning"
             />
-            <span className="text-slate-400">to</span>
+            <div className="text-slate-400">to</div>
             <input 
               type="date" 
               value={endDate} 
@@ -1575,9 +1531,9 @@ export default function GeneralLedgerPage() {
               placeholder="Latest"
             />
             {(!startDate && !endDate) ? (
-              <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+              <div className="bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-full">
                 All Time (شروع سے اب تک)
-              </span>
+              </div>
             ) : (
               <button
                 onClick={() => { setStartDate(""); setEndDate(""); }}
@@ -1602,12 +1558,12 @@ export default function GeneralLedgerPage() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-black text-slate-800 text-sm">Balance Sheet Equation (میزانِ حساب)</span>
-              <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+              <div className="font-black text-slate-800 text-sm">Balance Sheet Equation (میزانِ حساب)</div>
+              <div className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
                 bs.isBalanced ? "bg-emerald-100 text-emerald-800 font-extrabold" : "bg-amber-100 text-amber-800 font-extrabold"
               }`}>
                 {bs.isBalanced ? "Strictly Balanced (متوازن)" : `Variance (فرق): ${selectedCurrency || "Rs"} ${bs.diff.toLocaleString()}`}
-              </span>
+              </div>
             </div>
             <p className="text-slate-600 font-mono text-[11px] mt-1">
               Total Assets ({selectedCurrency || "Rs"} {bs.totalAssets.toLocaleString()}) = Total Liabilities ({selectedCurrency || "Rs"} {bs.totalLiabilities.toLocaleString()}) + Total Equity & Retained Earnings ({selectedCurrency || "Rs"} {bs.totalEquity.toLocaleString()})
@@ -1622,19 +1578,19 @@ export default function GeneralLedgerPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           {industryType === "showroom" && (
-            <span className="text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 px-3 py-1.5 rounded-xl">
+            <div className="text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 px-3 py-1.5 rounded-xl">
               Auto-Synced with Showroom Sub-Ledgers
-            </span>
+            </div>
           )}
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-2xl font-mono text-[11px]">
-            <span className="text-slate-500 font-bold">Assets:</span>
-            <span className="font-black text-blue-700">{selectedCurrency || "Rs"} {bs.totalAssets.toLocaleString()}</span>
-            <span className="text-slate-300">|</span>
-            <span className="text-slate-500 font-bold">Liab:</span>
-            <span className="font-black text-rose-700">{selectedCurrency || "Rs"} {bs.totalLiabilities.toLocaleString()}</span>
-            <span className="text-slate-300">|</span>
-            <span className="text-slate-500 font-bold">Equity:</span>
-            <span className="font-black text-emerald-700">{selectedCurrency || "Rs"} {bs.totalEquity.toLocaleString()}</span>
+            <div className="text-slate-500 font-bold">Assets:</div>
+            <div className="font-black text-blue-700">{selectedCurrency || "Rs"} {bs.totalAssets.toLocaleString()}</div>
+            <div className="text-slate-300">|</div>
+            <div className="text-slate-500 font-bold">Liab:</div>
+            <div className="font-black text-rose-700">{selectedCurrency || "Rs"} {bs.totalLiabilities.toLocaleString()}</div>
+            <div className="text-slate-300">|</div>
+            <div className="text-slate-500 font-bold">Equity:</div>
+            <div className="font-black text-emerald-700">{selectedCurrency || "Rs"} {bs.totalEquity.toLocaleString()}</div>
           </div>
         </div>
       </div>
@@ -1706,7 +1662,7 @@ export default function GeneralLedgerPage() {
       {loading ? (
         <div className="flex justify-center items-center py-20 bg-white rounded-3xl border border-slate-150">
           <Loader2 className="animate-spin text-blue-600 mr-2" size={24} />
-          <span className="text-slate-600 font-medium">Calculating Ledger accounts & customer balances...</span>
+          <div className="text-slate-600 font-medium">Calculating Ledger accounts & customer balances...</div>
         </div>
       ) : (
         <motion.div
@@ -1719,7 +1675,7 @@ export default function GeneralLedgerPage() {
             <div className="bg-white rounded-3xl border border-slate-150 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-xs font-black text-slate-800">{t("double_entry_trial_balance_table")}</span>
+                  <div className="text-xs font-black text-slate-800">{t("double_entry_trial_balance_table")}</div>
                   
                   {/* Mode Switcher: Post-Closing vs Unadjusted */}
                   <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-2xl">
@@ -1751,10 +1707,10 @@ export default function GeneralLedgerPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   {industryType === "showroom" && (
                     ledgerEntries.some(e => e.ref_type === "showroom_closing_period") ? (
-                      <span className="text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
+                      <div className="text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
                         <CheckCircle2 size={13} className="text-emerald-600" />
                         Closing Entry Posted in GL (Net Profit: {selectedCurrency || "Rs"} {pl.netProfit.toLocaleString()} &rarr; 3300)
-                      </span>
+                      </div>
                     ) : (
                       <Button
                         type="button"
@@ -1816,15 +1772,15 @@ export default function GeneralLedgerPage() {
                         >
                           <td className="p-4 font-mono font-bold text-blue-600">{acc.code}</td>
                           <td className="p-4 font-bold text-slate-800 flex items-center justify-between">
-                            <span>{acc.name}</span>
-                            <span className="text-[10px] text-blue-500 opacity-0 group-hover:opacity-100 flex items-center gap-1 font-semibold">
+                            <div>{acc.name}</div>
+                            <div className="text-[10px] text-blue-500 opacity-0 group-hover:opacity-100 flex items-center gap-1 font-semibold">
                               Open Ledger &rarr;
-                            </span>
+                            </div>
                           </td>
                           <td className="p-4">
-                            <span className="bg-slate-100 text-slate-650 px-2 py-0.5 rounded text-[10px] font-semibold">
+                            <div className="bg-slate-100 text-slate-650 px-2 py-0.5 rounded text-[10px] font-semibold">
                               {acc.type}
-                            </span>
+                            </div>
                           </td>
                           <td className="p-4 text-right font-mono text-slate-600">
                             {acc.debit > 0 ? `${selectedCurrency || "Rs"} ${acc.debit.toLocaleString()}` : "-"}
@@ -1843,15 +1799,15 @@ export default function GeneralLedgerPage() {
                     <tr>
                       <td colSpan={3} className="px-3.5 py-3 text-slate-800">
                         <div className="flex items-center gap-2">
-                          <span className="font-extrabold tracking-wide">TOTALS:</span>
+                          <div className="font-extrabold tracking-wide">TOTALS:</div>
                           {tbTotals.isBalanced ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold">
+                            <div className="inline-flex items-center gap-1 text-[11px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold">
                               <CheckCircle2 size={13} /> Strict Equality Validated (Debits = Credits)
-                            </span>
+                            </div>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] bg-rose-100 text-rose-800 px-2.5 py-0.5 rounded-full font-bold">
+                            <div className="inline-flex items-center gap-1 text-[11px] bg-rose-100 text-rose-800 px-2.5 py-0.5 rounded-full font-bold">
                               <AlertCircle size={13} /> Out of Balance by {selectedCurrency || "Rs"} {tbTotals.difference.toLocaleString()}
-                            </span>
+                            </div>
                           )}
                         </div>
                       </td>
@@ -1876,11 +1832,11 @@ export default function GeneralLedgerPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-1 space-y-6">
                 <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-6 rounded-3xl text-white shadow-md">
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Gross Sales Revenue</span>
+                  <div className="text-[10px] font-bold uppercase tracking-wider opacity-80">Gross Sales Revenue</div>
                   <h3 className="text-3xl font-black mt-2 font-mono">{selectedCurrency || "Rs"} {pl.revenue.toLocaleString()}</h3>
                   <div className="flex justify-between items-center mt-6 text-xs bg-white/10 p-3 rounded-2xl">
-                    <span>COGS Deductions:</span>
-                    <span className="font-bold font-mono">{selectedCurrency || "Rs"} {pl.costOfGoods.toLocaleString()}</span>
+                    <div>COGS Deductions:</div>
+                    <div className="font-bold font-mono">{selectedCurrency || "Rs"} {pl.costOfGoods.toLocaleString()}</div>
                   </div>
                 </div>
 
@@ -1889,44 +1845,44 @@ export default function GeneralLedgerPage() {
                     <TrendingUp className="text-blue-600" size={16} /> Margins Analysis
                   </h4>
                   <div className="flex justify-between text-xs py-2 border-b border-slate-50">
-                    <span className="text-slate-500">Gross Margin:</span>
-                    <span className="font-bold font-mono">
+                    <div className="text-slate-500">Gross Margin:</div>
+                    <div className="font-bold font-mono">
                       {pl.revenue > 0 ? ((pl.grossProfit / pl.revenue) * 100).toFixed(1) : 0}%
-                    </span>
+                    </div>
                   </div>
                   <div className="flex justify-between text-xs py-2 border-b border-slate-50">
-                    <span className="text-slate-500">Net Profit Margin:</span>
-                    <span className="font-bold font-mono">
+                    <div className="text-slate-500">Net Profit Margin:</div>
+                    <div className="font-bold font-mono">
                       {pl.revenue > 0 ? ((pl.netProfit / pl.revenue) * 100).toFixed(1) : 0}%
-                    </span>
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-150 shadow-sm overflow-hidden">
                 <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-                  <span className="text-xs font-black text-slate-800">{t("income_statement_pl")}</span>
+                  <div className="text-xs font-black text-slate-800">{t("income_statement_pl")}</div>
                 </div>
                 <div className="p-6 space-y-4 text-xs">
                   <div className="flex justify-between items-center py-2.5 font-bold border-b border-slate-100">
-                    <span className="text-slate-800">Gross Sales Revenue (1. Gross Sales)</span>
-                    <span className="font-mono text-slate-700">{selectedCurrency || "Rs"} {pl.revenue.toLocaleString()}</span>
+                    <div className="text-slate-800">Gross Sales Revenue (1. Gross Sales)</div>
+                    <div className="font-mono text-slate-700">{selectedCurrency || "Rs"} {pl.revenue.toLocaleString()}</div>
                   </div>
                   <div className="flex justify-between items-center py-2.5 font-bold border-b border-slate-100 pl-4 text-slate-500">
-                    <span>Less: Cost of Goods Sold (Purchases / Material Cost)</span>
-                    <span className="font-mono">({selectedCurrency || "Rs"} {pl.costOfGoods.toLocaleString()})</span>
+                    <div>Less: Cost of Goods Sold (Purchases / Material Cost)</div>
+                    <div className="font-mono">({selectedCurrency || "Rs"} {pl.costOfGoods.toLocaleString()})</div>
                   </div>
                   <div className="flex justify-between items-center py-3 font-black text-sm border-b border-slate-200 text-emerald-600">
-                    <span>{t("gross_profit")}</span>
-                    <span className="font-mono">{selectedCurrency || "Rs"} {pl.grossProfit.toLocaleString()}</span>
+                    <div>{t("gross_profit")}</div>
+                    <div className="font-mono">{selectedCurrency || "Rs"} {pl.grossProfit.toLocaleString()}</div>
                   </div>
                   <div className="flex justify-between items-center py-2.5 font-bold border-b border-slate-100 pl-4 text-slate-500">
-                    <span>Less: Operating Expenses (Rent, Utilities, Staff)</span>
-                    <span className="font-mono">({selectedCurrency || "Rs"} {pl.otherExpenses.toLocaleString()})</span>
+                    <div>Less: Operating Expenses (Rent, Utilities, Staff)</div>
+                    <div className="font-mono">({selectedCurrency || "Rs"} {pl.otherExpenses.toLocaleString()})</div>
                   </div>
                   <div className="flex justify-between items-center py-4 font-black text-base border-b border-slate-200 bg-slate-50 px-4 rounded-2xl text-slate-900 mt-4">
-                    <span>{t("net_profit_retained")}</span>
-                    <span className="font-mono text-blue-600">{selectedCurrency || "Rs"} {pl.netProfit.toLocaleString()}</span>
+                    <div>{t("net_profit_retained")}</div>
+                    <div className="font-mono text-blue-600">{selectedCurrency || "Rs"} {pl.netProfit.toLocaleString()}</div>
                   </div>
                 </div>
               </div>
@@ -1937,7 +1893,7 @@ export default function GeneralLedgerPage() {
           {activeTab === "balance" && (
             <div className="bg-white rounded-3xl border border-slate-150 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                <span className="text-xs font-black text-slate-800">{t("double_entry_balance_sheet")}</span>
+                <div className="text-xs font-black text-slate-800">{t("double_entry_balance_sheet")}</div>
                 <div className="text-[10px] text-slate-500 font-mono">Formula: Assets = Liabilities + Equity</div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-150 text-xs">
@@ -1948,16 +1904,16 @@ export default function GeneralLedgerPage() {
                   ) : (
                     bs.assetsList.map((acc) => (
                       <div key={acc.code} className="flex justify-between py-1.5">
-                        <span className="text-slate-650 font-medium">{acc.name}</span>
-                        <span className="font-mono font-bold text-slate-800">
+                        <div className="text-slate-650 font-medium">{acc.name}</div>
+                        <div className="font-mono font-bold text-slate-800">
                           {selectedCurrency || "Rs"} {acc.balance.toLocaleString()}
-                        </span>
+                        </div>
                       </div>
                     ))
                   )}
                   <div className="flex justify-between pt-4 border-t border-slate-200 font-black text-sm text-slate-900">
-                    <span>{t("total_assets")}</span>
-                    <span className="font-mono">{selectedCurrency || "Rs"} {bs.totalAssets.toLocaleString()}</span>
+                    <div>{t("total_assets")}</div>
+                    <div className="font-mono">{selectedCurrency || "Rs"} {bs.totalAssets.toLocaleString()}</div>
                   </div>
                 </div>
 
@@ -1971,16 +1927,16 @@ export default function GeneralLedgerPage() {
                     ) : (
                       bs.liabilitiesList.map((acc) => (
                         <div key={acc.code} className="flex justify-between py-1.5">
-                          <span className="text-slate-650 font-medium">{acc.name}</span>
-                          <span className="font-mono font-bold text-slate-800">
+                          <div className="text-slate-650 font-medium">{acc.name}</div>
+                          <div className="font-mono font-bold text-slate-800">
                             {selectedCurrency || "Rs"} {acc.balance.toLocaleString()}
-                          </span>
+                          </div>
                         </div>
                       ))
                     )}
                     <div className="flex justify-between py-2 border-t border-slate-100 text-slate-500 font-bold">
-                      <span>{t("total_liabilities")}</span>
-                      <span className="font-mono">{selectedCurrency || "Rs"} {bs.totalLiabilities.toLocaleString()}</span>
+                      <div>{t("total_liabilities")}</div>
+                      <div className="font-mono">{selectedCurrency || "Rs"} {bs.totalLiabilities.toLocaleString()}</div>
                     </div>
 
                     {/* Owner's Equity Section */}
@@ -1990,51 +1946,51 @@ export default function GeneralLedgerPage() {
                       </h5>
                       {bs.equityList.length === 0 ? (
                         <div className="flex justify-between py-1 text-slate-400 italic text-xs">
-                          <span>Owner's Capital (3100)</span>
-                          <span className="font-mono">Rs 0</span>
+                          <div>Owner's Capital (3100)</div>
+                          <div className="font-mono">Rs 0</div>
                         </div>
                       ) : (
                         bs.equityList.map((acc) => (
                           <div key={acc.code} className="flex justify-between py-1">
-                            <span className="text-slate-650 font-medium">{acc.name}</span>
-                            <span className="font-mono font-bold text-slate-800">
+                            <div className="text-slate-650 font-medium">{acc.name}</div>
+                            <div className="font-mono font-bold text-slate-800">
                               {selectedCurrency || "Rs"} {acc.balance.toLocaleString()}
-                            </span>
+                            </div>
                           </div>
                         ))
                       )}
                       <div className="flex justify-between py-1.5 text-slate-500 font-bold">
-                        <span>Total Equity</span>
-                        <span className="font-mono">{selectedCurrency || "Rs"} {bs.totalEquity.toLocaleString()}</span>
+                        <div>Total Equity</div>
+                        <div className="font-mono">{selectedCurrency || "Rs"} {bs.totalEquity.toLocaleString()}</div>
                       </div>
                     </div>
 
                     {!bs.equityList.some(acc => acc.code === "3300") && (
                       <div className="flex justify-between py-2 border-t border-slate-100 font-bold text-slate-600">
-                        <span>Retained Net Earnings (Current P&L)</span>
-                        <span className="font-mono">{selectedCurrency || "Rs"} {pl.netProfit.toLocaleString()}</span>
+                        <div>Retained Net Earnings (Current P&L)</div>
+                        <div className="font-mono">{selectedCurrency || "Rs"} {pl.netProfit.toLocaleString()}</div>
                       </div>
                     )}
                   </div>
 
                   <div className="pt-4 border-t-2 border-slate-200 mt-6 space-y-3">
                     <div className="flex justify-between font-black text-sm text-slate-900">
-                      <span>Total Liabilities & Equity</span>
-                      <span className="font-mono text-emerald-600">
+                      <div>Total Liabilities & Equity</div>
+                      <div className="font-mono text-emerald-600">
                         {selectedCurrency || "Rs"} {bs.totalLiabilitiesAndEquity.toLocaleString()}
-                      </span>
+                      </div>
                     </div>
                     {/* Strict Equality Validation Badge */}
                     <div className={`p-2.5 rounded-xl text-xs font-bold flex items-center justify-between ${
                       bs.isBalanced ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-amber-50 text-amber-900 border border-amber-200"
                     }`}>
-                      <span className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5">
                         {bs.isBalanced ? <CheckCircle2 size={14} className="text-emerald-600" /> : <AlertCircle size={14} className="text-amber-600" />}
                         {bs.isBalanced ? "Strict Equality Validated: Assets = Liabilities + Equity" : `Difference: ${selectedCurrency || "Rs"} ${bs.diff.toLocaleString()}`}
-                      </span>
-                      <span className="font-mono text-[11px]">
+                      </div>
+                      <div className="font-mono text-[11px]">
                         {bs.isBalanced ? "Double-Entry Perfect" : "Out of Balance"}
-                      </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2052,7 +2008,7 @@ export default function GeneralLedgerPage() {
               <div className="bg-white rounded-3xl border border-slate-150 shadow-sm overflow-hidden">
                 <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div>
-                    <span className="text-xs font-black text-slate-800">{t("product_flow_ledger")}</span>
+                    <div className="text-xs font-black text-slate-800">{t("product_flow_ledger")}</div>
                     <p className="text-[10px] text-slate-400 mt-0.5">Tracks real-time stock ins and outs (Cardex Log with Customer & Supplier info)</p>
                   </div>
                   <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
@@ -2083,7 +2039,7 @@ export default function GeneralLedgerPage() {
                 {flowLoading ? (
                   <div className="flex justify-center items-center py-20">
                     <Loader2 className="animate-spin text-amber-500 mr-2" size={20} />
-                    <span className="text-xs text-slate-500 font-bold">Loading stock transactions...</span>
+                    <div className="text-xs text-slate-500 font-bold">Loading stock transactions...</div>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -2113,18 +2069,18 @@ export default function GeneralLedgerPage() {
                               <td className="p-4 font-mono text-slate-500">{item.date}</td>
                               <td className="p-4 font-bold text-slate-800">{item.productName}</td>
                               <td className="p-4 font-bold text-slate-700 flex items-center gap-1.5">
-                                <Users size={12} className="text-slate-400" /> {item.partyName || "—"}
+                                <Users size={12} className="text-slate-400" /> {item.partyName || "-"}
                               </td>
                               <td className="p-4 font-mono text-slate-500">{item.ref}</td>
                               <td className="p-4">
                                 {item.type === "Purchase" ? (
-                                  <span className="bg-emerald-50 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
+                                  <div className="bg-emerald-50 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
                                     <Truck size={10} /> Purchase Inflow
-                                  </span>
+                                  </div>
                                 ) : (
-                                  <span className="bg-amber-50 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
+                                  <div className="bg-amber-50 text-amber-700 text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1">
                                     <ShoppingBag size={10} /> POS Sale Outflow
-                                  </span>
+                                  </div>
                                 )}
                               </td>
                               <td className="p-4 text-right font-mono font-bold text-emerald-600">
@@ -2146,7 +2102,7 @@ export default function GeneralLedgerPage() {
                     {flowList.length > 0 && (
                       <div className="p-4 border-t border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <div className="flex items-center gap-2 text-slate-500 font-bold text-xs">
-                          <span>Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, flowList.length)} of {flowList.length} records</span>
+                          <div>Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, flowList.length)} of {flowList.length} records</div>
                           <select
                             value={itemsPerPage}
                             onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
@@ -2168,9 +2124,9 @@ export default function GeneralLedgerPage() {
                           >
                             Previous
                           </Button>
-                          <span className="px-2 font-bold text-slate-700 text-xs">
+                          <div className="px-2 font-bold text-slate-700 text-xs">
                             Page {currentPage} of {totalPages}
-                          </span>
+                          </div>
                           <Button
                             variant="outline"
                             size="sm"
@@ -2199,7 +2155,7 @@ export default function GeneralLedgerPage() {
               <div className="bg-white rounded-3xl border border-slate-150 shadow-sm overflow-hidden">
                 <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div>
-                    <span className="text-xs font-black text-slate-800">{t("money_flow_register")}</span>
+                    <div className="text-xs font-black text-slate-800">{t("money_flow_register")}</div>
                     <p className="text-[10px] text-slate-400 mt-0.5">Real-time Cash & Bank Account (Code 1001) with Customer/Party Names</p>
                   </div>
                   <div className="relative w-full sm:w-64">
@@ -2242,31 +2198,31 @@ export default function GeneralLedgerPage() {
                                   {(item.partyName || "C").charAt(0).toUpperCase()}
                                 </div>
                                 <div>
-                                  <span className="font-bold text-slate-800 block">{item.partyName || "Walk-in Customer"}</span>
-                                  {item.partyPhone && <span className="text-[10px] text-slate-400 font-mono">{item.partyPhone}</span>}
+                                  <div className="font-bold text-slate-800 block">{item.partyName || "Walk-in Customer"}</div>
+                                  {item.partyPhone && <div className="text-[10px] text-slate-400 font-mono">{item.partyPhone}</div>}
                                 </div>
                               </div>
                             </td>
                             <td className="p-4">
                               <div className="flex flex-col">
-                                <span className="font-bold text-slate-800">{item.narration}</span>
-                                <span className="text-[9px] text-slate-400 uppercase font-bold mt-0.5">
+                                <div className="font-bold text-slate-800">{item.narration}</div>
+                                <div className="text-[9px] text-slate-400 uppercase font-bold mt-0.5">
                                   {item.billRef ? `${item.billRef} • ` : ""}Source: {item.ref_type}
-                                </span>
+                                </div>
                               </div>
                             </td>
                             <td className="p-4 text-right font-mono font-bold text-emerald-600">
                               {item.debit > 0 ? (
-                                <span className="inline-flex items-center gap-0.5">
+                                <div className="inline-flex items-center gap-0.5">
                                   <ArrowDownLeft size={12} /> {selectedCurrency || "Rs"} {item.debit.toLocaleString()}
-                                </span>
+                                </div>
                               ) : "-"}
                             </td>
                             <td className="p-4 text-right font-mono font-bold text-rose-600">
                               {item.credit > 0 ? (
-                                <span className="inline-flex items-center gap-0.5">
+                                <div className="inline-flex items-center gap-0.5">
                                   <ArrowUpRight size={12} /> {selectedCurrency || "Rs"} {item.credit.toLocaleString()}
-                                </span>
+                                </div>
                               ) : "-"}
                             </td>
                             <td className="p-4 text-right font-mono font-black text-slate-800">
@@ -2282,7 +2238,7 @@ export default function GeneralLedgerPage() {
                   {flowList.length > 0 && (
                     <div className="p-4 border-t border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center justify-between gap-3">
                       <div className="flex items-center gap-2 text-slate-500 font-bold text-xs">
-                        <span>Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, flowList.length)} of {flowList.length} records</span>
+                        <div>Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, flowList.length)} of {flowList.length} records</div>
                         <select
                           value={itemsPerPage}
                           onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
@@ -2304,9 +2260,9 @@ export default function GeneralLedgerPage() {
                         >
                           Previous
                         </Button>
-                        <span className="px-2 font-bold text-slate-700 text-xs">
+                        <div className="px-2 font-bold text-slate-700 text-xs">
                           Page {currentPage} of {totalPages}
-                        </span>
+                        </div>
                         <Button
                           variant="outline"
                           size="sm"
@@ -2352,9 +2308,9 @@ export default function GeneralLedgerPage() {
                   <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-4">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-0.5 rounded-lg bg-violet-100 text-violet-800 font-mono font-black text-xs">
+                        <div className="px-2.5 py-0.5 rounded-lg bg-violet-100 text-violet-800 font-mono font-black text-xs">
                           Account: {selectedLedgerCode}
-                        </span>
+                        </div>
                         <h2 className="text-lg font-black text-slate-800">
                           {selectedTemplate?.name || "Account Ledger"}
                         </h2>
@@ -2370,7 +2326,7 @@ export default function GeneralLedgerPage() {
 
                     <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500 font-bold whitespace-nowrap">Account:</span>
+                        <div className="text-xs text-slate-500 font-bold whitespace-nowrap">Account:</div>
                         <select
                           value={selectedLedgerCode}
                           onChange={(e) => {
@@ -2391,9 +2347,9 @@ export default function GeneralLedgerPage() {
                       {/* Party Filter for 1002 (Customers) or 2001 (Suppliers) */}
                       {isReceivableOrPayable && (
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500 font-bold whitespace-nowrap">
+                          <div className="text-xs text-slate-500 font-bold whitespace-nowrap">
                             {isCustomerReceivable ? "Customer:" : "Supplier:"}
-                          </span>
+                          </div>
                           <select
                             value={selectedPartyFilter}
                             onChange={(e) => setSelectedPartyFilter(e.target.value)}
@@ -2420,48 +2376,48 @@ export default function GeneralLedgerPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
                       <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-150 p-4 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-blue-700">کل قابل وصول ادھار (Total Receivable)</span>
+                          <div className="text-[11px] font-bold text-blue-700">کل قابل وصول ادھار (Total Receivable)</div>
                           <Users size={16} className="text-blue-600" />
                         </div>
                         <h4 className="text-xl font-black text-blue-900 mt-2 font-mono">
                           {selectedCurrency || "Rs"} {totalReceivableSum.toLocaleString()}
                         </h4>
-                        <span className="text-[10px] text-blue-600 mt-1 block">
+                        <div className="text-[10px] text-blue-600 mt-1 block">
                           {partySummaries.filter(p => p.balance > 0).length} گاہکوں سے رقم لینی ہے
-                        </span>
+                        </div>
                       </div>
 
                       <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-600">مدت میں ادھار فروخت (Sales on Credit)</span>
+                          <div className="text-[11px] font-bold text-slate-600">مدت میں ادھار فروخت (Sales on Credit)</div>
                           <ShoppingBag size={16} className="text-slate-500" />
                         </div>
                         <h4 className="text-xl font-black text-slate-800 mt-2 font-mono">
                           {selectedCurrency || "Rs"} {(accountsSummary["1002"]?.debit || 0).toLocaleString()}
                         </h4>
-                        <span className="text-[10px] text-slate-500 mt-1 block">ڈیبٹ اندراجات (Debit / New Credit)</span>
+                        <div className="text-[10px] text-slate-500 mt-1 block">ڈیبٹ اندراجات (Debit / New Credit)</div>
                       </div>
 
                       <div className="bg-emerald-50/60 border border-emerald-200 p-4 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-emerald-800">مدت میں وصولیاں (Recovered Payments)</span>
+                          <div className="text-[11px] font-bold text-emerald-800">مدت میں وصولیاں (Recovered Payments)</div>
                           <ArrowDownLeft size={16} className="text-emerald-600" />
                         </div>
                         <h4 className="text-xl font-black text-emerald-900 mt-2 font-mono">
                           {selectedCurrency || "Rs"} {(accountsSummary["1002"]?.credit || 0).toLocaleString()}
                         </h4>
-                        <span className="text-[10px] text-emerald-700 mt-1 block">کریڈٹ وصولی (Customer Payments)</span>
+                        <div className="text-[10px] text-emerald-700 mt-1 block">کریڈٹ وصولی (Customer Payments)</div>
                       </div>
 
                       <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-600">کل رجسٹرڈ گاہک (Total Customers)</span>
+                          <div className="text-[11px] font-bold text-slate-600">کل رجسٹرڈ گاہک (Total Customers)</div>
                           <UserCheck size={16} className="text-slate-500" />
                         </div>
                         <h4 className="text-xl font-black text-slate-800 mt-2 font-mono">
                           {partiesList.filter(p => p.type === "customer" || p.type === "dual").length}
                         </h4>
-                        <span className="text-[10px] text-slate-500 mt-1 block">کھاتہ دار کسٹمر پروفائلز</span>
+                        <div className="text-[10px] text-slate-500 mt-1 block">کھاتہ دار کسٹمر پروفائلز</div>
                       </div>
                     </div>
                   )}
@@ -2470,48 +2426,48 @@ export default function GeneralLedgerPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
                       <div className="bg-gradient-to-br from-rose-50 to-pink-50/50 border border-rose-150 p-4 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-rose-700">کل قابل ادائیگی (Total Payable to Suppliers)</span>
+                          <div className="text-[11px] font-bold text-rose-700">کل قابل ادائیگی (Total Payable to Suppliers)</div>
                           <Building2 size={16} className="text-rose-600" />
                         </div>
                         <h4 className="text-xl font-black text-rose-900 mt-2 font-mono">
                           {selectedCurrency || "Rs"} {totalPayableSum.toLocaleString()}
                         </h4>
-                        <span className="text-[10px] text-rose-600 mt-1 block">
+                        <div className="text-[10px] text-rose-600 mt-1 block">
                           {partySummaries.filter(p => p.balance > 0).length} سپلائرز کو رقم دینی ہے
-                        </span>
+                        </div>
                       </div>
 
                       <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-600">مدت میں ادھار خریداری (Purchases on Credit)</span>
+                          <div className="text-[11px] font-bold text-slate-600">مدت میں ادھار خریداری (Purchases on Credit)</div>
                           <Truck size={16} className="text-slate-500" />
                         </div>
                         <h4 className="text-xl font-black text-slate-800 mt-2 font-mono">
                           {selectedCurrency || "Rs"} {(accountsSummary["2001"]?.credit || 0).toLocaleString()}
                         </h4>
-                        <span className="text-[10px] text-slate-500 mt-1 block">کریڈٹ انٹریز (New Payables)</span>
+                        <div className="text-[10px] text-slate-500 mt-1 block">کریڈٹ انٹریز (New Payables)</div>
                       </div>
 
                       <div className="bg-emerald-50/60 border border-emerald-200 p-4 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-emerald-800">مدت میں ادائیگیاں (Supplier Payments)</span>
+                          <div className="text-[11px] font-bold text-emerald-800">مدت میں ادائیگیاں (Supplier Payments)</div>
                           <ArrowUpRight size={16} className="text-emerald-600" />
                         </div>
                         <h4 className="text-xl font-black text-emerald-900 mt-2 font-mono">
                           {selectedCurrency || "Rs"} {(accountsSummary["2001"]?.debit || 0).toLocaleString()}
                         </h4>
-                        <span className="text-[10px] text-emerald-700 mt-1 block">ڈیبٹ ادائیگی (Paid to Suppliers)</span>
+                        <div className="text-[10px] text-emerald-700 mt-1 block">ڈیبٹ ادائیگی (Paid to Suppliers)</div>
                       </div>
 
                       <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-600">کل رجسٹرڈ سپلائرز (Suppliers)</span>
+                          <div className="text-[11px] font-bold text-slate-600">کل رجسٹرڈ سپلائرز (Suppliers)</div>
                           <Building2 size={16} className="text-slate-500" />
                         </div>
                         <h4 className="text-xl font-black text-slate-800 mt-2 font-mono">
                           {partiesList.filter(p => p.type === "supplier" || p.type === "dual").length}
                         </h4>
-                        <span className="text-[10px] text-slate-500 mt-1 block">رجسٹرڈ وینڈر پروفائلز</span>
+                        <div className="text-[10px] text-slate-500 mt-1 block">رجسٹرڈ وینڈر پروفائلز</div>
                       </div>
                     </div>
                   )}
@@ -2575,12 +2531,12 @@ export default function GeneralLedgerPage() {
                     <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-slate-800">
+                          <div className="text-xs font-black text-slate-800">
                             {isCustomerReceivable ? "Customer Recovery & Balances Summary (گاہک ادھار وصولی رپورٹ)" : "Supplier Payables Ledger Summary (سپلائر وار ادائیگی سمری)"}
-                          </span>
-                          <span className="bg-rose-100 text-rose-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                          </div>
+                          <div className="bg-rose-100 text-rose-800 text-[10px] font-black px-2 py-0.5 rounded-full">
                             {partySummaries.filter(p => !onlyPendingDebtors || p.balance > 0).length} Accounts
-                          </span>
+                          </div>
                         </div>
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           {isCustomerReceivable 
@@ -2597,7 +2553,7 @@ export default function GeneralLedgerPage() {
                             onChange={(e) => setOnlyPendingDebtors(e.target.checked)}
                             className="rounded text-rose-600 border-slate-350 focus:ring-rose-500 w-4 h-4 cursor-pointer"
                           />
-                          <span>{isCustomerReceivable ? "صرف ادھار والے گاہک (Due > 0)" : "صرف واجبات والے سپلائرز"}</span>
+                          <div>{isCustomerReceivable ? "صرف ادھار والے گاہک (Due > 0)" : "صرف واجبات والے سپلائرز"}</div>
                         </label>
 
                         <Button 
@@ -2648,15 +2604,15 @@ export default function GeneralLedgerPage() {
                                           {p.name.charAt(0).toUpperCase()}
                                         </div>
                                         <div>
-                                          <span className="font-bold text-slate-900 block">{p.name}</span>
+                                          <div className="font-bold text-slate-900 block">{p.name}</div>
                                           {p.txCount > 0 ? (
-                                            <span className="text-[10px] text-slate-400">{p.txCount} period transactions</span>
+                                            <div className="text-[10px] text-slate-400">{p.txCount} period transactions</div>
                                           ) : p.hasOpening ? (
-                                            <span className="text-[10px] text-blue-600 font-semibold">Opening Khata Balance</span>
+                                            <div className="text-[10px] text-blue-600 font-semibold">Opening Khata Balance</div>
                                           ) : p.balance > 0 ? (
-                                            <span className="text-[10px] text-amber-600 font-semibold">Direct Khata Due</span>
+                                            <div className="text-[10px] text-amber-600 font-semibold">Direct Khata Due</div>
                                           ) : (
-                                            <span className="text-[10px] text-slate-400">Khata Active</span>
+                                            <div className="text-[10px] text-slate-400">Khata Active</div>
                                           )}
                                         </div>
                                       </div>
@@ -2670,15 +2626,15 @@ export default function GeneralLedgerPage() {
                                     </td>
                                     <td className="p-4 text-right font-mono font-black text-sm">
                                       {p.balance > 0 ? (
-                                        <span className="text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-xl font-bold">
+                                        <div className="text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-xl font-bold">
                                           {selectedCurrency || "Rs"} {p.balance.toLocaleString()}
-                                        </span>
+                                        </div>
                                       ) : p.balance < 0 ? (
-                                        <span className="text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl font-bold">
+                                        <div className="text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl font-bold">
                                           Advance: {selectedCurrency || "Rs"} {Math.abs(p.balance).toLocaleString()}
-                                        </span>
+                                        </div>
                                       ) : (
-                                        <span className="text-slate-400">0</span>
+                                        <div className="text-slate-400">0</div>
                                       )}
                                     </td>
                                     <td className="p-4">
@@ -2730,9 +2686,9 @@ export default function GeneralLedgerPage() {
                             <div>
                               <div className="flex items-center gap-2">
                                 <h3 className="text-base font-black text-white">{filteredPartyObj.name}</h3>
-                                <span className="bg-blue-500/30 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-400/30">
+                                <div className="bg-blue-500/30 text-blue-200 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-400/30">
                                   {isCustomerReceivable ? "Customer Khata" : "Supplier Khata"}
-                                </span>
+                                </div>
                               </div>
                               <p className="text-xs text-blue-200 mt-0.5 font-mono">
                                 📞 {filteredPartyObj.phone || "No phone registered"}
@@ -2742,12 +2698,12 @@ export default function GeneralLedgerPage() {
 
                           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-between md:justify-end">
                             <div className="text-right px-3 py-1 bg-white/10 rounded-2xl border border-white/15">
-                              <span className="text-[10px] text-blue-200 block font-semibold">
+                              <div className="text-[10px] text-blue-200 block font-semibold">
                                 {isCustomerReceivable ? "Net Receivable Due (لینے ہیں)" : "Net Payable (دینے ہیں)"}
-                              </span>
-                              <span className="text-lg font-black text-emerald-300 font-mono">
+                              </div>
+                              <div className="text-lg font-black text-emerald-300 font-mono">
                                 {selectedCurrency || "Rs"} {partyBal.toLocaleString()}
-                              </span>
+                              </div>
                             </div>
 
                             {waPhone && waPhone.length >= 10 && (
@@ -2776,13 +2732,13 @@ export default function GeneralLedgerPage() {
                       <div className="bg-white rounded-3xl border border-slate-150 shadow-sm overflow-hidden">
                         <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                           <div>
-                            <span className="text-xs font-black text-slate-800">
+                            <div className="text-xs font-black text-slate-800">
                               {isCustomerReceivable 
                                 ? `Customer Accounts Receivable Ledger • ${selectedPartyFilter !== "all" ? (partiesList.find(p => p.id === selectedPartyFilter)?.name || "Selected Customer") : "All Customers"}`
                                 : isSupplierPayable
                                 ? `Supplier Accounts Payable Ledger • ${selectedPartyFilter !== "all" ? (partiesList.find(p => p.id === selectedPartyFilter)?.name || "Selected Supplier") : "All Suppliers"}`
                                 : `${selectedTemplate?.name || "Account"} Statement`}
-                            </span>
+                            </div>
                             <p className="text-[10px] text-slate-400 mt-0.5">
                               Chronological posting transactions with Customer/Party names, Bill #, Debits, Credits and Running Due
                             </p>
@@ -2839,11 +2795,11 @@ export default function GeneralLedgerPage() {
                                         {(item.partyName || "C").charAt(0).toUpperCase()}
                                       </div>
                                       <div>
-                                        <span className="font-bold text-slate-900 block">{item.partyName || "Walk-in Customer"}</span>
+                                        <div className="font-bold text-slate-900 block">{item.partyName || "Walk-in Customer"}</div>
                                         {item.partyPhone && (
-                                          <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                                          <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
                                             <Phone size={10} /> {item.partyPhone}
-                                          </span>
+                                          </div>
                                         )}
                                       </div>
                                     </div>
@@ -2854,36 +2810,36 @@ export default function GeneralLedgerPage() {
                                   <div className="flex flex-col">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       {item.billRef && (
-                                        <span className="bg-slate-100 text-slate-700 text-[10px] px-2 py-0.5 rounded font-mono font-bold">
+                                        <div className="bg-slate-100 text-slate-700 text-[10px] px-2 py-0.5 rounded font-mono font-bold">
                                           {item.billRef}
-                                        </span>
+                                        </div>
                                       )}
-                                      <span className="font-bold text-slate-800">{item.narration || "Ledger Entry"}</span>
+                                      <div className="font-bold text-slate-800">{item.narration || "Ledger Entry"}</div>
                                     </div>
                                     {item.additionalDetails && (
-                                      <span className="text-[10px] text-blue-600 font-medium mt-0.5">
+                                      <div className="text-[10px] text-blue-600 font-medium mt-0.5">
                                         {item.additionalDetails}
-                                      </span>
+                                      </div>
                                     )}
-                                    <span className="text-[9px] text-slate-400 uppercase font-bold mt-0.5">
+                                    <div className="text-[9px] text-slate-400 uppercase font-bold mt-0.5">
                                       Source: {item.ref_type}
-                                    </span>
+                                    </div>
                                   </div>
                                 </td>
 
                                 <td className="p-4 text-right font-mono font-bold text-emerald-600 whitespace-nowrap">
                                   {item.debit > 0 ? (
-                                    <span>
+                                    <div>
                                       {selectedCurrency || "Rs"} {item.debit.toLocaleString()}
-                                    </span>
+                                    </div>
                                   ) : "-"}
                                 </td>
                                 
                                 <td className="p-4 text-right font-mono font-bold text-rose-600 whitespace-nowrap">
                                   {item.credit > 0 ? (
-                                    <span>
+                                    <div>
                                       {selectedCurrency || "Rs"} {item.credit.toLocaleString()}
-                                    </span>
+                                    </div>
                                   ) : "-"}
                                 </td>
 
@@ -2901,7 +2857,7 @@ export default function GeneralLedgerPage() {
                     {statementList.length > 0 && (
                       <div className="p-4 border-t border-slate-100 bg-slate-50/40 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <div className="flex items-center gap-2 text-slate-500 font-bold text-xs">
-                          <span>Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, statementList.length)} of {statementList.length} records</span>
+                          <div>Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, statementList.length)} of {statementList.length} records</div>
                           <select
                             value={itemsPerPage}
                             onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
@@ -2923,9 +2879,9 @@ export default function GeneralLedgerPage() {
                           >
                             Previous
                           </Button>
-                          <span className="px-2 font-bold text-slate-700 text-xs">
+                          <div className="px-2 font-bold text-slate-700 text-xs">
                             Page {currentPage} of {totalPages}
-                          </span>
+                          </div>
                           <Button
                             variant="outline"
                             size="sm"

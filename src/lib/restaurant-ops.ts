@@ -148,6 +148,7 @@ CREATE POLICY "restaurant_qr_orders_select_anon" ON restaurant_qr_orders FOR SEL
 export const RESTAURANT_RECIPE_COST_SQL = `
 ALTER TABLE product_recipes ADD COLUMN IF NOT EXISTS menu_size_id UUID REFERENCES restaurant_menu_sizes(id) ON DELETE SET NULL;
 ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS menu_size_id UUID REFERENCES restaurant_menu_sizes(id) ON DELETE SET NULL;
+ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(15, 4);
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cost_amount NUMERIC(15, 2) DEFAULT 0;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS profit_amount NUMERIC(15, 2) DEFAULT 0;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stock_deducted BOOLEAN DEFAULT false;

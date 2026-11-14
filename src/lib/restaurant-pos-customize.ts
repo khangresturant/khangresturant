@@ -19,35 +19,55 @@ export function inferSizeFromProductName(name: string): string | null {
   return null;
 }
 
+export type PosVariationOption = {
+  name: string;
+  priceAdd: number;
+  absolutePrice: number;
+  menuSizeId?: string | null;
+};
+
+/** POS sale options: DB sizes only when configured - no fake S/M/L and no Standard alongside sizes. */
+export function variationOptionsForPos(
+  product: { sale_price_single: number },
+  sizes: MenuSize[] | null | undefined
+): PosVariationOption[] {
+  if (sizes?.length) {
+    return [...sizes]
+      .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
+      .map((s) => ({
+        name: s.size_name,
+        priceAdd: Number(s.price) - Number(product.sale_price_single),
+        absolutePrice: Number(s.price),
+        menuSizeId: s.id,
+      }));
+  }
+  return [
+    {
+      name: "Standard",
+      priceAdd: 0,
+      absolutePrice: Number(product.sale_price_single) || 0,
+      menuSizeId: null,
+    },
+  ];
+}
+
 export function resolveDefaultVariation(
   product: { name: string; sale_price_single: number },
   sizes: MenuSize[] | null | undefined
 ): { name: string; priceAdd: number } {
-  const inferred = inferSizeFromProductName(product.name);
-  if (sizes?.length) {
-    const match =
-      (inferred &&
-        sizes.find((s) => s.size_name.toLowerCase() === inferred.toLowerCase())) ||
-      sizes.find((s) => s.size_name.toLowerCase() === "medium") ||
-      sizes[0];
-    if (match) {
-      return {
-        name: match.size_name,
-        priceAdd: Number(match.price) - product.sale_price_single,
-      };
-    }
-  }
-  if (inferred) {
-    const fallback = [
-      { name: "Small", priceAdd: -Math.round(product.sale_price_single * 0.15) },
-      { name: "Medium", priceAdd: 0 },
-      { name: "Large", priceAdd: Math.round(product.sale_price_single * 0.25) },
-      { name: "XL", priceAdd: Math.round(product.sale_price_single * 0.5) },
-    ];
-    const f = fallback.find((x) => x.name.toLowerCase() === inferred.toLowerCase());
-    if (f) return f;
-  }
-  return { name: "Medium", priceAdd: 0 };
+  const opts = variationOptionsForPos(product, sizes);
+  const first = opts[0];
+  return { name: first.name, priceAdd: first.priceAdd };
+}
+
+export function unitSalePriceForVariation(
+  product: { sale_price_single: number },
+  sizes: MenuSize[] | null | undefined,
+  selectedName: string
+): number {
+  const opts = variationOptionsForPos(product, sizes);
+  const hit = opts.find((o) => o.name === selectedName) || opts[0];
+  return (hit?.absolutePrice ?? Number(product.sale_price_single)) || 0;
 }
 
 export function buildCustomizedLineName(

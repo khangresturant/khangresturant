@@ -11,6 +11,8 @@ import {
   ClipboardList, Receipt, Bell, Tag, RefreshCw
 } from "lucide-react";
 import { RestaurantDealsTab } from "@/components/restaurant/RestaurantDealsTab";
+import { DealConfigureModal } from "@/components/restaurant/DealConfigureModal";
+import type { RestaurantDeal } from "@/lib/restaurant-deals";
 import { SettleOrderDialog, type SettleOrderData } from "@/components/restaurant/SettleOrderDialog";
 import { WaiterNotificationsDialog, useWaiterNotificationCount } from "@/components/restaurant/WaiterNotificationsDialog";
 import type { MenuSize } from "@/lib/restaurant-deals";
@@ -38,6 +40,7 @@ import {
   RESTAURANT_ORDER_STATUS_LABELS,
   canPrintGuestBill,
   canSettleOrder,
+  requiresBillingDeskForItemEdits,
   markBillPrinted,
   generateDailyOrderNumber,
   normalizeOrderStatus,
@@ -55,7 +58,25 @@ import {
   type RestaurantStation,
 } from "@/lib/restaurant-ops";
 import { dispatchKitchenTicket } from "@/lib/restaurant-kitchen";
-import { computeCartIngredientCost, restoreStockForInvoiceLines } from "@/lib/restaurant-recipe-cost";
+import {
+  shouldAutoAppendBillVersion,
+  persistRestaurantDraftBillEdit,
+  type RestaurantBillEditPersistLine,
+} from "@/lib/restaurant-bill-edit";
+import {
+  computeCartIngredientCost,
+  computeInvoiceIngredientCost,
+  restoreStockForInvoiceLines,
+  roundMoney,
+  type RestaurantCartCostLine,
+} from "@/lib/restaurant-recipe-cost";
+import { dealCostLinesFromInvoiceMeta } from "@/lib/restaurant-deal-invoice-lines";
+import {
+  buildDealReceiptIncludes,
+  invoiceItemDisplayName,
+  parseDealStockMeta,
+  restaurantReceiptItemLabels,
+} from "@/lib/restaurant-deal-slots";
 import {
   cartDiscountableSubtotal,
   computeRestaurantOrderDiscount,
@@ -64,6 +85,8 @@ import {
   buildCustomizedLineName,
   buildKitchenRemarks,
   resolveDefaultVariation,
+  variationOptionsForPos,
+  unitSalePriceForVariation,
   type CartAddOnLine,
 } from "@/lib/restaurant-pos-customize";
 import { Flame9PosHeaderBrand } from "@/components/branding/Flame9PosHeaderBrand";
@@ -121,14 +144,22 @@ type CartItem = {
   addOns?: CartAddOnLine[];
   notDiscounted?: boolean;
   isDeal?: boolean;
+  dealId?: string;
+  /** Persisted on invoice_items.packing_name for settle stock expansion. */
+  dealMeta?: string;
+  /** Per-slot COGS for combo deals (recipe + size). */
+  dealCostLines?: import("@/lib/restaurant-recipe-cost").RestaurantCartCostLine[];
 };
 
 export default function RestaurantPOSPage() {
-  const { shopId, userId, shopName, shopLogo, activeClosingBook, defaultTaxRate, defaultTaxType } = useShop();
+  const { shopId, userId, userName, shopName, shopLogo, activeClosingBook, defaultTaxRate, defaultTaxType } =
+    useShop();
   const { t, language } = useLanguage();
   const supabase = createClient();
   const searchParams = useSearchParams();
   const reservationDeepLinkRef = useRef(false);
+  const resumeDeepLinkRef = useRef(false);
+  const [resumeInvoiceId, setResumeInvoiceId] = useState<string | null>(null);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -170,6 +201,71 @@ export default function RestaurantPOSPage() {
   // Cart & Ordering States
   const [cart, setCart] = useState<CartItem[]>([]);
   const [dbItems, setDbItems] = useState<CartItem[]>([]); // Copy of items stored in active draft invoice
+  const [dealTitleById, setDealTitleById] = useState<Record<string, string>>({});
+  const [cartEpoch, setCartEpoch] = useState(0);
+  const CART_PANEL_MIN_W = 300;
+  const CART_PANEL_MAX_W = 580;
+  const CART_PANEL_DEFAULT_W = 380;
+  const [cartPanelWidth, setCartPanelWidth] = useState(CART_PANEL_DEFAULT_W);
+  const [cartPanelResizing, setCartPanelResizing] = useState(false);
+  const cartPanelWidthRef = useRef(CART_PANEL_DEFAULT_W);
+  const [cartPanelDesktop, setCartPanelDesktop] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const sync = () => setCartPanelDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("restaurant_pos_cart_panel_width");
+    if (saved) {
+      const w = parseInt(saved, 10);
+      if (!Number.isNaN(w) && w >= CART_PANEL_MIN_W && w <= CART_PANEL_MAX_W) {
+        setCartPanelWidth(w);
+        cartPanelWidthRef.current = w;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!cartPanelResizing) return;
+    const onMove = (e: MouseEvent) => {
+      const w = Math.min(
+        CART_PANEL_MAX_W,
+        Math.max(CART_PANEL_MIN_W, window.innerWidth - e.clientX)
+      );
+      cartPanelWidthRef.current = w;
+      setCartPanelWidth(w);
+    };
+    const onUp = () => {
+      setCartPanelResizing(false);
+      localStorage.setItem(
+        "restaurant_pos_cart_panel_width",
+        String(cartPanelWidthRef.current)
+      );
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [cartPanelResizing]);
+
+  const startCartPanelResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCartPanelResizing(true);
+  };
+
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("walkin");
   const [discount, setDiscount] = useState<number>(0);
   const [taxRate, setTaxRate] = useState<number>(0);
@@ -203,6 +299,7 @@ export default function RestaurantPOSPage() {
     }
   }, [receiptSettings.restaurantPrintKitchenOnKot]);
   const [leftPosTab, setLeftPosTab] = useState<"menu" | "deals" | "history">("menu");
+  const [dealToConfigure, setDealToConfigure] = useState<RestaurantDeal | null>(null);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [loadingRecentOrders, setLoadingRecentOrders] = useState(false);
   const [productSizes, setProductSizes] = useState<MenuSize[]>([]);
@@ -237,10 +334,41 @@ export default function RestaurantPOSPage() {
   const [isPrintingKOT, setIsPrintingKOT] = useState(false);
   const [showMobileCart, setShowMobileCart] = useState(false);
 
-  // Calculations
-  const cartSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const lineGroupKey = (item: CartItem) =>
+    `${item.productId}:${item.price}:${item.menuSizeId || ""}:${item.sizeLabel || ""}`;
+
+  const mergeCartWithBaseline = (baseline: CartItem[], staging: CartItem[]): CartItem[] => {
+    if (!staging.length) return baseline;
+    if (!baseline.length) return staging;
+    const map = new Map<string, CartItem>();
+    for (const b of baseline) {
+      map.set(lineGroupKey(b), JSON.parse(JSON.stringify(b)) as CartItem);
+    }
+    for (const c of staging) {
+      const k = lineGroupKey(c);
+      const ex = map.get(k);
+      if (ex) {
+        map.set(k, { ...ex, quantity: ex.quantity + c.quantity, cartItemId: c.cartItemId });
+      } else {
+        map.set(k, { ...c });
+      }
+    }
+    return [...map.values()];
+  };
+
+  const billingCart = React.useMemo(
+    () => mergeCartWithBaseline(dbItems, cart),
+    [dbItems, cart]
+  );
+
+  // Calculations - bill = already on KOT (baseline) + new cart lines (do not merge qty for display)
+  const baselineSubtotal = dbItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const stagingSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const cartSubtotal = roundMoney(baselineSubtotal + stagingSubtotal);
+  const baselineDishCount = dbItems.reduce((s, i) => s + i.quantity, 0);
+  const stagingDishCount = cart.reduce((s, i) => s + i.quantity, 0);
   const discountableSubtotal = cartDiscountableSubtotal(
-    cart.map((item) => ({
+    billingCart.map((item) => ({
       unitPrice: item.price,
       quantity: item.quantity,
       notDiscounted: item.notDiscounted,
@@ -257,36 +385,181 @@ export default function RestaurantPOSPage() {
     cartSubtotal + taxAmount - effectiveDiscount + deliveryFee + additionalCharges + tipAmount
   );
 
-  const [estimatedIngredientCost, setEstimatedIngredientCost] = useState(0);
-  useEffect(() => {
-    if (!shopId || cart.length === 0) {
-      setEstimatedIngredientCost(0);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const cost = await computeCartIngredientCost(
-        supabase,
-        cart.map((c) => ({
+  /** Staging cart empty but items already on KOT - footer shows Rs 0 until next add. */
+  const awaitingNextKot = cart.length === 0 && dbItems.length > 0;
+  const displayCartSubtotal = awaitingNextKot ? stagingSubtotal : cartSubtotal;
+  const displayTaxAmount = awaitingNextKot
+    ? taxType === "flat"
+      ? 0
+      : (stagingSubtotal * taxRate) / 100
+    : taxAmount;
+  const displayEffectiveDiscount = awaitingNextKot
+    ? 0
+    : effectiveDiscount;
+  const displayNetTotal = awaitingNextKot
+    ? Math.max(
+        0,
+        stagingSubtotal +
+          displayTaxAmount -
+          displayEffectiveDiscount +
+          (posMode === "delivery" ? deliveryFee : 0) +
+          additionalCharges +
+          tipAmount
+      )
+    : netTotal;
+
+  const cartItemsToCostLines = (items: CartItem[]): RestaurantCartCostLine[] => {
+    const lines: RestaurantCartCostLine[] = [];
+    for (const c of items) {
+      if (c.isDeal && c.dealCostLines?.length) {
+        lines.push(...c.dealCostLines);
+      } else {
+        lines.push({
           productId: c.productId,
           quantity: c.quantity,
           menuSizeId: c.menuSizeId,
           menuSizeName: c.sizeLabel,
-        }))
-      );
-      if (!cancelled) setEstimatedIngredientCost(cost);
+        });
+      }
+    }
+    return lines;
+  };
+
+  const stagingCostLines = React.useMemo(() => cartItemsToCostLines(cart), [cart]);
+  const baselineCostLines = React.useMemo(() => cartItemsToCostLines(dbItems), [dbItems]);
+  const showSplitCogs = cart.length > 0 && dbItems.length > 0;
+
+  const [stagingCogs, setStagingCogs] = useState(0);
+  const [baselineCogs, setBaselineCogs] = useState(0);
+
+  useEffect(() => {
+    if (!shopId || stagingCostLines.length === 0) {
+      setStagingCogs(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const cost = await computeCartIngredientCost(supabase, stagingCostLines);
+      if (!cancelled) setStagingCogs(roundMoney(cost));
     })();
     return () => {
       cancelled = true;
     };
-  }, [cart, shopId, supabase]);
+  }, [stagingCostLines, shopId, supabase]);
 
-  const estimatedProfit = Math.max(0, netTotal - estimatedIngredientCost);
+  useEffect(() => {
+    if (!shopId || baselineCostLines.length === 0) {
+      setBaselineCogs(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const cost = await computeCartIngredientCost(supabase, baselineCostLines);
+      if (!cancelled) setBaselineCogs(roundMoney(cost));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [baselineCostLines, shopId, supabase]);
+
+  useEffect(() => {
+    if (!shopId) return;
+    const needsHydrate = dbItems.some(
+      (it) => Boolean(it.dealMeta) && !(it.dealCostLines?.length)
+    );
+    if (!needsHydrate) return;
+    let cancelled = false;
+    (async () => {
+      const updated = await Promise.all(
+        dbItems.map(async (it) => {
+          if (!it.dealMeta || it.dealCostLines?.length) return it;
+          const dealCostLines = await dealCostLinesFromInvoiceMeta(supabase, it.dealMeta);
+          if (!dealCostLines.length) return it;
+          return { ...it, isDeal: true, dealCostLines };
+        })
+      );
+      if (cancelled) return;
+      const changed = updated.some((row, i) => row !== dbItems[i]);
+      if (changed) setDbItems(updated);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dbItems, shopId, supabase]);
+
+  useEffect(() => {
+    if (!shopId) return;
+    const ids = new Set<string>();
+    [...dbItems, ...cart].forEach((it) => {
+      if (!it.dealMeta) return;
+      const meta = parseDealStockMeta(it.dealMeta);
+      if (meta?.dealId && !meta.dealName) ids.add(meta.dealId);
+    });
+    if (!ids.size) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("restaurant_deals")
+        .select("id, name")
+        .eq("shop_id", shopId)
+        .in("id", [...ids]);
+      if (cancelled || !data?.length) return;
+      const map: Record<string, string> = {};
+      data.forEach((d: any) => {
+        map[d.id] = String(d.name || "").trim();
+      });
+      setDealTitleById((prev) => ({ ...prev, ...map }));
+      const refresh = (items: CartItem[]) =>
+        items.map((it) => {
+          if (!it.dealMeta || !it.isDeal) return it;
+          const labels = restaurantReceiptItemLabels(
+            "",
+            it.dealMeta,
+            it.name.replace(/^\s*🎯\s*/, ""),
+            map
+          );
+          const next = `🎯 ${labels.title}`;
+          return it.name === next ? it : { ...it, name: next };
+        });
+      setDbItems((prev) => refresh(prev));
+      setCart((prev) => refresh(prev));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dbItems, cart, shopId, supabase]);
+
+  const estimatedIngredientCost = showSplitCogs
+    ? roundMoney(stagingCogs + baselineCogs)
+    : awaitingNextKot
+      ? 0
+      : cart.length > 0
+        ? stagingCogs
+        : baselineCogs;
+
+  const displayEstimatedProfit = roundMoney(
+    Math.max(0, (awaitingNextKot ? displayNetTotal : netTotal) - estimatedIngredientCost)
+  );
 
   const activeOrderInvoiceId =
-    posMode === "dining" ? selectedTable?.active_invoice_id ?? null : takeawayInvoiceId;
+    resumeInvoiceId ??
+    (posMode === "dining" ? selectedTable?.active_invoice_id ?? null : takeawayInvoiceId);
   const orderFlowSettleReady =
     Boolean(activeOrderInvoiceId) && canSettleOrder(currentOrderStatus);
+
+  const cartToEditLines = (items: CartItem[]): RestaurantBillEditPersistLine[] =>
+    items.map((c) => {
+      const baseName = c.name.includes(" (") ? c.name.split(" (")[0]! : c.name;
+      return {
+        product_id: c.productId,
+        quantity: c.quantity,
+        unit_price: c.price,
+        subtotal: c.price * c.quantity,
+        packing_name: c.sizeLabel || null,
+        menu_size_id: c.menuSizeId || null,
+        products: { name: baseName, purchase_price_single: c.purchasePrice },
+      };
+    });
 
   // Fetch initial data
   const loadData = async () => {
@@ -505,6 +778,369 @@ export default function RestaurantPOSPage() {
     };
   }, [shopId]);
 
+  const mapInvoiceItemsToCart = React.useCallback(
+    (
+      invoiceItems: any[] | null | undefined,
+      dealNames: Record<string, string> = dealTitleById
+    ): CartItem[] =>
+      (invoiceItems || []).map((it: any, index: number) => {
+        const baseName = it.products?.name || "Unknown Item";
+        const dealMeta =
+          typeof it.packing_name === "string" && it.packing_name.includes("DEAL_ID:")
+            ? it.packing_name
+            : undefined;
+        if (dealMeta) {
+          const labels = restaurantReceiptItemLabels(
+            baseName,
+            dealMeta,
+            it.custom_name,
+            dealNames
+          );
+          const includes = buildDealReceiptIncludes(dealMeta);
+          return {
+            cartItemId: it.id || `${it.product_id || "item"}-${index}`,
+            productId: it.product_id,
+            name: `🎯 ${labels.title}`,
+            price: Number(it.unit_price),
+            purchasePrice: Number(it.products?.purchase_price_single || 0),
+            quantity: Number(it.quantity),
+            remarks: includes || "",
+            sizeLabel: undefined,
+            menuSizeId: it.menu_size_id || undefined,
+            isDeal: true,
+            dealMeta,
+          };
+        }
+        const displayName = it.packing_name
+          ? `${baseName} (${it.packing_name})`
+          : baseName;
+        return {
+          cartItemId: it.id || `${it.product_id || "item"}-${index}`,
+          productId: it.product_id,
+          name: displayName,
+          price: Number(it.unit_price),
+          purchasePrice: Number(it.products?.purchase_price_single || 0),
+          quantity: Number(it.quantity),
+          remarks: "",
+          sizeLabel: it.packing_name || undefined,
+          menuSizeId: it.menu_size_id || undefined,
+          isDeal: false,
+          dealMeta: undefined,
+        };
+      }),
+    [dealTitleById]
+  );
+
+  const cartDiffersFromBaseline = (live: CartItem[], baseline: CartItem[]) => {
+    if (live.length !== baseline.length) return true;
+    const keys = new Set([...live, ...baseline].map(lineGroupKey));
+    for (const key of keys) {
+      const qty = (rows: CartItem[]) =>
+        rows.filter((i) => lineGroupKey(i) === key).reduce((s, i) => s + i.quantity, 0);
+      if (qty(live) !== qty(baseline)) return true;
+    }
+    return false;
+  };
+
+  const commitCartBaseline = (source?: CartItem[]) => {
+    const snapSource = source ?? cart;
+    const snapshot = JSON.parse(JSON.stringify(snapSource)) as CartItem[];
+    setDbItems(snapshot);
+    setCartEpoch((n) => n + 1);
+  };
+
+  const applyCartFromInvoiceRows = (
+    invoiceItems: any[] | null | undefined,
+    meta?: { restaurant_order_status?: string | null; order_number?: string | null }
+  ) => {
+    const loadedCart = mapInvoiceItemsToCart(invoiceItems);
+    const snapshot = JSON.parse(JSON.stringify(loadedCart)) as CartItem[];
+    setCart(loadedCart);
+    setDbItems(snapshot);
+    if (meta?.restaurant_order_status) {
+      setCurrentOrderStatus(normalizeOrderStatus(meta.restaurant_order_status) || "pending");
+    }
+    if (meta?.order_number) setOrderNumber(meta.order_number);
+    setCartEpoch((n) => n + 1);
+  };
+
+  /** KOT baseline only (invoice already sent) - keeps cart empty, avoids duplicate KOT qty. */
+  const applyBaselineFromInvoiceRows = (
+    invoiceItems: any[] | null | undefined,
+    meta?: { restaurant_order_status?: string | null; order_number?: string | null }
+  ) => {
+    const loadedCart = mapInvoiceItemsToCart(invoiceItems);
+    const snapshot = JSON.parse(JSON.stringify(loadedCart)) as CartItem[];
+    setCart([]);
+    setDbItems(snapshot);
+    if (meta?.restaurant_order_status) {
+      setCurrentOrderStatus(normalizeOrderStatus(meta.restaurant_order_status) || "pending");
+    }
+    if (meta?.order_number) setOrderNumber(meta.order_number);
+    setCartEpoch((n) => n + 1);
+  };
+
+  const fetchInvoiceCartSnapshot = async (
+    invoiceId: string
+  ): Promise<{
+    items: any[] | null;
+    meta?: { restaurant_order_status?: string | null; order_number?: string | null };
+  } | null> => {
+    try {
+      const { data: invData, error } = await supabase
+        .from("invoices")
+        .select(
+          `
+          restaurant_order_status,
+          order_number,
+          invoice_items (
+            id,
+            product_id,
+            quantity,
+            unit_price,
+            packing_name,
+            menu_size_id,
+            products ( name, purchase_price_single )
+          )
+        `
+        )
+        .eq("id", invoiceId)
+        .maybeSingle();
+
+      if (!error && invData && Array.isArray(invData.invoice_items)) {
+        return {
+          items: invData.invoice_items,
+          meta: invData,
+        };
+      }
+    } catch (err: unknown) {
+      console.warn("fetchInvoiceCartSnapshot nested:", err);
+    }
+
+    try {
+      const [{ data: items, error: itemsErr }, { data: invMeta }] = await Promise.all([
+        supabase
+          .from("invoice_items")
+          .select(
+            "id, product_id, quantity, unit_price, packing_name, custom_name, menu_size_id, products ( name, purchase_price_single )"
+          )
+          .eq("invoice_id", invoiceId),
+        supabase
+          .from("invoices")
+          .select("restaurant_order_status, order_number")
+          .eq("id", invoiceId)
+          .maybeSingle(),
+      ]);
+      if (!itemsErr && items) {
+        return { items, meta: invMeta || undefined };
+      }
+    } catch (err: unknown) {
+      console.warn("fetchInvoiceCartSnapshot fallback:", err);
+    }
+    return null;
+  };
+
+  /** Reload visible cart + baseline (resume bill / table load). */
+  const refreshCartFromInvoice = async (invoiceId: string) => {
+    const snap = await fetchInvoiceCartSnapshot(invoiceId);
+    if (snap?.items) {
+      applyCartFromInvoiceRows(snap.items, snap.meta);
+      return;
+    }
+    commitCartBaseline();
+  };
+
+  /** After KOT print: clear staging cart; bill stays on table / billing desk. */
+  const clearCartAfterKot = async (activeInvoiceId: string, localBaseline?: CartItem[]) => {
+    const immediate: CartItem[] =
+      localBaseline && localBaseline.length > 0
+        ? (JSON.parse(JSON.stringify(localBaseline)) as CartItem[])
+        : mergeCartWithBaseline(dbItems, cart);
+
+    setCart([]);
+    setDiscount(0);
+    setDiscountPercent(0);
+    setTaxRate(0);
+    setTipAmount(0);
+    setAdditionalCharges(0);
+    if (posMode !== "delivery") setDeliveryFee(0);
+    setStagingCogs(0);
+    setBaselineCogs(0);
+    setCartEpoch((n) => n + 1);
+
+    if (immediate.length > 0) {
+      setDbItems(JSON.parse(JSON.stringify(immediate)) as CartItem[]);
+      setCartEpoch((n) => n + 1);
+    }
+
+    const snap = await fetchInvoiceCartSnapshot(activeInvoiceId);
+    if (snap?.items?.length) {
+      applyBaselineFromInvoiceRows(snap.items, snap.meta);
+    } else if (immediate.length > 0) {
+      setCart([]);
+      setDbItems(JSON.parse(JSON.stringify(immediate)) as CartItem[]);
+      setCartEpoch((n) => n + 1);
+    } else {
+      setDbItems([]);
+      setCartEpoch((n) => n + 1);
+    }
+
+    try {
+      const { data: invRow } = await supabase
+        .from("invoices")
+        .select(
+          "total_amount, discount, discount_percentage, tax_rate, restaurant_order_status, order_number"
+        )
+        .eq("id", activeInvoiceId)
+        .maybeSingle();
+      if (invRow) {
+        setCurrentOrderStatus(
+          normalizeOrderStatus(invRow.restaurant_order_status) || "pending"
+        );
+        if (invRow.order_number) setOrderNumber(invRow.order_number);
+      }
+    } catch {
+      /* non-fatal */
+    }
+
+    if (posMode !== "dining" && activeInvoiceId) {
+      setTakeawayInvoiceId(activeInvoiceId);
+    }
+    if (posMode === "dining" && selectedTable && activeInvoiceId) {
+      setSelectedTable({ ...selectedTable, active_invoice_id: activeInvoiceId });
+    }
+    setCartEpoch((n) => n + 1);
+  };
+
+  const syncDraftInvoiceFromCart = async (
+    activeInvoiceId: string
+  ): Promise<{ versionSaved: boolean; revisionCount?: number }> => {
+    const { data: prevInv } = await supabase
+      .from("invoices")
+      .select("stock_deducted, restaurant_order_status, bill_printed_at, edit_history, is_edited")
+      .eq("id", activeInvoiceId)
+      .maybeSingle();
+    const { data: prevItems } = await supabase
+      .from("invoice_items")
+      .select(
+        "product_id, quantity, unit_price, packing_name, custom_name, menu_size_id, products ( name, purchase_price_single )"
+      )
+      .eq("invoice_id", activeInvoiceId);
+
+    const previousLines: RestaurantBillEditPersistLine[] = (prevItems || []).map((it: any) => ({
+      product_id: it.product_id,
+      quantity: Number(it.quantity),
+      unit_price: Number(it.unit_price),
+      subtotal: Number(it.unit_price) * Number(it.quantity),
+      packing_name: it.packing_name,
+      menu_size_id: it.menu_size_id,
+      products: it.products,
+    }));
+    const nextLines = cartToEditLines(billingCart);
+    const recordVersion = shouldAutoAppendBillVersion(previousLines, nextLines);
+
+    const prevStatus = normalizeOrderStatus(prevInv?.restaurant_order_status);
+    const wasPostPrint =
+      requiresBillingDeskForItemEdits(prevStatus) || Boolean(prevInv?.bill_printed_at);
+    const nextStatus = wasPostPrint
+      ? "pending"
+      : prevStatus && prevStatus !== "pending" && prevStatus !== "cancelled"
+        ? prevStatus
+        : "pending";
+
+    const metaPatch = {
+      discount_percentage: discountPercent,
+      customer_name: customerName || null,
+      customer_phone: customerPhone || null,
+      customer_address: customerAddress || null,
+      delivery_fee: posMode === "delivery" ? deliveryFee : 0,
+      additional_charges: additionalCharges + tipAmount,
+      special_instructions: orderSpecialInstructions || null,
+      waiter_id: posMode === "dining" ? selectedWaiterId || null : null,
+      rider_id: posMode === "delivery" ? selectedRiderId || null : null,
+    };
+
+    if (recordVersion) {
+      const result = await persistRestaurantDraftBillEdit(supabase, {
+        invoiceId: activeInvoiceId,
+        previousItemRows: previousLines,
+        nextItemRows: nextLines,
+        discount: effectiveDiscount,
+        taxRate: taxRate,
+        editedBy: userName ?? undefined,
+        nextOrderStatus: nextStatus ?? undefined,
+        clearBillPrintedAt: wasPostPrint,
+      });
+      await supabase.from("invoices").update(metaPatch).eq("id", activeInvoiceId);
+      setCurrentOrderStatus(nextStatus);
+      return {
+        versionSaved: true,
+        revisionCount: result.updatedHistory.length,
+      };
+    }
+
+    if (prevInv?.stock_deducted && previousLines.length) {
+      await restoreStockForInvoiceLines(
+        supabase,
+        invoiceLinesForCost(
+          previousLines.map((it) => ({
+            product_id: it.product_id,
+            quantity: it.quantity,
+            packing_name: it.packing_name,
+            menu_size_id: it.menu_size_id,
+          }))
+        )
+      );
+    }
+
+    await supabase.from("invoice_items").delete().eq("invoice_id", activeInvoiceId);
+    const invoiceItems = mapCartToInvoiceRows(activeInvoiceId, billingCart);
+    if (invoiceItems.length) {
+      await supabase.from("invoice_items").insert(invoiceItems);
+    }
+
+    await supabase
+      .from("invoices")
+      .update({
+        total_amount: netTotal,
+        tax_amount: taxAmount,
+        discount: effectiveDiscount,
+        tax_rate: taxRate,
+        restaurant_order_status: nextStatus,
+        ...(wasPostPrint ? { bill_printed_at: null } : {}),
+        ...metaPatch,
+      })
+      .eq("id", activeInvoiceId);
+
+    await applyRestaurantOrderCostAndStock(
+      supabase,
+      activeInvoiceId,
+      invoiceLinesForCost(
+        invoiceItems.map((it) => ({
+          product_id: it.product_id,
+          quantity: it.quantity,
+          packing_name: it.packing_name,
+          menu_size_id: it.menu_size_id,
+        }))
+      ),
+      netTotal
+    );
+    setCurrentOrderStatus(nextStatus);
+    return { versionSaved: false };
+  };
+
+  useEffect(() => {
+    if (!activeOrderInvoiceId || !shopId) return;
+    const invoiceId = activeOrderInvoiceId;
+    const timer = setInterval(() => {
+      if (isSubmittingKOT) return;
+      if (cart.length === 0) return;
+      if (cartDiffersFromBaseline(cart, dbItems)) return;
+      void refreshCartFromInvoice(invoiceId);
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [activeOrderInvoiceId, shopId, isSubmittingKOT, cart, dbItems]);
+
   // Load Active Table Order when table is selected
   const handleSelectTable = async (table: RestTable) => {
     setSelectedTable(table);
@@ -550,20 +1186,10 @@ export default function RestaurantPOSPage() {
           .single();
 
         if (invData) {
-          const loadedCart: CartItem[] = (invData.invoice_items || []).map((it: any, index: number) => ({
-            cartItemId: it.id || `${it.product_id || "item"}-${index}-${Date.now()}`,
-            productId: it.product_id,
-            name: it.products?.name || "Unknown Item",
-            price: Number(it.unit_price),
-            purchasePrice: Number(it.products?.purchase_price_single || 0),
-            quantity: Number(it.quantity),
-            remarks: it.remarks || "",
-            sizeLabel: it.packing_name || undefined,
-            menuSizeId: it.menu_size_id || undefined,
-          }));
-
+          const loadedCart = mapInvoiceItemsToCart(invData.invoice_items);
           setCart(loadedCart);
           setDbItems(JSON.parse(JSON.stringify(loadedCart)));
+          setCartEpoch((n) => n + 1);
           setSelectedCustomerId(invData.party_id || "walkin");
           setDiscount(Number(invData.discount || 0));
           setTaxRate(Number(invData.tax_rate || 0));
@@ -602,6 +1228,91 @@ export default function RestaurantPOSPage() {
       if (guest) setCustomerName(guest);
       if (phone) setCustomerPhone(phone);
     })();
+  }, [shopId, loading, tables, searchParams]);
+
+  const loadInvoiceIntoPosForEdit = async (invoiceId: string) => {
+    if (!shopId) return;
+    try {
+      const { data: inv, error } = await supabase
+        .from("invoices")
+        .select(
+          `
+          id, status, service_type, table_id, party_id, discount, tax_rate,
+          restaurant_order_status, order_number, customer_name, customer_phone, customer_address,
+          delivery_fee, additional_charges, special_instructions, discount_percentage, waiter_id, rider_id,
+          invoice_items (
+            id, product_id, quantity, unit_price, packing_name, custom_name, menu_size_id,
+            products ( name, purchase_price_single )
+          )
+        `
+        )
+        .eq("id", invoiceId)
+        .eq("shop_id", shopId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!inv || inv.status !== "draft") {
+        toast.error(language === "en" ? "Open draft bill not found." : "ڈرافٹ بل نہیں ملا۔");
+        return;
+      }
+
+      const service = (inv.service_type || "takeaway") as "dining" | "takeaway" | "delivery";
+      setPosMode(service);
+      setResumeInvoiceId(invoiceId);
+
+      if (service === "dining") {
+        const table =
+          tables.find((t) => t.active_invoice_id === invoiceId) ||
+          (inv.table_id ? tables.find((t) => t.id === inv.table_id) : undefined);
+        if (table) {
+          await handleSelectTable(table);
+        } else {
+          const loadedCart = mapInvoiceItemsToCart(inv.invoice_items);
+          setCart(loadedCart);
+          setDbItems(JSON.parse(JSON.stringify(loadedCart)));
+          setCartEpoch((n) => n + 1);
+        }
+      } else {
+        setTakeawayInvoiceId(invoiceId);
+        const loadedCart = mapInvoiceItemsToCart(inv.invoice_items);
+        setCart(loadedCart);
+        setDbItems(JSON.parse(JSON.stringify(loadedCart)));
+        setCartEpoch((n) => n + 1);
+      }
+
+      setSelectedCustomerId(inv.party_id || "walkin");
+      setDiscount(Number(inv.discount || 0));
+      setTaxRate(Number(inv.tax_rate || 0));
+      setDiscountPercent(Number(inv.discount_percentage || 0));
+      setSelectedWaiterId(inv.waiter_id || "");
+      setSelectedRiderId(inv.rider_id || "");
+      setCurrentOrderStatus(normalizeOrderStatus(inv.restaurant_order_status) || "pending");
+      setOrderNumber(inv.order_number || null);
+      setCustomerName(inv.customer_name || "");
+      setCustomerPhone(inv.customer_phone || "");
+      setCustomerAddress(inv.customer_address || "");
+      setDeliveryFee(Number(inv.delivery_fee || 0));
+      setAdditionalCharges(Number(inv.additional_charges || 0));
+      setOrderSpecialInstructions(inv.special_instructions || "");
+      setShowMobileCart(true);
+
+      toast.success(
+        language === "en"
+          ? "Bill loaded - change cart like a new order, then Send KOT to save edit + version."
+          : "بل لوڈ - کارٹ بدلیں، پھر Send KOT (ورژن + pending)۔"
+      );
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg || "Failed to load bill");
+    }
+  };
+
+  useEffect(() => {
+    if (!shopId || loading) return;
+    const invId = searchParams.get("resumeInvoice");
+    if (!invId || resumeDeepLinkRef.current) return;
+    resumeDeepLinkRef.current = true;
+    void loadInvoiceIntoPosForEdit(invId);
   }, [shopId, loading, tables, searchParams]);
 
   // Add Product to Cart (Default / Retail)
@@ -655,15 +1366,18 @@ export default function RestaurantPOSPage() {
     });
   };
 
-  const mapCartToInvoiceRows = (invoiceId: string) =>
-    cart.map((item) => ({
+  const mapCartToInvoiceRows = (invoiceId: string, items: CartItem[] = cart) =>
+    items.map((item) => ({
       invoice_id: invoiceId,
       product_id: item.productId,
       quantity: item.quantity,
       unit_price: item.price,
       subtotal: item.price * item.quantity,
-      packing_name: item.sizeLabel || null,
+      packing_name: item.dealMeta || item.sizeLabel || null,
       menu_size_id: item.menuSizeId || null,
+      custom_name: item.isDeal
+        ? item.name.replace(/^\s*🎯\s*/, "").trim() || null
+        : null,
     }));
 
   const handleProductClick = async (product: DBProduct) => {
@@ -720,6 +1434,9 @@ export default function RestaurantPOSPage() {
     cartItemId: string; productId: string; name: string; price: number;
     purchasePrice: number; quantity: number; remarks: string;
     isDeal?: boolean;
+    dealId?: string;
+    dealMeta?: string;
+    dealCostLines?: import("@/lib/restaurant-recipe-cost").RestaurantCartCostLine[];
   }) => {
     setCart((prev) => [
       ...prev,
@@ -728,6 +1445,9 @@ export default function RestaurantPOSPage() {
         cartItemId: item.cartItemId,
         notDiscounted: false,
         isDeal: true,
+        dealId: item.dealId,
+        dealMeta: item.dealMeta,
+        dealCostLines: item.dealCostLines,
       },
     ]);
     toast.success("Deal added to order");
@@ -818,31 +1538,69 @@ export default function RestaurantPOSPage() {
 
     setIsSubmittingKOT(true);
     try {
+      let activeInvoiceId =
+        resumeInvoiceId ??
+        (posMode === "dining" ? selectedTable?.active_invoice_id || null : takeawayInvoiceId);
+
       // 1. Compute incremental KOT items
-      const kotItems = cart.map(item => {
-        const dbQty = dbItems.find(d => d.cartItemId === item.cartItemId)?.quantity || 0;
+      const kotItems = cart.map((item) => {
+        const dbQty =
+          dbItems.find((d) => d.cartItemId === item.cartItemId)?.quantity ??
+          dbItems
+            .filter(
+              (d) =>
+                d.productId === item.productId &&
+                d.price === item.price &&
+                (d.menuSizeId || null) === (item.menuSizeId || null)
+            )
+            .reduce((sum, d) => sum + d.quantity, 0);
         const diffQty = item.quantity - dbQty;
         if (diffQty > 0) {
+          const labels = restaurantReceiptItemLabels(
+            item.name,
+            item.dealMeta || item.sizeLabel || null,
+            null,
+            dealTitleById
+          );
+          const kitchenNote = item.isDeal
+            ? item.remarks?.trim() || labels.detail || ""
+            : item.remarks;
           return {
             product_id: item.productId,
-            name: item.name,
+            name: item.isDeal ? labels.title : item.name,
             quantity: diffQty,
-            remarks: item.remarks,
-            sizeLabel: item.sizeLabel || null,
+            remarks: kitchenNote,
+            sizeLabel: item.isDeal ? null : item.sizeLabel || null,
           };
         }
         return null;
       }).filter(Boolean) as any[];
 
-      if (kotItems.length === 0) {
+      const cartDirty = cartDiffersFromBaseline(cart, dbItems);
+
+      if (kotItems.length === 0 && !cartDirty) {
         toast.info("No new items or quantities added since last KOT.");
         setIsSubmittingKOT(false);
         return;
       }
 
-      let activeInvoiceId = posMode === "dining" 
-        ? (selectedTable?.active_invoice_id || null) 
-        : takeawayInvoiceId;
+      const baselineForKot = JSON.parse(JSON.stringify(billingCart)) as CartItem[];
+
+      if (kotItems.length === 0 && cartDirty && activeInvoiceId) {
+        const syncMeta = await syncDraftInvoiceFromCart(activeInvoiceId);
+        await clearCartAfterKot(activeInvoiceId, baselineForKot);
+        toast.success(
+          syncMeta.versionSaved
+            ? language === "en"
+              ? `Bill reprocessed - edit version v${syncMeta.revisionCount ?? 1} saved automatically.`
+              : `بل دوبارہ پروسیس - ورژن v${syncMeta.revisionCount ?? 1} خود محفوظ۔`
+            : language === "en"
+              ? "Cart synced with bill."
+              : "کارٹ بل کے ساتھ اپڈیٹ ہو گیا۔"
+        );
+        setIsSubmittingKOT(false);
+        return;
+      }
 
       // 2. Create Draft Invoice if Dining/Takeaway and not already created
       if (!activeInvoiceId) {
@@ -917,76 +1675,9 @@ export default function RestaurantPOSPage() {
 
       setCurrentOrderStatus("pending");
 
-      // 5. Sync all items to invoice_items + recipe cost / stock (POSRESTURANT)
+      let syncMeta: { versionSaved: boolean; revisionCount?: number } = { versionSaved: false };
       if (activeInvoiceId) {
-        const { data: prevInv } = await supabase
-          .from("invoices")
-          .select("stock_deducted, restaurant_order_status")
-          .eq("id", activeInvoiceId)
-          .maybeSingle();
-        const { data: prevItems } = await supabase
-          .from("invoice_items")
-          .select("product_id, quantity, packing_name, menu_size_id")
-          .eq("invoice_id", activeInvoiceId);
-
-        if (prevInv?.stock_deducted && (prevItems || []).length) {
-          await restoreStockForInvoiceLines(
-            supabase,
-            invoiceLinesForCost(
-              (prevItems || []).map((it: any) => ({
-                product_id: it.product_id,
-                quantity: Number(it.quantity),
-                packing_name: it.packing_name,
-                menu_size_id: it.menu_size_id,
-              }))
-            )
-          );
-        }
-
-        await supabase.from("invoice_items").delete().eq("invoice_id", activeInvoiceId);
-
-        const invoiceItems = mapCartToInvoiceRows(activeInvoiceId);
-        await supabase.from("invoice_items").insert(invoiceItems);
-
-        const keepStatus = normalizeOrderStatus(prevInv?.restaurant_order_status);
-        const nextStatus =
-          keepStatus && keepStatus !== "pending" && keepStatus !== "cancelled"
-            ? keepStatus
-            : "pending";
-
-        await supabase
-          .from("invoices")
-          .update({
-            total_amount: netTotal,
-            tax_amount: taxAmount,
-            discount: effectiveDiscount,
-            discount_percentage: discountPercent,
-            tax_rate: taxRate,
-            customer_name: customerName || null,
-            customer_phone: customerPhone || null,
-            customer_address: customerAddress || null,
-            delivery_fee: posMode === "delivery" ? deliveryFee : 0,
-            additional_charges: additionalCharges + tipAmount,
-            special_instructions: orderSpecialInstructions || null,
-            restaurant_order_status: nextStatus,
-            waiter_id: posMode === "dining" ? selectedWaiterId || null : null,
-            rider_id: posMode === "delivery" ? selectedRiderId || null : null,
-          })
-          .eq("id", activeInvoiceId);
-
-        await applyRestaurantOrderCostAndStock(
-          supabase,
-          activeInvoiceId,
-          invoiceLinesForCost(
-            invoiceItems.map((it) => ({
-              product_id: it.product_id,
-              quantity: it.quantity,
-              packing_name: it.packing_name,
-              menu_size_id: it.menu_size_id,
-            }))
-          ),
-          netTotal
-        );
+        syncMeta = await syncDraftInvoiceFromCart(activeInvoiceId);
       }
 
       // 6. Print KOT Slip
@@ -1018,13 +1709,24 @@ export default function RestaurantPOSPage() {
         );
       }
 
-      // 7. Sync local DBItems
-      setDbItems(JSON.parse(JSON.stringify(cart)));
+      if (activeInvoiceId) {
+        await clearCartAfterKot(activeInvoiceId, baselineForKot);
+      } else {
+        commitCartBaseline(baselineForKot);
+        setCart([]);
+        setCartEpoch((n) => n + 1);
+      }
+
       toast.success(
-        language === "en"
-          ? `KOT sent to kitchen - open Kitchen KDS (top bar) to see tickets.`
-          : "KOT کچن میں - اوپر Kitchen KDS کھولیں۔"
+        syncMeta.versionSaved
+          ? language === "en"
+            ? `KOT sent - edit version v${syncMeta.revisionCount ?? 1} saved (reprocess).`
+            : `KOT بھیجا - ورژن v${syncMeta.revisionCount ?? 1} خود محفوظ۔`
+          : language === "en"
+            ? "KOT sent to kitchen - cart updated."
+            : "KOT کچن میں - کارٹ اپڈیٹ۔"
       );
+      void loadRecentOrders();
     } catch (err: any) {
       toast.error("Failed to send KOT: " + err.message);
     } finally {
@@ -1194,13 +1896,17 @@ export default function RestaurantPOSPage() {
   };
 
   const resolveActiveBillLines = async (invoiceId: string): Promise<RestaurantReceiptLine[]> => {
-    const local = cart.length > 0 ? cart : dbItems;
-    if (local.length > 0) {
-      return local.map((c) => ({
-        name: c.sizeLabel ? `${c.name} (${c.sizeLabel})` : c.name,
-        quantity: c.quantity,
-        unit_price: c.price,
-      }));
+    if (billingCart.length > 0) {
+      return billingCart.map((c) => {
+        const packing = c.dealMeta || c.sizeLabel || null;
+        const labels = restaurantReceiptItemLabels(c.name, packing);
+        return {
+          name: labels.title,
+          detail: labels.detail,
+          quantity: c.quantity,
+          unit_price: c.price,
+        };
+      });
     }
     const { data } = await supabase
       .from("invoice_items")
@@ -1279,7 +1985,7 @@ export default function RestaurantPOSPage() {
       settings: receiptSettings,
       title: `Guest Receipt #${lastInvoice.invoice?.id?.slice(0, 8).toUpperCase() || "Receipt"}`,
       onSuccess: () => toast.success("Printing guest receipt..."),
-      onError: (err) => toast.error("Printing failed: " + ((err as any)?.message || "Check printer"))
+      onError: (err) => toast.error("Printing failed: " + (err?.message || "Check printer"))
     });
   };
 
@@ -1301,8 +2007,10 @@ export default function RestaurantPOSPage() {
   const [settleOrderData, setSettleOrderData] = useState<SettleOrderData | null>(null);
 
   const openSettleOrderModal = async () => {
-    if (cart.length === 0) {
-      toast.error("Your cart is empty.");
+    if (billingCart.length === 0) {
+      toast.error(
+        language === "en" ? "No items on this bill yet." : "بل میں کوئی آئٹم نہیں۔"
+      );
       return;
     }
     if (!shopId) return;
@@ -1361,16 +2069,15 @@ export default function RestaurantPOSPage() {
       return;
     }
 
-    const localCart = cart.length > 0 ? cart : dbItems;
     let invoiceItemsForSettle: SettleOrderData["invoice_items"];
-    if (localCart.length > 0) {
-      invoiceItemsForSettle = localCart.map((c) => ({
+    if (billingCart.length > 0) {
+      invoiceItemsForSettle = billingCart.map((c) => ({
         product_id: c.productId,
         quantity: c.quantity,
         unit_price: c.price,
         menu_size_id: c.menuSizeId || null,
-        menu_size_name: c.sizeLabel || null,
-        packing_name: c.sizeLabel || null,
+        menu_size_name: c.isDeal ? null : c.sizeLabel || null,
+        packing_name: c.dealMeta || c.sizeLabel || null,
       }));
     } else {
       const { data: invItems } = await supabase
@@ -1451,7 +2158,7 @@ export default function RestaurantPOSPage() {
     }
   };
 
-  const loadRecentOrders = async () => {
+  const loadRecentOrders = React.useCallback(async () => {
     if (!shopId) return;
     setLoadingRecentOrders(true);
     try {
@@ -1462,6 +2169,8 @@ export default function RestaurantPOSPage() {
           order_number,
           created_at,
           total_amount,
+          cost_amount,
+          profit_amount,
           status,
           restaurant_order_status,
           service_type,
@@ -1474,6 +2183,8 @@ export default function RestaurantPOSPage() {
             product_id,
             quantity,
             unit_price,
+            packing_name,
+            menu_size_id,
             products ( name )
           )
         `)
@@ -1482,14 +2193,91 @@ export default function RestaurantPOSPage() {
         .limit(30);
 
       if (!error && data) {
-        setRecentOrders(data);
+        const liveInvoiceId =
+          activeOrderInvoiceId ??
+          (posMode === "dining" ? selectedTable?.active_invoice_id ?? null : takeawayInvoiceId);
+
+        const enriched = await Promise.all(
+          data.map(async (ord: any) => {
+            const isLive = Boolean(liveInvoiceId && ord.id === liveInvoiceId);
+            let items = ord.invoice_items || [];
+            let displayTotal = Number(ord.total_amount || 0);
+
+            if (isLive && billingCart.length > 0) {
+              items = billingCart.map((c) => ({
+                product_id: c.productId,
+                quantity: c.quantity,
+                unit_price: c.price,
+                packing_name: c.dealMeta || c.sizeLabel || null,
+                menu_size_id: c.menuSizeId || null,
+                products: { name: c.name.replace(/^\s*🎯\s*/, "") },
+              }));
+              displayTotal = netTotal;
+            }
+
+            let cost = Number(ord.cost_amount);
+            let profit = Number(ord.profit_amount);
+            const shouldEstimateCost =
+              isLive || ord.status === "draft" && (!Number.isFinite(cost) || cost <= 0);
+
+            if (shouldEstimateCost) {
+              if (isLive && billingCart.length > 0) {
+                const cartCostLines = cartItemsToCostLines(billingCart);
+                if (cartCostLines.length) {
+                  cost = roundMoney(await computeCartIngredientCost(supabase, cartCostLines));
+                }
+              } else {
+                const costLines = invoiceLinesForCost(
+                  items.map((it: any) => ({
+                    product_id: it.product_id,
+                    quantity: Number(it.quantity),
+                    packing_name: it.packing_name,
+                    menu_size_id: it.menu_size_id,
+                  }))
+                );
+                if (costLines.length) {
+                  cost = roundMoney(await computeInvoiceIngredientCost(supabase, costLines));
+                }
+              }
+              profit = roundMoney(Math.max(0, displayTotal - cost));
+            }
+
+            return {
+              ...ord,
+              total_amount: displayTotal,
+              invoice_items: items,
+              cost_amount: cost,
+              profit_amount: profit,
+              _liveDraft: isLive && billingCart.length > 0,
+            };
+          })
+        );
+
+        setRecentOrders(enriched);
       }
     } catch (e) {
       console.error("Error loading recent orders:", e);
     } finally {
       setLoadingRecentOrders(false);
     }
-  };
+  }, [
+    shopId,
+    supabase,
+    activeOrderInvoiceId,
+    posMode,
+    selectedTable?.active_invoice_id,
+    takeawayInvoiceId,
+    billingCart,
+    netTotal,
+  ]);
+
+  React.useEffect(() => {
+    if (leftPosTab !== "history") return;
+    const timer = setTimeout(() => {
+      void loadRecentOrders();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [leftPosTab, billingCart, loadRecentOrders]);
 
   if (!mounted) {
     return (
@@ -1500,6 +2288,7 @@ export default function RestaurantPOSPage() {
   }
 
   const totalCartItemCount = cart.reduce((sum, it) => sum + it.quantity, 0);
+  const onBillItemCount = dbItems.reduce((sum, it) => sum + it.quantity, 0);
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-slate-100 font-sans select-none">
@@ -1562,9 +2351,9 @@ export default function RestaurantPOSPage() {
               <Coffee size={12} className="mr-1" /> Tables
             </Button>
           </Link>
-          <Link href="/dashboard/restaurant/active-bills">
+          <Link href="/dashboard/restaurant/billing-desk">
             <Button variant="ghost" className="text-zinc-300 hover:text-white text-[11px] h-7 px-2 font-bold hover:bg-zinc-900">
-              <Receipt size={12} className="mr-1" /> Bills
+              <Receipt size={12} className="mr-1" /> Billing Desk
             </Button>
           </Link>
           <Link href="/dashboard/settings">
@@ -1864,9 +2653,19 @@ export default function RestaurantPOSPage() {
                     <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                       {recentOrders.map((ord, idx) => {
                         const itemsSummary = (ord.invoice_items || [])
-                          .map((it: any) => `${it.quantity}x ${it.products?.name || "Item"}`)
+                          .map((it: any) => {
+                            const label = invoiceItemDisplayName(
+                              it.products?.name || "Item",
+                              it.packing_name
+                            );
+                            return `${it.quantity}x ${label}`;
+                          })
                           .join(", ");
                         const isPaid = ord.status === "paid" || ord.restaurant_order_status === "settled";
+                        const costAmt = Number(ord.cost_amount);
+                        const profitAmt = Number(ord.profit_amount);
+                        const hasCost =
+                          ord.cost_amount != null && ord.cost_amount !== "" && Number.isFinite(costAmt);
 
                         return (
                           <div
@@ -1885,6 +2684,11 @@ export default function RestaurantPOSPage() {
                                 }`}>
                                   {ord.restaurant_order_status || ord.status}
                                 </div>
+                                {ord._liveDraft && (
+                                  <div className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                                    {language === "en" ? "Live cart" : "لائیو"}
+                                  </div>
+                                )}
                                 <div className="text-[10px] font-medium text-slate-500">
                                   {ord.service_type === "dining" ? `🍽️ Table: ${ord.restaurant_tables?.name || ord.table_id || "Dine-In"}` : ord.service_type === "delivery" ? "🛵 Delivery" : "🥡 Takeaway"}
                                 </div>
@@ -1897,10 +2701,29 @@ export default function RestaurantPOSPage() {
                               </div>
                             </div>
 
-                            <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-200">
+                            <div className="flex sm:flex-col items-end justify-between w-full sm:w-auto shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-200 gap-0.5">
                               <div className="font-black text-slate-900 text-xs font-mono">
                                 Rs {Number(ord.total_amount || 0).toLocaleString()}
                               </div>
+                              {hasCost || (ord._liveDraft && Number.isFinite(costAmt)) ? (
+                                <div className="text-[9px] font-mono text-slate-600">
+                                  {language === "en" ? "COGS (est.)" : "لاگت"} Rs {costAmt.toFixed(0)}
+                                  {" · "}
+                                  <div className="text-emerald-700">
+                                    {language === "en" ? "Profit" : "منافع"} Rs{" "}
+                                    {(Number.isFinite(profitAmt)
+                                      ? profitAmt
+                                      : Number(ord.total_amount || 0) - costAmt
+                                    ).toFixed(0)}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-[9px] text-slate-400">
+                                  {language === "en"
+                                    ? "COGS - add items or send KOT"
+                                    : "آئٹم یا KOT"}
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
@@ -1910,7 +2733,7 @@ export default function RestaurantPOSPage() {
                 </div>
               ) : leftPosTab === "deals" ? (
                 <div className="flex-1 overflow-y-auto">
-                  <RestaurantDealsTab onAddDeal={addDealToCart} />
+                  <RestaurantDealsTab onConfigureDeal={setDealToConfigure} />
                 </div>
               ) : (
                 <>
@@ -2006,65 +2829,141 @@ export default function RestaurantPOSPage() {
               >
                 <ShoppingCart size={18} />
                 <div>View Cart ({totalCartItemCount})</div>
-                <div className="font-mono bg-blue-700 px-2 py-0.5 rounded-full text-[10px]">Rs {cartSubtotal}</div>
+                <div className="font-mono bg-blue-700 px-2 py-0.5 rounded-full text-[10px]">
+                  Rs {roundMoney(displayCartSubtotal).toLocaleString()}
+                </div>
               </Button>
             </div>
           )}
         </div>
 
-        {/* Right Sidebar Cart Panel - Fixed Height & Dedicated Scroll */}
-        <div className={`w-full md:w-[410px] h-full flex flex-col bg-white border-l border-slate-200 shadow-xl overflow-hidden shrink-0 ${showMobileCart ? "flex" : "hidden md:flex"}`}>
-          {/* Cart Header */}
-          <div className="p-3 border-b border-slate-200 shrink-0 bg-slate-900 text-white flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowMobileCart(false)}
-                className="md:hidden text-slate-300 hover:text-white p-1 mr-1 h-auto flex items-center gap-0.5"
-              >
-                <ArrowLeft size={16} />
-              </Button>
-              <div className="bg-blue-600 text-white p-1.5 rounded-lg">
-                <ShoppingCart size={16} />
-              </div>
-              <div>
-                <h3 className="font-black text-white text-xs tracking-wide">
-                  {posMode === "dining" ? (selectedTable ? `Table: ${selectedTable.name}` : "Dine-In Cart") : posMode === "delivery" ? "Delivery Cart" : "Takeaway Cart"}
-                </h3>
-                <div className="text-[10px] text-slate-300 font-semibold">
-                  {totalCartItemCount} {totalCartItemCount === 1 ? "dish" : "dishes"} selected
+        {/* Right cart panel - width draggable on desktop (left edge) */}
+        <div
+          className={`w-full h-full flex flex-col bg-white border-l border-slate-200 overflow-hidden shrink-0 min-h-0 relative ${
+            showMobileCart ? "flex" : "hidden md:flex"
+          }`}
+          style={
+            cartPanelDesktop
+              ? {
+                  width: `${cartPanelWidth}px`,
+                  minWidth: CART_PANEL_MIN_W,
+                  maxWidth: CART_PANEL_MAX_W,
+                  transition: cartPanelResizing ? "none" : "width 0.15s ease-out",
+                }
+              : undefined
+          }
+        >
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={startCartPanelResize}
+            className={`absolute left-0 top-0 bottom-0 w-2 z-20 cursor-col-resize hidden md:flex items-center justify-center group ${
+              cartPanelResizing ? "bg-sky-500/15" : "hover:bg-slate-100/80"
+            }`}
+            title={language === "en" ? "Drag to resize cart panel" : "کارٹ پینل چوڑائی"}
+          >
+            <div
+              className={`w-0.5 h-10 rounded-full ${cartPanelResizing ? "bg-sky-600" : "bg-transparent group-hover:bg-slate-400"}`}
+            />
+          </div>
+          {/* Top bar: table + guest + clear (cart title header hidden) */}
+          <div className="px-2 py-1 border-b border-slate-200 shrink-0 bg-white">
+            <div className="flex items-center justify-between gap-2 text-xs min-h-7">
+              <div className="flex items-center gap-1 min-w-0 flex-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowMobileCart(false)}
+                  className="md:hidden text-slate-600 hover:text-slate-900 p-0.5 h-auto shrink-0"
+                >
+                  <ArrowLeft size={18} />
+                </Button>
+                <div className="min-w-0 truncate text-[11px] leading-tight">
+                  {posMode === "dining" && selectedTable && (
+                    <div className="font-black text-slate-900">{selectedTable.name}</div>
+                  )}
+                  {posMode === "dining" && selectedTable && (
+                    <div className="text-slate-400 mx-1">·</div>
+                  )}
+                  {posMode === "delivery" && (
+                    <div className="font-black text-slate-900">
+                      {language === "en" ? "Delivery" : "ڈیلیوری"}
+                      <div className="text-slate-400 mx-1">·</div>
+                    </div>
+                  )}
+                  {posMode === "takeaway" && (
+                    <div className="font-black text-slate-900">
+                      {language === "en" ? "Takeaway" : "پیک"}
+                      <div className="text-slate-400 mx-1">·</div>
+                    </div>
+                  )}
+                  <div className="font-semibold text-slate-600">
+                    {totalCartItemCount > 0
+                      ? `${totalCartItemCount} ${language === "en" ? "in cart" : "کارٹ"}`
+                      : language === "en"
+                        ? "New order - add items"
+                        : "نیا آرڈر"}
+                  </div>
                 </div>
               </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Clear items in this cart (not the kitchen bill)?")) {
+                        setCart([]);
+                        if (!activeOrderInvoiceId && !onBillItemCount) {
+                          setDbItems([]);
+                          setSelectedTable(null);
+                          setTakeawayInvoiceId(null);
+                          setCurrentOrderStatus(null);
+                          setCustomerName("");
+                          setCustomerPhone("");
+                          setCustomerAddress("");
+                        }
+                        setCartEpoch((n) => n + 1);
+                      }
+                    }}
+                    className="text-[11px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer whitespace-nowrap"
+                  >
+                    Clear cart
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowCustomerDetails(!showCustomerDetails)}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer whitespace-nowrap"
+                >
+                  {showCustomerDetails ? "Hide" : "Edit"}
+                </button>
+              </div>
             </div>
-
-            {cart.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  if (confirm("Clear all items from current cart?")) {
-                    setCart([]);
-                    setDbItems([]);
-                    setSelectedTable(null);
-                    setTakeawayInvoiceId(null);
-                    setCurrentOrderStatus(null);
-                    setCustomerName("");
-                    setCustomerPhone("");
-                    setCustomerAddress("");
-                  }
-                }}
-                className="text-rose-400 hover:text-rose-200 hover:bg-slate-800 text-[10px] font-bold p-1 h-auto cursor-pointer"
-              >
-                Clear Cart
-              </Button>
+            {activeOrderInvoiceId && onBillItemCount > 0 && (
+              <div className="mt-1.5 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px]">
+                <div className="min-w-0 truncate text-slate-700">
+                  <div className="font-bold text-slate-800">
+                    {language === "en" ? "Open kitchen bill" : "کھلا بل"}
+                  </div>
+                  {orderNumber ? (
+                    <div className="font-mono font-bold text-blue-800 ml-1">#{orderNumber}</div>
+                  ) : null}
+                  <div className="font-mono font-black text-slate-900 ml-1">
+                    Rs {roundMoney(baselineSubtotal).toLocaleString()}
+                  </div>
+                  <div className="text-slate-500 ml-1">
+                    · {onBillItemCount} {language === "en" ? "sent to kitchen" : "کچن"}
+                  </div>
+                </div>
+                <Link
+                  href="/dashboard/restaurant/active-bills"
+                  className="shrink-0 font-bold text-blue-700 hover:text-blue-900 whitespace-nowrap"
+                >
+                  {language === "en" ? "View bill" : "دیکھیں"}
+                </Link>
+              </div>
             )}
-          </div>
-
-          {/* Compact Customer & Waiter Bar with Toggle */}
-          <div className="p-2 border-b border-slate-200 shrink-0 bg-slate-50/80">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 truncate max-w-[240px]">
+            <div className="flex items-center justify-between gap-2 text-[11px] pt-0.5">
+              <div className="flex items-center gap-1.5 truncate min-w-0">
                 <div className="font-bold text-slate-800 truncate">
                   👤 {customerName || (selectedCustomerId === "walkin" ? "Walk-in Guest" : customers.find(c => c.id === selectedCustomerId)?.name || "Guest")}
                 </div>
@@ -2081,12 +2980,6 @@ export default function RestaurantPOSPage() {
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => setShowCustomerDetails(!showCustomerDetails)}
-                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-0.5 shrink-0"
-              >
-                {showCustomerDetails ? "Hide Info ▲" : "Edit Info ▼"}
-              </button>
             </div>
 
             {/* Expandable Inputs */}
@@ -2169,18 +3062,37 @@ export default function RestaurantPOSPage() {
           </div>
 
           {/* Cart Item Rows - Primary Scrollable Area */}
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5 bg-slate-50/40">
-            {cart.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
-                <ShoppingCart size={36} className="mb-2 text-slate-300 animate-bounce" />
-                <p className="text-xs font-bold text-slate-700">Your cart is empty</p>
-                <p className="text-[10px] mt-0.5 text-slate-400 text-center max-w-[200px]">
-                  Click on any food dish or beverage on the left to add it to this order.
+          <div
+            key={`restaurant-cart-${cartEpoch}`}
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1.5 py-1 space-y-1 bg-white"
+          >
+            {cart.length === 0 && (
+              <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/80 px-3 py-6 text-center">
+                <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-500">
+                  <ShoppingCart size={20} strokeWidth={2.25} />
+                </div>
+                <p className="text-[12px] font-bold text-slate-800">
+                  {language === "en" ? "Billing ready for new items" : "بلنگ تیار"}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-500 leading-snug px-2">
+                  {language === "en"
+                    ? "Pick dishes from the menu - they show here. Send KOT when this cart is ready."
+                    : "مینو سے آئٹم - یہاں نظر آئیں گی۔ پھر KOT بھیجیں۔"}
                 </p>
               </div>
-            ) : (
+            )}
+            {cart.length > 0 &&
               cart.map((item, idx) => {
-                const dbQty = dbItems.find(d => d.cartItemId === item.cartItemId)?.quantity || 0;
+                const dbQty =
+                  dbItems.find((d) => d.cartItemId === item.cartItemId)?.quantity ??
+                  dbItems
+                    .filter(
+                      (d) =>
+                        d.productId === item.productId &&
+                        d.price === item.price &&
+                        (d.menuSizeId || null) === (item.menuSizeId || null)
+                    )
+                    .reduce((sum, d) => sum + d.quantity, 0);
                 const isNew = item.quantity > dbQty;
                 const itemKey = item.cartItemId || `cart-item-${item.productId || "dish"}-${idx}`;
 
@@ -2189,7 +3101,7 @@ export default function RestaurantPOSPage() {
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
                     key={itemKey} 
-                    className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm relative"
+                    className="py-1.5 px-1 border-b border-slate-100 relative"
                   >
                     {isNew && (
                       <div className="absolute top-2 right-2 text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded">
@@ -2255,133 +3167,203 @@ export default function RestaurantPOSPage() {
                       </div>
                     </div>
 
-                    {/* Remarks / Chef Notes input */}
-                    <div className="mt-1.5 flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
-                      <MessageSquare size={10} className="text-slate-400 shrink-0" />
+                    <div className="mt-1 flex items-center gap-1 bg-slate-50 border border-slate-100 rounded px-1.5 h-6">
+                      <MessageSquare size={9} className="text-slate-400 shrink-0" />
                       <input
-                        placeholder="Kitchen note (crust, add-ons sync here on add)"
+                        placeholder="Kitchen note"
                         value={item.remarks}
                         onChange={(e) => updateCartRemarks(item.cartItemId, e.target.value)}
-                        className="w-full bg-transparent text-[10px] font-medium placeholder-slate-400 focus:outline-none"
+                        className="w-full bg-transparent text-[10px] placeholder-slate-400 focus:outline-none"
                       />
                     </div>
                   </motion.div>
                 );
-              })
-            )}
+              })}
           </div>
 
           {/* Pricing Summary & Checkout Action Buttons */}
-          <div className="border-t border-slate-200 p-3 space-y-1.5 bg-white shrink-0 shadow-lg">
-            <div className="flex justify-between text-xs font-bold text-slate-700">
-              <div>Subtotal:</div>
-              <div className="font-mono">Rs {cartSubtotal.toLocaleString()}</div>
-            </div>
-            {cart.length > 0 && (
-              <>
-                <div className="flex justify-between text-[11px] text-slate-500">
-                  <div>Ingredient cost (est.):</div>
-                  <div className="font-mono">Rs {estimatedIngredientCost.toFixed(2)}</div>
+          <div className="border-t border-slate-200 px-1.5 py-1.5 bg-white shrink-0">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(6.25rem,1fr))] gap-x-2 gap-y-1.5 w-full">
+              {awaitingNextKot ? (
+                <div className="col-span-full min-w-0">
+                  <div className="text-[10px] font-semibold text-slate-500">
+                    {language === "en" ? `This cart · ${stagingDishCount} dishes` : `کارٹ · ${stagingDishCount}`}
+                  </div>
+                  <div className="font-mono font-black text-slate-900 text-sm">Rs 0</div>
                 </div>
-                <div className="flex justify-between text-[11px] font-semibold text-emerald-700">
-                  <div>Est. profit:</div>
-                  <div className="font-mono">Rs {estimatedProfit.toFixed(2)}</div>
+              ) : onBillItemCount > 0 && stagingDishCount > 0 ? (
+                <>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-semibold text-slate-500 truncate leading-tight">
+                      {language === "en"
+                        ? `Kitchen (sent) · ${baselineDishCount}`
+                        : `کچن · ${baselineDishCount}`}
+                    </div>
+                    <div className="font-mono font-black text-slate-500 text-sm leading-tight">
+                      Rs {roundMoney(baselineSubtotal).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-semibold text-blue-700 truncate leading-tight">
+                      {language === "en"
+                        ? `This cart · ${stagingDishCount}`
+                        : `کارٹ · ${stagingDishCount}`}
+                    </div>
+                    <div className="font-mono font-black text-blue-800 text-sm leading-tight">
+                      Rs {roundMoney(stagingSubtotal).toLocaleString()}
+                    </div>
+                  </div>
+                </>
+              ) : stagingDishCount > 0 ? (
+                <div className="col-span-full min-w-0">
+                  <div className="text-[10px] font-semibold text-slate-500">
+                    {language === "en" ? `Subtotal · ${stagingDishCount} dishes` : `سب ٹوٹل · ${stagingDishCount}`}
+                  </div>
+                  <div className="font-mono font-black text-slate-900 text-sm">
+                    Rs {roundMoney(stagingSubtotal).toLocaleString()}
+                  </div>
                 </div>
-              </>
-            )}
+              ) : null}
 
-            <div className="flex justify-between items-center text-xs text-slate-600">
-              <div className="font-medium">Discount (Rs):</div>
-              <input
-                type="number"
-                value={discount || ""}
-                onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-                placeholder="0"
-                className="w-16 bg-slate-50 border border-slate-200 h-6 text-right rounded px-1.5 text-xs font-bold text-slate-800 font-mono focus:outline-none"
-              />
-            </div>
+              {(stagingCostLines.length > 0 ||
+                baselineCostLines.length > 0 ||
+                (!awaitingNextKot && cartSubtotal > 0)) && (
+                <>
+                  {showSplitCogs ? (
+                    <>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-semibold text-slate-500">
+                          {language === "en" ? "On bill COGS" : "بل لاگت"}
+                        </div>
+                        <div className="font-mono font-bold text-slate-800 text-sm">Rs {baselineCogs.toFixed(0)}</div>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-semibold text-blue-700">
+                          {language === "en" ? "New lines COGS" : "نئی لاگت"}
+                        </div>
+                        <div className="font-mono font-bold text-blue-800 text-sm">Rs {stagingCogs.toFixed(0)}</div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-semibold text-slate-500">
+                        {language === "en" ? "COGS (est.)" : "لاگت"}
+                      </div>
+                      <div className="font-mono font-bold text-slate-800 text-sm">
+                        Rs {estimatedIngredientCost.toFixed(0)}
+                      </div>
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-semibold text-emerald-700">
+                      {language === "en" ? "Profit (est.)" : "منافع"}
+                    </div>
+                    <div className="font-mono font-bold text-emerald-800 text-sm">
+                      Rs {displayEstimatedProfit.toFixed(0)}
+                    </div>
+                  </div>
+                </>
+              )}
 
-            {posMode === "delivery" && (
-              <div className="flex justify-between items-center text-xs text-slate-600">
-                <div className="font-medium">Delivery Fee:</div>
-                <input
-                  type="number"
-                  value={deliveryFee || ""}
-                  onChange={(e) => setDeliveryFee(Math.max(0, parseFloat(e.target.value) || 0))}
-                  placeholder="0"
-                  className="w-16 bg-slate-50 border border-slate-200 h-6 text-right rounded px-1.5 text-xs font-bold font-mono"
-                />
+              <div className="min-w-0 flex flex-col gap-1 justify-center">
+                <div>
+                  <div className="text-[10px] font-semibold text-slate-500 block">{language === "en" ? "Discount" : "رعایت"}</div>
+                  <input
+                    type="number"
+                    value={discount || ""}
+                    onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                    placeholder="0"
+                    className="w-full border border-slate-200 h-7 text-right rounded px-1.5 text-sm font-bold font-mono focus:outline-none focus:border-slate-400"
+                  />
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold text-slate-500 block">{language === "en" ? "Tax %" : "ٹیکس"}</div>
+                  <input
+                    type="number"
+                    value={taxRate || ""}
+                    onChange={(e) => setTaxRate(Math.max(0, parseFloat(e.target.value) || 0))}
+                    placeholder="0"
+                    className="w-full border border-slate-200 h-7 text-right rounded px-1.5 text-sm font-bold font-mono focus:outline-none focus:border-slate-400"
+                  />
+                </div>
               </div>
-            )}
 
-            <div className="flex justify-between items-center text-xs text-slate-600">
-              <div className="font-medium">Tax (%):</div>
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  value={taxRate || ""}
-                  onChange={(e) => setTaxRate(Math.max(0, parseFloat(e.target.value) || 0))}
-                  placeholder="0"
-                  className="w-12 bg-slate-50 border border-slate-200 h-6 text-right rounded px-1 text-xs font-bold text-slate-800 font-mono focus:outline-none"
-                />
-                <div className="text-[10px] font-bold text-slate-500">%</div>
-              </div>
-            </div>
-
-            <div className="flex justify-between text-sm font-black text-slate-900 border-t border-slate-200 pt-1.5">
-              <div>Net Payable:</div>
-              <div className="font-mono text-blue-700 text-base">Rs {netTotal.toLocaleString()}</div>
-            </div>
-
-            {/* Action Buttons Grid */}
-            <p className="text-[10px] text-slate-500 leading-snug pt-0.5">
-              {language === "en"
-                ? "KOT → kitchen → optional table slip → Pay = thermal payment receipt"
-                : "KOT → کچن → (اختیاری سلپ) → ادائیگی = تھرمل رسید"}
-              {currentOrderStatus && (
-                <div className="ml-1 font-semibold text-slate-600">
-                  ·{" "}
-                  {RESTAURANT_ORDER_STATUS_LABELS[currentOrderStatus]?.en ||
-                    currentOrderStatus}
+              {posMode === "delivery" && (
+                <div className="col-span-full flex items-center justify-between gap-2 min-w-0">
+                  <div className="text-[10px] font-semibold text-slate-500 shrink-0">{language === "en" ? "Delivery" : "ڈیلیوری"}</div>
+                  <input
+                    type="number"
+                    value={deliveryFee || ""}
+                    onChange={(e) => setDeliveryFee(Math.max(0, parseFloat(e.target.value) || 0))}
+                    placeholder="0"
+                    className="w-full max-w-[8rem] border border-slate-200 h-8 text-right rounded px-1.5 text-sm font-mono"
+                  />
                 </div>
               )}
-            </p>
-            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5">
-              <label className="flex items-center gap-1.5 cursor-pointer font-semibold">
-                <input
-                  type="checkbox"
-                  checked={printKitchenReceipt}
-                  onChange={(e) => setPrintKitchenReceipt(e.target.checked)}
-                  className="rounded border-slate-300"
-                />
-                Print KOT slip
+
+              <div className="min-w-0">
+                <div className="text-[10px] font-semibold text-slate-600">
+                  {awaitingNextKot
+                    ? language === "en"
+                      ? "Next KOT total"
+                      : "اگلا KOT"
+                    : language === "en"
+                      ? "Bill total"
+                      : "کل بل"}
+                </div>
+                <div className="font-mono font-black text-slate-900 text-base leading-tight">
+                  Rs {roundMoney(displayCartSubtotal).toLocaleString()}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] font-semibold text-blue-800">
+                  {awaitingNextKot
+                    ? language === "en"
+                      ? "New lines payable"
+                      : "نئی لائنیں"
+                    : language === "en"
+                      ? "Net payable"
+                      : "ادائیگی"}
+                </div>
+                <div className="font-mono font-black text-blue-700 text-base leading-tight">
+                  Rs {roundMoney(displayNetTotal).toLocaleString()}
+                </div>
+              </div>
+
+              {currentOrderStatus && (
+                <p className="col-span-full text-[10px] text-slate-500 text-center py-0.5">
+                  {language === "en" ? "Status:" : "اسٹیٹس:"}{" "}
+                  {RESTAURANT_ORDER_STATUS_LABELS[currentOrderStatus]?.[language === "en" ? "en" : "ur"] ||
+                    currentOrderStatus}
+                </p>
+              )}
+              {resumeInvoiceId && (
+                <p className="col-span-full text-[10px] text-violet-700 text-center">
+                  {language === "en" ? "Bill edit - KOT saves version." : "بل ایڈٹ - KOT ورژن۔"}
+                </p>
+              )}
+
+              <label className="col-span-full flex items-center justify-between gap-2 cursor-pointer text-[11px] font-semibold text-slate-600">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={printKitchenReceipt}
+                    onChange={(e) => setPrintKitchenReceipt(e.target.checked)}
+                    className="rounded border-slate-300"
+                  />
+                  Print KOT
+                </div>
+                <Link href="/dashboard/settings" className="text-blue-600 hover:underline truncate">
+                  {language === "en" ? "Printers" : "پرنٹر"}
+                </Link>
               </label>
-              <div className="text-slate-400">|</div>
-              <div>
-                Kitchen:{" "}
-                <strong className="font-mono">
-                  {receiptSettings.kitchenPrinterName?.trim() || "Windows default"}
-                </strong>
-              </div>
-              <div className="text-slate-400">·</div>
-              <div>
-                Customer:{" "}
-                <strong className="font-mono">
-                  {receiptSettings.customerPrinterName?.trim() || "Windows default"}
-                </strong>
-              </div>
-              <Link
-                href="/dashboard/settings"
-                className="text-blue-600 hover:underline ml-auto"
-              >
-                Business Details
-              </Link>
             </div>
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
+
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-1 pt-1">
               <Button
                 onClick={sendKOT}
                 disabled={isSubmittingKOT || cart.length === 0 || !!activeClosingBook}
-                className="bg-slate-900 hover:bg-black text-white font-bold h-10 text-xs shadow-sm flex items-center justify-center gap-1 cursor-pointer"
+                className="bg-slate-900 hover:bg-black text-white font-bold h-9 text-xs flex items-center justify-center gap-1 cursor-pointer shadow-none"
               >
                 {isSubmittingKOT ? <Loader2 className="animate-spin h-3.5 w-3.5" /> : <ChefHat size={14} />}
                 Send KOT
@@ -2389,24 +3371,24 @@ export default function RestaurantPOSPage() {
               <Button
                 onClick={printGuestBill}
                 disabled={
-                  cart.length === 0 ||
+                  billingCart.length === 0 ||
                   !activeOrderInvoiceId ||
                   !canPrintGuestBill(currentOrderStatus) ||
                   !!activeClosingBook
                 }
                 variant="outline"
-                className="font-bold h-10 text-xs border-slate-300 hover:bg-slate-100 flex items-center justify-center gap-1 cursor-pointer"
+                className="font-bold h-9 text-xs border-slate-300 hover:bg-slate-50 flex items-center justify-center gap-1 cursor-pointer shadow-none"
               >
                 <Printer size={14} />
-                Table slip (unpaid)
+                Table slip
               </Button>
             </div>
 
             {/* Payment → thermal receipt (not the unpaid slip above) */}
             <Button
               onClick={openSettleOrderModal}
-              disabled={cart.length === 0 || !!activeClosingBook || !orderFlowSettleReady}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-600 text-white font-black h-11 text-xs shadow-md flex items-center justify-center gap-1.5 cursor-pointer mt-1 rounded-xl"
+              disabled={billingCart.length === 0 || !!activeClosingBook || !orderFlowSettleReady}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-600 text-white font-black h-9 text-xs flex items-center justify-center gap-1.5 cursor-pointer mt-1 rounded-lg shadow-none"
             >
               <DollarSign size={16} />
               {orderFlowSettleReady
@@ -2423,8 +3405,8 @@ export default function RestaurantPOSPage() {
               <button
                 type="button"
                 onClick={() => setIsSplitModalOpen(true)}
-                disabled={cart.length === 0 || !!activeClosingBook}
-                className="text-[10.5px] font-bold text-purple-700 hover:text-purple-900 cursor-pointer flex items-center gap-1 py-0.5"
+                disabled={billingCart.length === 0 || !!activeClosingBook}
+                className="text-[11px] font-bold text-purple-700 hover:text-purple-900 cursor-pointer flex items-center gap-1 py-0.5"
               >
                 <Users size={11} /> Split Bill Between Seats / Items
               </button>
@@ -2459,20 +3441,15 @@ export default function RestaurantPOSPage() {
               {/* Variations */}
               <div className="mb-4">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Size / Variation (سائز)</label>
+                {productSizes.length > 0 && (
+                  <p className="text-[10px] text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 mb-2">
+                    {language === "en"
+                      ? "This dish has sizes - base / Standard price is hidden. Pick a size (recipe & stock follow that size)."
+                      : "سائز موجود - بیس قیمت نہیں۔ سائز چنیں، اسٹاک اُسی ریسپی سے۔"}
+                  </p>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {(productSizes.length > 0
-                    ? productSizes.map((s) => ({
-                        name: s.size_name,
-                        priceAdd: Number(s.price) - customizingProduct.sale_price_single,
-                        absolutePrice: Number(s.price),
-                      }))
-                    : [
-                        { name: "Small", priceAdd: -Math.round(customizingProduct.sale_price_single * 0.15), absolutePrice: 0 },
-                        { name: "Medium", priceAdd: 0, absolutePrice: customizingProduct.sale_price_single },
-                        { name: "Large", priceAdd: Math.round(customizingProduct.sale_price_single * 0.25), absolutePrice: 0 },
-                        { name: "XL", priceAdd: Math.round(customizingProduct.sale_price_single * 0.5), absolutePrice: 0 },
-                      ]
-                  ).map((v) => (
+                  {variationOptionsForPos(customizingProduct, productSizes).map((v) => (
                     <button
                       key={v.name}
                       type="button"
@@ -2492,7 +3469,7 @@ export default function RestaurantPOSPage() {
                     >
                       {v.name}
                       <div className="block text-[9px] font-mono opacity-80">
-                        Rs {(v.absolutePrice || customizingProduct.sale_price_single + v.priceAdd).toLocaleString()}
+                        Rs {v.absolutePrice.toLocaleString()}
                       </div>
                     </button>
                   ))}
@@ -2645,30 +3622,39 @@ export default function RestaurantPOSPage() {
                       customizingProduct.name.toLowerCase().includes("sweet");
                     const qtyFactor = useWeight ? weightKg : 1;
                     const unitBase =
-                      customizingProduct.sale_price_single +
-                      selectedVariation.priceAdd +
+                      unitSalePriceForVariation(customizingProduct, productSizes, selectedVariation.name) +
                       selectedAddOns.reduce((sum, a) => sum + a.priceAdd, 0);
                     const finalPrice = unitBase * qtyFactor;
-                    const fullName = buildCustomizedLineName(
-                      customizingProduct.name,
-                      selectedVariation.name,
-                      selectedCrust,
-                      weightKg,
-                      useWeight
-                    );
+                    const fullName =
+                      productSizes.length > 0
+                        ? buildCustomizedLineName(
+                            customizingProduct.name,
+                            selectedVariation.name,
+                            selectedCrust,
+                            weightKg,
+                            useWeight
+                          )
+                        : customizingProduct.name;
                     const remarksStr = buildKitchenRemarks(
                       selectedCrust,
                       selectedAddOns,
                       specialInstructions
                     );
 
+                    const varOpt =
+                      variationOptionsForPos(customizingProduct, productSizes).find(
+                        (o) => o.name === selectedVariation.name
+                      ) || variationOptionsForPos(customizingProduct, productSizes)[0];
                     const matchedSize =
                       productSizes.find((s) => s.size_name === selectedVariation.name) ||
                       productSizes[0];
 
                     addCustomizedToCart(customizingProduct, fullName, finalPrice, remarksStr, {
-                      sizeLabel: selectedVariation.name,
-                      menuSizeId: matchedSize?.id || null,
+                      sizeLabel: productSizes.length > 0 ? selectedVariation.name : undefined,
+                      menuSizeId:
+                        productSizes.length > 0
+                          ? varOpt?.menuSizeId ?? matchedSize?.id ?? null
+                          : null,
                       crust: selectedCrust,
                       addOns: [...selectedAddOns],
                     });
@@ -2677,8 +3663,7 @@ export default function RestaurantPOSPage() {
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold"
                 >
                   Add to Cart • Rs {(
-                    (customizingProduct.sale_price_single +
-                      selectedVariation.priceAdd +
+                    (unitSalePriceForVariation(customizingProduct, productSizes, selectedVariation.name) +
                       selectedAddOns.reduce((sum, a) => sum + a.priceAdd, 0)) *
                     (customizingProduct.unit?.toLowerCase().includes("kg") ||
                     customizingProduct.name.toLowerCase().includes("cake") ||
@@ -2895,6 +3880,17 @@ export default function RestaurantPOSPage() {
         open={waiterDialogOpen}
         onClose={() => setWaiterDialogOpen(false)}
       />
+
+      {dealToConfigure && (
+        <DealConfigureModal
+          deal={dealToConfigure}
+          onClose={() => setDealToConfigure(null)}
+          onConfirm={(payload) => {
+            addDealToCart(payload);
+            setDealToConfigure(null);
+          }}
+        />
+      )}
     </div>
   );
 }

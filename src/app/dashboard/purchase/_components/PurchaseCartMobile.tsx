@@ -5,11 +5,12 @@ import type { CartItem } from "./types";
 
 type Props = {
   cart: CartItem[];
+  hideSalePrice?: boolean;
   onUpdateQty: (idx: number, qty: number) => void;
   onRemove: (idx: number) => void;
 };
 
-export function PurchaseCartMobile({ cart, onUpdateQty, onRemove }: Props) {
+export function PurchaseCartMobile({ cart, hideSalePrice, onUpdateQty, onRemove }: Props) {
   if (cart.length === 0) return null;
 
   return (
@@ -26,7 +27,10 @@ export function PurchaseCartMobile({ cart, onUpdateQty, onRemove }: Props) {
                 <p className="text-[10px] font-bold text-violet-600 mt-0.5">{item.packingName}</p>
               )}
               <p className="text-xs text-slate-500 mt-1">
-                Cost Rs {item.purchasePrice?.toLocaleString()} · Sale Rs {item.salePrice?.toLocaleString()}
+                Cost Rs {item.purchasePrice?.toLocaleString()}
+                {!hideSalePrice && (
+                  <> · Sale Rs {item.salePrice?.toLocaleString()}</>
+                )}
               </p>
             </div>
             <button
@@ -47,7 +51,7 @@ export function PurchaseCartMobile({ cart, onUpdateQty, onRemove }: Props) {
               >
                 <Minus size={14} />
               </button>
-              <span className="text-sm font-black w-8 text-center">{item.quantity}</span>
+              <div className="text-sm font-black w-8 text-center">{item.quantity}</div>
               <button
                 type="button"
                 onClick={() => onUpdateQty(idx, item.quantity + 1)}

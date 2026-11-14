@@ -9,11 +9,14 @@ import {
   kotChangeTypeLabel,
   type RestaurantBillChangeLine,
 } from "@/lib/restaurant-bill-edit";
+import { restaurantReceiptItemLabels } from "@/lib/restaurant-deal-slots";
 
 export type RestaurantReceiptLine = {
   name: string;
   quantity: number;
   unit_price: number;
+  /** Deal slot picks - shown under the deal name on customer slips. */
+  detail?: string | null;
 };
 
 export type RestaurantGuestDetails = {
@@ -157,15 +160,25 @@ export function mapDbInvoiceItemsToReceiptLines(
   }[]
 ): RestaurantReceiptLine[] {
   return items.map((i) => {
-    const base = i.products?.name || i.custom_name || "Item";
-    const size = i.packing_name?.trim();
-    const name = size && !base.includes(size) ? `${base} (${size})` : base;
+    const labels = restaurantReceiptItemLabels(
+      i.products?.name || "Item",
+      i.packing_name,
+      i.custom_name
+    );
     return {
-      name,
+      name: labels.title,
+      detail: labels.detail,
       quantity: Number(i.quantity) || 0,
       unit_price: Number(i.unit_price) || 0,
     };
   });
+}
+
+/** Guest bill = deal name only; paid receipt / exports keep slot detail. */
+export function compactReceiptLinesForGuestBill(
+  items: RestaurantReceiptLine[]
+): RestaurantReceiptLine[] {
+  return items.map((item) => ({ ...item, detail: null }));
 }
 
 function itemAmountRows(items: RestaurantReceiptLine[]): string {
@@ -173,11 +186,15 @@ function itemAmountRows(items: RestaurantReceiptLine[]): string {
     .map(
       (item, idx) => `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px;font-size:11px;line-height:1.35;margin:3px 0;">
-      <span style="flex:1;word-break:break-word;">${idx + 1}. ${esc(item.name)}</span>
-      <span style="width:22px;text-align:center;flex-shrink:0;">${item.quantity}</span>
-      <span style="width:58px;text-align:right;flex-shrink:0;font-weight:bold;">${Math.round(
+      <div style="flex:1;word-break:break-word;">${idx + 1}. ${esc(item.name)}${
+        item.detail
+          ? `<div style="font-size:9px;font-weight:normal;color:#333;margin-top:2px;padding-left:6px;">↳ ${esc(item.detail)}</div>`
+          : ""
+      }</div>
+      <div style="width:22px;text-align:center;flex-shrink:0;">${item.quantity}</div>
+      <div style="width:58px;text-align:right;flex-shrink:0;font-weight:bold;">${Math.round(
         item.unit_price * item.quantity
-      ).toLocaleString()}</span>
+      ).toLocaleString()}</div>
     </div>`
     )
     .join("");
@@ -195,10 +212,10 @@ function serviceTypeLabel(serviceType?: string | null, tableName?: string | null
 
 function metaRow(label: string, value: string, strong = false): string {
   return `<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;">
-    <span>${esc(label)}</span>${
+    <div>${esc(label)}</div>${
       strong
         ? `<strong style="text-align:right;">${esc(value)}</strong>`
-        : `<span style="text-align:right;">${esc(value)}</span>`
+        : `<div style="text-align:right;">${esc(value)}</div>`
     }
   </div>`;
 }
@@ -230,7 +247,7 @@ function guestDetailsBlock(
   const addr = input.customerAddress?.trim();
   if (addr) {
     rows.push(
-      `<div style="margin-top:2px;"><span>Address:</span> <span>${esc(addr)}</span></div>`
+      `<div style="margin-top:2px;"><div>Address:</div> <div>${esc(addr)}</div></div>`
     );
   }
 
@@ -258,12 +275,12 @@ function extraChargeRows(input: RestaurantGuestDetails): string {
   const parts: string[] = [];
   if ((input.deliveryFee || 0) > 0) {
     parts.push(
-      `<div style="display:flex;justify-content:space-between;"><span>Delivery</span><span>+${Math.round(Number(input.deliveryFee)).toLocaleString()}</span></div>`
+      `<div style="display:flex;justify-content:space-between;"><div>Delivery</div><div>+${Math.round(Number(input.deliveryFee)).toLocaleString()}</div></div>`
     );
   }
   if ((input.additionalCharges || 0) > 0) {
     parts.push(
-      `<div style="display:flex;justify-content:space-between;"><span>Extra charges</span><span>+${Math.round(Number(input.additionalCharges)).toLocaleString()}</span></div>`
+      `<div style="display:flex;justify-content:space-between;"><div>Extra charges</div><div>+${Math.round(Number(input.additionalCharges)).toLocaleString()}</div></div>`
     );
   }
   return parts.join("");
@@ -344,13 +361,18 @@ export function printRestaurantKOTSlip(
     .map((it) => {
       const size = it.sizeLabel?.trim();
       const title = size ? `${it.name} · ${size}` : it.name;
+      const note =
+        it.remarks?.trim() &&
+        !String(it.remarks).includes("DEAL_ID:")
+          ? it.remarks
+          : null;
       return `
       <tr>
         <td style="padding:4px 0;vertical-align:top;border-bottom:1px dotted #ccc;">
           <div style="font-weight:bold;font-size:12px;">${esc(title)}</div>
           ${
-            it.remarks
-              ? `<div style="font-size:10px;font-style:italic;margin-top:2px;">Note: ${esc(it.remarks)}</div>`
+            note
+              ? `<div style="font-size:10px;font-style:italic;margin-top:2px;">Includes: ${esc(note)}</div>`
               : ""
           }
         </td>
@@ -458,27 +480,27 @@ export function printRestaurantGuestBill(
     })}
     <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;margin:4px 0;">
       <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:bold;margin-bottom:2px;">
-        <span style="flex:1;">Item</span>
-        <span style="width:22px;text-align:center;">Qty</span>
-        <span style="width:58px;text-align:right;">Amount</span>
+        <div style="flex:1;">Item</div>
+        <div style="width:22px;text-align:center;">Qty</div>
+        <div style="width:58px;text-align:right;">Amount</div>
       </div>
-      ${itemAmountRows(input.items) || `<div style="font-size:10px;">No line items</div>`}
+      ${itemAmountRows(compactReceiptLinesForGuestBill(input.items)) || `<div style="font-size:10px;">No line items</div>`}
     </div>
     <div style="font-size:11px;line-height:1.5;margin-top:4px;">
-      <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${Math.round(input.subtotal).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;"><div>Subtotal</div><div>${Math.round(input.subtotal).toLocaleString()}</div></div>
       ${extraChargeRows(input)}
       ${
         input.discount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><span>Discount</span><span>-${Math.round(input.discount).toLocaleString()}</span></div>`
+          ? `<div style="display:flex;justify-content:space-between;"><div>Discount</div><div>-${Math.round(input.discount).toLocaleString()}</div></div>`
           : ""
       }
       ${
         input.taxAmount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><span>Tax (${input.taxRate}%)</span><span>+${Math.round(input.taxAmount).toLocaleString()}</span></div>`
+          ? `<div style="display:flex;justify-content:space-between;"><div>Tax (${input.taxRate}%)</div><div>+${Math.round(input.taxAmount).toLocaleString()}</div></div>`
           : ""
       }
       <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;border-top:1px solid #000;margin-top:4px;padding-top:4px;">
-        <span>NET PAYABLE</span><span>Rs ${Math.round(input.netTotal).toLocaleString()}</span>
+        <div>NET PAYABLE</div><div>Rs ${Math.round(input.netTotal).toLocaleString()}</div>
       </div>
     </div>
     <div style="text-align:center;font-size:9px;margin-top:10px;border-top:1px dashed #000;padding-top:6px;">
@@ -551,27 +573,27 @@ export function printRestaurantRevisedGuestBill(
     })}
     <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;margin:4px 0;">
       <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:bold;margin-bottom:2px;">
-        <span style="flex:1;">Item (updated)</span>
-        <span style="width:22px;text-align:center;">Qty</span>
-        <span style="width:58px;text-align:right;">Amount</span>
+        <div style="flex:1;">Item (updated)</div>
+        <div style="width:22px;text-align:center;">Qty</div>
+        <div style="width:58px;text-align:right;">Amount</div>
       </div>
-      ${itemAmountRows(input.items) || `<div style="font-size:10px;">No line items</div>`}
+      ${itemAmountRows(compactReceiptLinesForGuestBill(input.items)) || `<div style="font-size:10px;">No line items</div>`}
     </div>
     <div style="font-size:11px;line-height:1.5;margin-top:4px;">
-      <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${Math.round(input.subtotal).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;"><div>Subtotal</div><div>${Math.round(input.subtotal).toLocaleString()}</div></div>
       ${extraChargeRows(input)}
       ${
         input.discount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><span>Discount</span><span>-${Math.round(input.discount).toLocaleString()}</span></div>`
+          ? `<div style="display:flex;justify-content:space-between;"><div>Discount</div><div>-${Math.round(input.discount).toLocaleString()}</div></div>`
           : ""
       }
       ${
         input.taxAmount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><span>Tax (${input.taxRate}%)</span><span>+${Math.round(input.taxAmount).toLocaleString()}</span></div>`
+          ? `<div style="display:flex;justify-content:space-between;"><div>Tax (${input.taxRate}%)</div><div>+${Math.round(input.taxAmount).toLocaleString()}</div></div>`
           : ""
       }
       <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;border-top:1px solid #000;margin-top:4px;padding-top:4px;">
-        <span>NET PAYABLE</span><span>Rs ${Math.round(input.netTotal).toLocaleString()}</span>
+        <div>NET PAYABLE</div><div>Rs ${Math.round(input.netTotal).toLocaleString()}</div>
       </div>
     </div>
     <div style="text-align:center;font-size:9px;margin-top:10px;border-top:1px dashed #000;padding-top:6px;">
@@ -613,37 +635,37 @@ export function printRestaurantPaidReceipt(
     <div style="font-size:10px;margin-bottom:4px;">${metaRow("Payment", restaurantPaymentLabel(input.paymentMode), true)}</div>
     <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;margin:4px 0;">
       <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:bold;margin-bottom:2px;">
-        <span style="flex:1;">Item</span>
-        <span style="width:22px;text-align:center;">Qty</span>
-        <span style="width:58px;text-align:right;">Amount</span>
+        <div style="flex:1;">Item</div>
+        <div style="width:22px;text-align:center;">Qty</div>
+        <div style="width:58px;text-align:right;">Amount</div>
       </div>
       ${itemAmountRows(input.items) || `<div style="font-size:10px;">No line items</div>`}
     </div>
     <div style="font-size:11px;line-height:1.5;margin-top:4px;">
-      <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>${Math.round(input.subtotal).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;"><div>Subtotal</div><div>${Math.round(input.subtotal).toLocaleString()}</div></div>
       ${extraChargeRows(input)}
       ${
         input.discount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><span>Discount</span><span>-${Math.round(input.discount).toLocaleString()}</span></div>`
+          ? `<div style="display:flex;justify-content:space-between;"><div>Discount</div><div>-${Math.round(input.discount).toLocaleString()}</div></div>`
           : ""
       }
       ${
         input.taxAmount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><span>Tax (${input.taxRate}%)</span><span>+${Math.round(input.taxAmount).toLocaleString()}</span></div>`
+          ? `<div style="display:flex;justify-content:space-between;"><div>Tax (${input.taxRate}%)</div><div>+${Math.round(input.taxAmount).toLocaleString()}</div></div>`
           : ""
       }
       <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;border-top:1px solid #000;margin-top:4px;padding-top:4px;">
-        <span>NET PAID</span><span>Rs ${Math.round(input.netTotal).toLocaleString()}</span>
+        <div>NET PAID</div><div>Rs ${Math.round(input.netTotal).toLocaleString()}</div>
       </div>
-      <div style="display:flex;justify-content:space-between;margin-top:2px;"><span>Received</span><span>Rs ${Math.round(input.paidAmount).toLocaleString()}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-top:2px;"><div>Received</div><div>Rs ${Math.round(input.paidAmount).toLocaleString()}</div></div>
       ${
         changeGiven > 0 && input.remainingDue <= 0
-          ? `<div style="display:flex;justify-content:space-between;"><span>Change</span><span>Rs ${Math.round(changeGiven).toLocaleString()}</span></div>`
+          ? `<div style="display:flex;justify-content:space-between;"><div>Change</div><div>Rs ${Math.round(changeGiven).toLocaleString()}</div></div>`
           : ""
       }
       ${
         input.remainingDue > 0
-          ? `<div style="display:flex;justify-content:space-between;font-weight:bold;"><span>Credit Due</span><span>Rs ${Math.round(input.remainingDue).toLocaleString()}</span></div>`
+          ? `<div style="display:flex;justify-content:space-between;font-weight:bold;"><div>Credit Due</div><div>Rs ${Math.round(input.remainingDue).toLocaleString()}</div></div>`
           : ""
       }
     </div>

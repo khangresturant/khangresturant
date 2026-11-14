@@ -206,6 +206,16 @@ export default function RecipesPage() {
     }
   }, [selectedParentId]);
 
+  useEffect(() => {
+    if (menuSizes.length > 0) {
+      setSelectedRecipeSizeId((prev) =>
+        prev && menuSizes.some((s) => s.id === prev) ? prev : menuSizes[0].id
+      );
+    } else {
+      setSelectedRecipeSizeId(null);
+    }
+  }, [menuSizes]);
+
   const loadMenuSizes = async (parentId: string) => {
     if (!shopId) return;
     try {
@@ -399,11 +409,24 @@ export default function RecipesPage() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between text-xs text-slate-500 pb-1 border-b border-slate-100">
-        <p>
-          {language === "en" 
-            ? "Map menu dishes to raw ingredients per size. Set sizes under Restaurant -> Deals & Sizes, then pick a size here for size-specific BOM." 
-            : "مینو ڈشز کو سائز کے حساب سے خام مال سے منسلک کریں۔ سائز Restaurant -> Deals & Sizes میں سیٹ کریں۔"}
+      
+      {/* Title Header */}
+      <div>
+        <h2 className="text-lg font-black tracking-tight text-slate-800 flex items-center gap-1.5 font-nastaleeq">
+          <Layers className="text-blue-600" /> {language === "en" ? "Recipe & BOM Management" : "ریسیپی اور خام مال کی انوینٹری (BOM)"}
+        </h2>
+        <p className="text-slate-500 text-xs mt-0.5">
+          {language === "en" ? (
+            <>
+              Same BOM as POSRESTURANT - fastest path:{" "}
+              <Link href="/dashboard/restaurant/menu" className="text-blue-600 font-semibold underline">
+                Menu Management
+              </Link>{" "}
+              → edit item → sizes + ingredients per size. This page is for bulk review.
+            </>
+          ) : (
+            "مینو میں آئٹم ایڈٹ کریں - سائز + خام مال ایک جگہ۔"
+          )}
         </p>
       </div>
 
@@ -493,17 +516,19 @@ export default function RecipesPage() {
 
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="text-[10px] font-bold text-slate-500 uppercase">Recipe for size:</div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRecipeSizeId(null)}
-                    className={`text-xs px-3 py-1.5 rounded-full border font-bold ${
-                      selectedRecipeSizeId === null
-                        ? "bg-slate-900 text-white border-slate-900"
-                        : "bg-white text-slate-600 border-slate-200"
-                    }`}
-                  >
-                    Standard / Base
-                  </button>
+                  {menuSizes.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRecipeSizeId(null)}
+                      className={`text-xs px-3 py-1.5 rounded-full border font-bold ${
+                        selectedRecipeSizeId === null
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-600 border-slate-200"
+                      }`}
+                    >
+                      Standard / Base
+                    </button>
+                  )}
                   {menuSizes.map((sz) => (
                     <button
                       key={sz.id}
@@ -520,7 +545,7 @@ export default function RecipesPage() {
                   ))}
                   {menuSizes.length === 0 && (
                     <div className="text-[10px] text-slate-400">
-                      No extra sizes - only base recipe. Add sizes in Deals &amp; Sizes.
+                      No extra sizes - only base recipe. Add sizes in Menu Management → edit item.
                     </div>
                   )}
                 </div>

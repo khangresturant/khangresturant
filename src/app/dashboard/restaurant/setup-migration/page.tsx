@@ -34,6 +34,8 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS edit_history JSONB;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stock_deducted BOOLEAN DEFAULT false;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cost_amount NUMERIC(15, 2);
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS profit_amount NUMERIC(15, 2);
+ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(15, 4);
+COMMENT ON COLUMN invoice_items.purchase_price IS 'Restaurant: per-unit COGS snapshot at settle (frozen; raw price changes do not alter past orders)';
 ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS invoice_id UUID REFERENCES invoices(id) ON DELETE SET NULL;
 ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS waiter_id UUID;`;
 
@@ -75,6 +77,8 @@ CREATE TABLE IF NOT EXISTS restaurant_deal_items (
     item_type VARCHAR(30) DEFAULT 'item',
     quantity NUMERIC(15, 2) NOT NULL DEFAULT 1,
     size_name VARCHAR(30),
+    slot_label VARCHAR(120),
+    allowed_product_ids JSONB,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 

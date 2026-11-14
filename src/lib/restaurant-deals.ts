@@ -1,6 +1,12 @@
-export const MENU_SIZE_OPTIONS = ["Small", "Medium", "Large", "XL"] as const;
+export {
+  MENU_SIZE_OPTIONS,
+  MENU_SIZE_SUGGESTIONS,
+  fetchRestaurantMenuProducts,
+  buildProductNameMap,
+  type RestaurantMenuProductRow,
+} from "./restaurant-menu-products";
 
-export type MenuSizeName = (typeof MENU_SIZE_OPTIONS)[number];
+export type MenuSizeName = string;
 
 export type RestaurantDeal = {
   id: string;
@@ -17,6 +23,8 @@ export type RestaurantDeal = {
     quantity: number;
     size_name: string | null;
     item_type: string;
+    slot_label?: string | null;
+    allowed_product_ids?: string[] | string | null;
     products?: { name: string } | null;
   }[];
 };
@@ -50,5 +58,5 @@ export function dealSavingsPercent(original: number, deal: number): number {
 
 export function formatDealLabel(deal: RestaurantDeal): string {
   const save = dealSavingsPercent(Number(deal.original_price), Number(deal.deal_price));
-  return `${deal.name} — Rs ${Number(deal.deal_price).toLocaleString()} (save ${save}%)`;
+  return `${deal.name} - Rs ${Number(deal.deal_price).toLocaleString()} (save ${save}%)`;
 }

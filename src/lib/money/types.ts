@@ -82,6 +82,8 @@ export type ReceivePurchaseItem = {
   quantity: number;
   bonus_quantity?: number;
   purchase_price: number;
+  /** Per-unit landed cost (after line disc/tax, incl. bonus spread) for WAC. */
+  landed_unit_cost?: number;
   sale_price?: number | null;
   discount_amount?: number;
   batch_number?: string | null;

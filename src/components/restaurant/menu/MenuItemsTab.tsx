@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Loader2,
   Plus,
@@ -21,6 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { fetchStations, type RestaurantStation } from "@/lib/restaurant-ops";
+import { MenuItemSizesPanel } from "@/components/restaurant/menu/MenuItemSizesPanel";
+import { MenuItemRecipePanel } from "@/components/restaurant/menu/MenuItemRecipePanel";
 
 type MenuProduct = {
   id: string;
@@ -44,6 +47,8 @@ export function MenuItemsTab() {
   const { language } = useLanguage();
   const supabase = createClient();
   const isEn = language === "en";
+  const searchParams = useSearchParams();
+  const deepLinkOpened = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<MenuProduct[]>([]);
@@ -55,6 +60,7 @@ export function MenuItemsTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<MenuProduct | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sizesVersion, setSizesVersion] = useState(0);
 
   const [form, setForm] = useState({
     name: "",
@@ -129,6 +135,16 @@ export function MenuItemsTab() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const pid = searchParams.get("product");
+    if (!pid || deepLinkOpened.current || loading || !items.length) return;
+    const hit = items.find((p) => p.id === pid);
+    if (hit) {
+      deepLinkOpened.current = true;
+      openEdit(hit);
+    }
+  }, [searchParams, items, loading]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return items.filter(
@@ -162,6 +178,7 @@ export function MenuItemsTab() {
   };
 
   const openEdit = (p: MenuProduct) => {
+    setSizesVersion(0);
     setEditing(p);
     setForm({
       name: p.name,
@@ -200,13 +217,17 @@ export function MenuItemsTab() {
       if (editing) {
         const { error } = await supabase.from("products").update(payload).eq("id", editing.id);
         if (error) throw error;
-        toast.success(isEn ? "Menu item updated" : "اپڈیٹ");
+        toast.success(
+          isEn ? "Saved - add or edit sizes below, then Done when finished" : "محفوظ - نیچے سائز شامل کریں"
+        );
       } else {
-        const { error } = await supabase.from("products").insert(payload);
+        const { data: created, error } = await supabase.from("products").insert(payload).select("id, name, code, sale_price_single, category_id, note, kitchen_station_id, not_discounted, show_in_restaurant_pos, categories ( name )").single();
         if (error) throw error;
-        toast.success(isEn ? "Menu item created" : "آئٹم بن گیا");
+        toast.success(isEn ? "Item saved - add sizes below if needed" : "آئٹم بن گیا");
+        if (created) {
+          setEditing(created as MenuProduct);
+        }
       }
-      setModalOpen(false);
       load();
     } catch (e: any) {
       if (e.message?.includes("not_discounted") || e.message?.includes("show_in_restaurant")) {
@@ -282,7 +303,16 @@ export function MenuItemsTab() {
                 <td className="p-2.5 text-right font-mono font-semibold">
                   Rs {Number(p.sale_price_single).toLocaleString()}
                 </td>
-                <td className="p-2.5 text-center">{sizeCounts[p.id] || 0}</td>
+                <td className="p-2.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(p)}
+                    className={`font-bold ${sizeCounts[p.id] ? "text-blue-700" : "text-slate-400"}`}
+                    title={isEn ? "Edit item → sizes section in form" : "سائز فارم میں"}
+                  >
+                    {sizeCounts[p.id] || 0}
+                  </button>
+                </td>
                 <td className="p-2.5 text-center">
                   <button
                     type="button"
@@ -338,7 +368,7 @@ export function MenuItemsTab() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/40" onClick={() => setModalOpen(false)} />
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-lg">
               {editing ? (isEn ? "Edit menu item" : "ترمیم") : isEn ? "New menu item" : "نیا آئٹم"}
             </h3>
@@ -362,6 +392,31 @@ export function MenuItemsTab() {
                 }
               />
             </div>
+            {editing?.id && (
+              <>
+                <MenuItemSizesPanel
+                  productId={editing.id}
+                  basePrice={Number(form.sale_price_single) || 0}
+                  onSizesChanged={() => {
+                    load();
+                    setSizesVersion((v) => v + 1);
+                  }}
+                />
+                <MenuItemRecipePanel
+                  productId={editing.id}
+                  productName={form.name || editing.name}
+                  basePrice={Number(form.sale_price_single) || 0}
+                  sizesVersion={sizesVersion}
+                />
+              </>
+            )}
+            {!editing && (
+              <p className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1.5">
+                {isEn
+                  ? "Save first - then add sizes & per-size ingredients here (same as POSRESTURANT fast food menu dialog)."
+                  : "پہلے محفوظ کریں - پھر سائز اور خام مال یہیں۔"}
+              </p>
+            )}
             <div>
               <label className="text-xs font-bold text-slate-500">{isEn ? "Category" : "کیٹگری"}</label>
               <SearchableSelect
@@ -427,7 +482,7 @@ export function MenuItemsTab() {
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : isEn ? "Save" : "محفوظ"}
               </Button>
               <Button variant="outline" onClick={() => setModalOpen(false)}>
-                {isEn ? "Cancel" : "منسوخ"}
+                {editing ? (isEn ? "Done" : "ٹھیک") : isEn ? "Cancel" : "منسوخ"}
               </Button>
             </div>
             {editing && (
