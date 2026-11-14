@@ -1502,9 +1502,9 @@ export default function SettingsPage() {
                         </option>
                       ))}
                     </select>
-                    <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                      Active Zone: <div className="font-bold text-slate-600">{getCurrentTimezonePreview(selectedTimezoneVal).resolvedTimezone}</div> - {getCurrentTimezonePreview(selectedTimezoneVal).date}
-                    </p>
+                    <div className="text-[10px] text-slate-400 font-semibold mt-1 flex items-center gap-1 flex-wrap">
+                      Active Zone: <div className="font-bold text-slate-600 inline">{getCurrentTimezonePreview(selectedTimezoneVal).resolvedTimezone}</div> - {getCurrentTimezonePreview(selectedTimezoneVal).date}
+                    </div>
                   </div>
 
                   <div className="bg-blue-50 p-4.5 rounded-2xl border border-blue-100 flex items-start gap-3">
