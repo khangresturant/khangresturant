@@ -131,7 +131,7 @@ async function importMenu() {
         ) VALUES (
           $1, $2, $3,
           $4, 0,
-          0, 'serving',
+          0, null,
           false, true, false,
           now(), now()
         )
