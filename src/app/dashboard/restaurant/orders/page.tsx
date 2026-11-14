@@ -28,6 +28,7 @@ import {
 } from "@/lib/restaurant-orders";
 import { SettleOrderDialog, type SettleOrderData } from "@/components/restaurant/SettleOrderDialog";
 import { DEFAULT_RECEIPT_SETTINGS } from "@/components/ReceiptTemplate";
+import { KITCHEN_POLL_INTERVAL_MS, shouldPollKitchenLive } from "@/lib/restaurant-kitchen";
 import {
   companyRowToShopDetails,
   mergeRestaurantPrintProfile,
@@ -46,6 +47,12 @@ import {
   parseRestaurantEditHistory,
   type RestaurantBillEditHistoryEntry,
 } from "@/lib/restaurant-bill-edit";
+import { invoiceItemDisplayName } from "@/lib/restaurant-deal-slots";
+import {
+  computeInvoiceIngredientCost,
+  roundMoney,
+} from "@/lib/restaurant-recipe-cost";
+import { invoiceLinesForCost } from "@/lib/restaurant-orders";
 
 type OrderRow = {
   id: string;
@@ -116,10 +123,23 @@ function computeDateRange(dateFilter: string) {
 /** Skip re-render if visible order data unchanged */
 function ordersSnapshotKey(rows: OrderRow[]): string {
   return rows
-    .map(
-      (o) =>
-        `${o.id}:${o.restaurant_order_status}:${o.status}:${o.total_amount}:${o.order_number}:${o.customer_name}`
-    )
+    .map((o) => {
+      const histLen = o.edit_history?.length ?? 0;
+      const histTail = o.edit_history?.[histLen - 1]?.edited_at ?? "";
+      return [
+        o.id,
+        o.restaurant_order_status,
+        o.status,
+        o.total_amount,
+        o.cost_amount ?? "",
+        o.profit_amount ?? "",
+        o.is_edited ? 1 : 0,
+        histLen,
+        histTail,
+        o.order_number,
+        o.customer_name,
+      ].join(":");
+    })
     .join("|");
 }
 
@@ -247,6 +267,8 @@ export default function RestaurantOrdersPage() {
             ...inv,
             cost_amount: inv.cost_amount ?? null,
             profit_amount: inv.profit_amount ?? null,
+            is_edited: inv.is_edited ?? false,
+            edit_history: inv.edit_history ?? null,
             invoice_items: (inv.invoice_items || []).map((it: any) => ({
               ...it,
               packing_name: it.packing_name ?? null,
@@ -261,15 +283,44 @@ export default function RestaurantOrdersPage() {
 
       setMigrationNeeded(false);
       const tableList = tables || [];
-      const mapped: OrderRow[] = (data || []).map((inv: any) => {
-        const t = tableList.find((x: any) => x.id === inv.table_id || x.active_invoice_id === inv.id);
-        return {
-          ...inv,
-          edit_history: parseRestaurantEditHistory(inv.edit_history),
-          restaurant_order_status: normalizeOrderStatus(inv.restaurant_order_status),
-          tableName: t?.name || (inv.service_type === "takeaway" ? "Takeaway" : inv.service_type === "delivery" ? "Delivery" : "Dine-In"),
-        };
-      });
+      const mapped: OrderRow[] = await Promise.all(
+        (data || []).map(async (inv: any) => {
+          const t = tableList.find((x: any) => x.id === inv.table_id || x.active_invoice_id === inv.id);
+          const row: OrderRow = {
+            ...inv,
+            edit_history: parseRestaurantEditHistory(inv.edit_history),
+            restaurant_order_status: normalizeOrderStatus(inv.restaurant_order_status),
+            tableName:
+              t?.name ||
+              (inv.service_type === "takeaway"
+                ? "Takeaway"
+                : inv.service_type === "delivery"
+                  ? "Delivery"
+                  : "Dine-In"),
+          };
+          const items = row.invoice_items || [];
+          const isOpenBill =
+            row.status === "draft" &&
+            row.restaurant_order_status !== "settled" &&
+            row.restaurant_order_status !== "cancelled";
+          if (isOpenBill && items.length > 0) {
+            const lines = invoiceLinesForCost(
+              items.map((it) => ({
+                product_id: it.product_id,
+                quantity: Number(it.quantity),
+                packing_name: it.packing_name,
+                menu_size_id: it.menu_size_id,
+              }))
+            );
+            const cost = roundMoney(await computeInvoiceIngredientCost(supabase, lines));
+            row.cost_amount = cost;
+            row.profit_amount = roundMoney(
+              Math.max(0, Number(row.total_amount || 0) - cost)
+            );
+          }
+          return row;
+        })
+      );
 
       const nextKey = ordersSnapshotKey(mapped);
       setOrders((prev) => (ordersSnapshotKey(prev) === nextKey ? prev : mapped));
@@ -301,6 +352,10 @@ export default function RestaurantOrdersPage() {
         "restaurant_order_status",
         "status",
         "total_amount",
+        "cost_amount",
+        "profit_amount",
+        "is_edited",
+        "edit_history",
         "order_number",
         "customer_name",
         "customer_phone",
@@ -347,6 +402,11 @@ export default function RestaurantOrdersPage() {
         { event: "DELETE", schema: "public", table: "invoices", filter: `shop_id=eq.${shopId}` },
         () => scheduleSilentRefresh()
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "kitchen_orders", filter: `shop_id=eq.${shopId}` },
+        () => scheduleSilentRefresh()
+      )
       .subscribe();
 
     return () => {
@@ -354,6 +414,35 @@ export default function RestaurantOrdersPage() {
       supabase.removeChannel(channel);
     };
   }, [shopId, supabase, scheduleSilentRefresh, onInvoiceUpdate]);
+
+  useEffect(() => {
+    if (!shopId) return;
+    let pollId: ReturnType<typeof setInterval> | undefined;
+    if (shouldPollKitchenLive()) {
+      pollId = setInterval(() => {
+        void loadOrdersRef.current({ silent: true });
+      }, KITCHEN_POLL_INTERVAL_MS);
+    }
+    const refreshOnFocus = () => void loadOrdersRef.current({ silent: true });
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadOrdersRef.current({ silent: true });
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      if (pollId) clearInterval(pollId);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [shopId]);
+
+  useEffect(() => {
+    if (!historyOpen || !historyOrder?.id) return;
+    const fresh = orders.find((o) => o.id === historyOrder.id);
+    if (fresh && ordersSnapshotKey([fresh]) !== ordersSnapshotKey([historyOrder])) {
+      setHistoryOrder(fresh);
+    }
+  }, [orders, historyOpen, historyOrder]);
 
   const filtered = orders.filter((o) => {
     const q = searchQuery.toLowerCase();
@@ -721,6 +810,12 @@ export default function RestaurantOrdersPage() {
         </div>
       </div>
 
+      <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+        {isEn
+          ? "Edit bill → POS with same menu flow; Send KOT saves edit + version, status back to Pending."
+          : "بل ایڈٹ → POS؛ Send KOT پر ورژن + Pending۔"}
+      </p>
+
       {/* Table - only full spinner on first load */}
       <div className="bg-white border rounded-xl overflow-hidden shadow-sm min-h-[200px]">
         {initialLoading && orders.length === 0 ? (
@@ -742,6 +837,7 @@ export default function RestaurantOrdersPage() {
                   <th className="p-3 font-bold text-right">Total</th>
                   <th className="p-3 font-bold text-right">Cost</th>
                   <th className="p-3 font-bold text-right">Profit</th>
+                  <th className="p-3 font-bold text-center">Versions</th>
                   <th className="p-3 font-bold text-center">Actions</th>
                 </tr>
               </thead>
@@ -754,11 +850,35 @@ export default function RestaurantOrdersPage() {
                     orderStatus: st,
                     invoiceStatus: o.status,
                   });
-                  const itemSummary = o.invoice_items?.slice(0, 3).map((i) => `${i.quantity}x ${i.products?.name}`).join(", ") || "-";
+                  const itemSummary =
+                    o.invoice_items
+                      ?.slice(0, 3)
+                      .map(
+                        (i) =>
+                          `${i.quantity}x ${invoiceItemDisplayName(i.products?.name || "Item", i.packing_name)}`
+                      )
+                      .join(", ") || "-";
                   const cust = o.customer_name || o.parties?.name || "Walk-in";
                   return (
                     <tr key={o.id} className="border-b border-slate-100 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="p-3 font-mono font-bold text-blue-700">{o.order_number || o.id.slice(0, 8).toUpperCase()}</td>
+                      <td className="p-3 font-mono font-bold text-blue-700">
+                        <div>{o.order_number || o.id.slice(0, 8).toUpperCase()}</div>
+                        {(o.is_edited || (o.edit_history?.length ?? 0) > 0) && (
+                          <button
+                            type="button"
+                            onClick={() => openOrderHistory(o)}
+                            className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-100 text-amber-900 border border-amber-200 hover:bg-amber-200 cursor-pointer"
+                            title={
+                              isEn
+                                ? `${o.edit_history?.length ?? 0} saved bill version(s) - click to view`
+                                : `${o.edit_history?.length ?? 0} ورژن - دیکھنے کے لیے کلک`
+                            }
+                          >
+                            {isEn ? "Edited" : "ایڈٹ شدہ"}
+                            {(o.edit_history?.length ?? 0) > 0 ? ` · v${o.edit_history!.length}` : ""}
+                          </button>
+                        )}
+                      </td>
                       <td className="p-3 text-slate-600 whitespace-nowrap">{fmtDate(o.created_at)}</td>
                       <td className="p-3 font-semibold">{cust}{o.customer_phone ? <div className="text-slate-400 block">{o.customer_phone}</div> : null}</td>
                       <td className="p-3">{o.tableName}</td>
@@ -792,11 +912,25 @@ export default function RestaurantOrdersPage() {
                       }`}>
                         {o.profit_amount != null ? `Rs ${Number(o.profit_amount).toFixed(0)}` : "-"}
                       </td>
+                      <td className="p-3 text-center">
+                        {(o.edit_history?.length ?? 0) > 0 ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[10px] px-2 border-amber-200 text-amber-900"
+                            onClick={() => openOrderHistory(o)}
+                          >
+                            {isEn ? `v${o.edit_history!.length}` : `${o.edit_history!.length} ورژن`}
+                          </Button>
+                        ) : (
+                          <div className="text-slate-300">-</div>
+                        )}
+                      </td>
                       <td className="p-3">
                         <div className="flex items-center justify-center gap-1 flex-wrap">
                           {o.status === "draft" && (
                             <>
-                              <Link href={`/dashboard/restaurant/active-bills?bill=${o.id}`}>
+                              <Link href={`/dashboard/restaurant/pos?resumeInvoice=${o.id}`}>
                                 <Button size="sm" variant="outline" className="h-7 text-[10px] px-2">
                                   {isEn ? "Edit bill" : "بل ایڈٹ"}
                                 </Button>
@@ -835,6 +969,16 @@ export default function RestaurantOrdersPage() {
                           )}
                           {o.status !== "draft" && (
                             <>
+                              {(o.edit_history?.length ?? 0) > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-[10px] px-2 border-amber-200"
+                                  onClick={() => openOrderHistory(o)}
+                                >
+                                  {isEn ? "Versions" : "ورژن"}
+                                </Button>
+                              )}
                               <Button size="sm" variant="outline" className="h-7 text-[10px] px-2" onClick={() => handleReprintPaidReceipt(o)}>
                                 <Printer size={10} className="mr-0.5" /> {isEn ? "Reprint" : "دوبارہ"}
                               </Button>

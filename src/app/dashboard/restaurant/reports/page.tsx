@@ -13,6 +13,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SubscriptionBlocker } from "@/components/dashboard/SubscriptionBlocker";
+import {
+  pickRecipeRowsForSize,
+  roundMoney,
+  roundStockQty,
+} from "@/lib/restaurant-recipe-cost";
+import { buildDealReceiptIncludes } from "@/lib/restaurant-deal-slots";
 
 type Product = {
   id: string;
@@ -27,6 +33,15 @@ type RecipeItem = {
   parent_product_id: string;
   ingredient_product_id: string;
   quantity: number;
+  menu_size_id?: string | null;
+};
+
+type SettledLedgerRow = {
+  total_amount: number;
+  cost_amount: number | null;
+  profit_amount: number | null;
+  tax_amount?: number | null;
+  discount?: number | null;
 };
 
 type WastageLog = {
@@ -70,6 +85,7 @@ export default function RestaurantReportsPage() {
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
   const [salesItems, setSalesItems] = useState<any[]>([]);
   const [wastageLogs, setWastageLogs] = useState<WastageLog[]>([]);
+  const [settledLedger, setSettledLedger] = useState<SettledLedgerRow[]>([]);
 
   // Wastage Form State
   const [selectedIngredientId, setSelectedIngredientId] = useState("");
@@ -127,45 +143,116 @@ export default function RestaurantReportsPage() {
       setProducts(prods);
 
       // 2. Fetch Recipes
-      const { data: recsData, error: recsErr } = await supabase
+      let { data: recsData, error: recsErr } = await supabase
         .from("product_recipes")
-        .select("parent_product_id, ingredient_product_id, quantity");
-      if (recsErr && recsErr.code !== "PGRST205") throw recsErr; // Ignore table missing error during local sandbox startup if any
+        .select("parent_product_id, ingredient_product_id, quantity, menu_size_id");
+      if (recsErr) {
+        const fb = await supabase
+          .from("product_recipes")
+          .select("parent_product_id, ingredient_product_id, quantity");
+        recsData = (fb.data || []).map((r: any) => ({ ...r, menu_size_id: null }));
+        recsErr = fb.error;
+      }
+      if (recsErr && recsErr.code !== "PGRST205") throw recsErr;
       setRecipes(recsData || []);
 
-      // 3. Fetch Paid/Settled Invoice Items in date range
-      const { data: invItemsData, error: invErr } = await supabase
-        .from("invoices")
-        .select(`
-          id,
-          status,
-          created_at,
-          invoice_items (
+      // 3. Paid / settled restaurant invoices in date range (matches Order History cost at settle)
+      const invoiceItemSelectFull = `
             product_id,
             quantity,
             unit_price,
-            subtotal
+            subtotal,
+            packing_name,
+            menu_size_id,
+            purchase_price`;
+      const invoiceItemSelectBasic = `
+            product_id,
+            quantity,
+            unit_price,
+            subtotal,
+            packing_name`;
+      const SETTLED_STATUSES = ["paid", "partial", "unpaid"];
+
+      const fetchRestaurantInvoices = async (
+        itemFields: string,
+        restaurantOnly: boolean,
+        withLedgerCols: boolean
+      ) => {
+        const ledgerCols = withLedgerCols
+          ? `
+          total_amount,
+          cost_amount,
+          profit_amount,
+          tax_amount,
+          discount,`
+          : `
+          total_amount,`;
+        let q = supabase
+          .from("invoices")
+          .select(`
+          id,
+          status,
+          created_at,${ledgerCols}
+          invoice_items (
+            ${itemFields}
           )
         `)
-        .eq("shop_id", shopId)
-        .eq("is_voided", false)
-        .neq("status", "draft")
-        .neq("status", "quotation")
-        .gte("created_at", startDateTime)
-        .lte("created_at", endDateTime);
+          .eq("shop_id", shopId)
+          .eq("is_voided", false)
+          .neq("status", "draft")
+          .neq("status", "quotation")
+          .neq("status", "cancelled")
+          .gte("created_at", startDateTime)
+          .lte("created_at", endDateTime);
+        if (restaurantOnly) q = q.not("service_type", "is", null);
+        return q;
+      };
 
-      if (invErr) throw invErr;
+      let invRes = await fetchRestaurantInvoices(invoiceItemSelectFull, true, true);
+      if (invRes.error?.message?.includes("service_type")) {
+        invRes = await fetchRestaurantInvoices(invoiceItemSelectFull, false, true);
+      }
+      if (
+        invRes.error?.message?.includes("menu_size_id") ||
+        invRes.error?.message?.includes("cost_amount")
+      ) {
+        invRes = await fetchRestaurantInvoices(invoiceItemSelectBasic, true, false);
+        if (invRes.error?.message?.includes("service_type")) {
+          invRes = await fetchRestaurantInvoices(invoiceItemSelectBasic, false, false);
+        }
+      }
+      if (invRes.error) throw invRes.error;
+      const invItemsData = (invRes.data || []).filter((inv: any) =>
+        SETTLED_STATUSES.includes(String(inv.status || "").toLowerCase())
+      );
 
-      // Extract and flatten invoice items
+      const ledgerRows: SettledLedgerRow[] = invItemsData.map((inv: any) => ({
+        total_amount: Number(inv.total_amount || 0),
+        cost_amount: inv.cost_amount != null ? Number(inv.cost_amount) : null,
+        profit_amount: inv.profit_amount != null ? Number(inv.profit_amount) : null,
+        tax_amount: inv.tax_amount != null ? Number(inv.tax_amount) : null,
+        discount: inv.discount != null ? Number(inv.discount) : null,
+      }));
+      setSettledLedger(ledgerRows);
+
       const flattenedItems: any[] = [];
-      (invItemsData || []).forEach((inv: any) => {
+      invItemsData.forEach((inv: any) => {
         (inv.invoice_items || []).forEach((item: any) => {
           flattenedItems.push({
             product_id: item.product_id,
             quantity: Number(item.quantity || 0),
             unit_price: Number(item.unit_price || 0),
             subtotal: Number(item.subtotal || 0),
-            created_at: inv.created_at
+            packing_name: item.packing_name ?? null,
+            menu_size_id: item.menu_size_id ?? null,
+            line_unit_cogs:
+              item.purchase_price != null && Number(item.purchase_price) >= 0
+                ? Number(item.purchase_price)
+                : null,
+            invoice_id: inv.id,
+            invoice_cost_amount:
+              inv.cost_amount != null ? Number(inv.cost_amount) : null,
+            created_at: inv.created_at,
           });
         });
       });
@@ -236,8 +323,8 @@ export default function RestaurantReportsPage() {
       // Adjust stock of raw material directly in background via decrement_product_stock RPC
       // Wastage is zaya, so we decrement stock
       const { error: stockErr } = await supabase.rpc("decrement_product_stock", {
-        p_product_id: selectedIngredientId,
-        p_qty: wastageQty
+        p_id: selectedIngredientId,
+        qty: roundStockQty(wastageQty),
       });
       if (stockErr) console.error("Error decrementing stock for wastage:", stockErr);
 
@@ -268,16 +355,33 @@ export default function RestaurantReportsPage() {
       }
     });
 
-    // Loop through sold invoice items
-    salesItems.forEach(sale => {
-      // Find parent's recipe list
-      const matchingRecipes = recipes.filter(r => r.parent_product_id === sale.product_id);
-      if (matchingRecipes.length > 0) {
-        matchingRecipes.forEach(rec => {
-          if (rawIngMap[rec.ingredient_product_id]) {
-            const consumedQty = rec.quantity * sale.quantity;
-            rawIngMap[rec.ingredient_product_id].qtyNeeded += consumedQty;
-            rawIngMap[rec.ingredient_product_id].totalCost += consumedQty * (rawIngMap[rec.ingredient_product_id].product.purchase_price_single || 0);
+    const recipesByParent: Record<string, RecipeItem[]> = {};
+    recipes.forEach((r) => {
+      if (!recipesByParent[r.parent_product_id]) recipesByParent[r.parent_product_id] = [];
+      recipesByParent[r.parent_product_id].push(r);
+    });
+
+    salesItems.forEach((sale) => {
+      const all = recipesByParent[sale.product_id] || [];
+      const picked = pickRecipeRowsForSize(
+        all.map((r) => ({
+          ingredient_product_id: r.ingredient_product_id,
+          quantity: r.quantity,
+          menu_size_id: r.menu_size_id,
+        })),
+        sale.menu_size_id,
+        sale.packing_name
+      );
+      if (picked.length > 0) {
+        picked.forEach((rec) => {
+          const ingId = rec.ingredient_product_id;
+          if (rawIngMap[ingId]) {
+            const consumedQty = roundStockQty(rec.quantity * sale.quantity);
+            rawIngMap[ingId].qtyNeeded += consumedQty;
+            rawIngMap[ingId].totalCost = roundMoney(
+              rawIngMap[ingId].totalCost +
+                consumedQty * (rawIngMap[ingId].product.purchase_price_single || 0)
+            );
           }
         });
       }
@@ -296,24 +400,34 @@ export default function RestaurantReportsPage() {
       totalCOGS: number;
       profit: number;
       profitPercent: number;
+      /** Latest deal slot summary when this row is a sold deal package. */
+      dealIncludesSample?: string | null;
     }> = {};
 
     // Map all finished products (non-ingredients)
     products.forEach(p => {
       if (!p.is_ingredient) {
         // Calculate recipe cost for this finished item
-        let calculatedRecipeCost = 0;
-        const matchingRecipes = recipes.filter(r => r.parent_product_id === p.id);
-        if (matchingRecipes.length > 0) {
-          matchingRecipes.forEach(rec => {
-            const ingProd = products.find(prod => prod.id === rec.ingredient_product_id);
-            const ingCost = ingProd?.purchase_price_single || 0;
-            calculatedRecipeCost += rec.quantity * ingCost;
-          });
-        } else {
-          // If no recipe setup, fall back to its direct purchase price (e.g. cold drinks)
-          calculatedRecipeCost = p.purchase_price_single || 0;
-        }
+        const baseRecipeCost = (sizeId?: string | null, sizeName?: string | null) => {
+          const all = recipes.filter((r) => r.parent_product_id === p.id);
+          const picked = pickRecipeRowsForSize(
+            all.map((r) => ({
+              ingredient_product_id: r.ingredient_product_id,
+              quantity: r.quantity,
+              menu_size_id: r.menu_size_id,
+            })),
+            sizeId,
+            sizeName
+          );
+          if (picked.length > 0) {
+            return picked.reduce((sum, rec) => {
+              const ingProd = products.find((prod) => prod.id === rec.ingredient_product_id);
+              return sum + rec.quantity * (ingProd?.purchase_price_single || 0);
+            }, 0);
+          }
+          return p.purchase_price_single || 0;
+        };
+        const calculatedRecipeCost = baseRecipeCost(null, null);
 
         menuItemsMap[p.id] = {
           product: p,
@@ -328,20 +442,46 @@ export default function RestaurantReportsPage() {
     });
 
     // Populate actual sales
-    salesItems.forEach(sale => {
-      if (menuItemsMap[sale.product_id]) {
-        const item = menuItemsMap[sale.product_id];
-        item.soldQty += sale.quantity;
-        item.revenue += sale.subtotal;
-        item.totalCOGS += item.recipeCost * sale.quantity;
+    const recipesByParent: Record<string, RecipeItem[]> = {};
+    recipes.forEach((r) => {
+      if (!recipesByParent[r.parent_product_id]) recipesByParent[r.parent_product_id] = [];
+      recipesByParent[r.parent_product_id].push(r);
+    });
+
+    salesItems.forEach((sale) => {
+      if (!menuItemsMap[sale.product_id]) return;
+      const item = menuItemsMap[sale.product_id];
+      const all = recipesByParent[sale.product_id] || [];
+      const picked = pickRecipeRowsForSize(
+        all.map((r) => ({
+          ingredient_product_id: r.ingredient_product_id,
+          quantity: r.quantity,
+          menu_size_id: r.menu_size_id,
+        })),
+        sale.menu_size_id,
+        sale.packing_name
+      );
+      let lineUnitCost = item.recipeCost;
+      if (sale.line_unit_cogs != null && Number(sale.line_unit_cogs) >= 0) {
+        lineUnitCost = Number(sale.line_unit_cogs);
+      } else if (picked.length > 0) {
+        lineUnitCost = picked.reduce((sum, rec) => {
+          const ingProd = products.find((prod) => prod.id === rec.ingredient_product_id);
+          return sum + rec.quantity * (ingProd?.purchase_price_single || 0);
+        }, 0);
       }
+      const dealIncludes = buildDealReceiptIncludes(sale.packing_name);
+      if (dealIncludes) item.dealIncludesSample = dealIncludes;
+      item.soldQty += sale.quantity;
+      item.revenue = roundMoney(item.revenue + sale.subtotal);
+      item.totalCOGS = roundMoney(item.totalCOGS + lineUnitCost * sale.quantity);
     });
 
     // Calculate final net profit margins
     return Object.values(menuItemsMap)
       .map(item => {
-        const profit = item.revenue - item.totalCOGS;
-        const profitPercent = item.revenue > 0 ? (profit / item.revenue) * 100 : 0;
+        const profit = roundMoney(item.revenue - item.totalCOGS);
+        const profitPercent = item.revenue > 0 ? roundMoney((profit / item.revenue) * 100) : 0;
         return {
           ...item,
           profit,
@@ -357,8 +497,22 @@ export default function RestaurantReportsPage() {
     it.product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalWastageCost = wastageLogs.reduce((sum, item) => sum + (item.cost_at_wastage * item.quantity), 0);
-  const totalConsumptionCost = consumptionData.reduce((sum, item) => sum + item.totalCost, 0);
+  const totalWastageCost = roundMoney(
+    wastageLogs.reduce((sum, item) => sum + item.cost_at_wastage * item.quantity, 0)
+  );
+  const totalConsumptionCost = roundMoney(
+    consumptionData.reduce((sum, item) => sum + item.totalCost, 0)
+  );
+  const ledgerSales = roundMoney(settledLedger.reduce((s, r) => s + r.total_amount, 0));
+  const ledgerCost = roundMoney(
+    settledLedger.reduce((s, r) => s + (r.cost_amount ?? 0), 0)
+  );
+  const ledgerProfit = roundMoney(
+    settledLedger.reduce(
+      (s, r) => s + (r.profit_amount ?? Math.max(0, r.total_amount - (r.cost_amount ?? 0))),
+      0
+    )
+  );
 
   const rawMaterials = products.filter(p => p.is_ingredient);
 
@@ -482,30 +636,30 @@ export default function RestaurantReportsPage() {
               {/* Consumption Overview Card */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-5 shadow-sm flex flex-col justify-between h-28">
-                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">
+                  <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">
                     Total Raw Ingredients Used (تھوریٹیکل کھپت)
-                  </span>
-                  <span className="text-2xl font-black text-slate-850 font-mono">
+                  </div>
+                  <div className="text-2xl font-black text-slate-850 font-mono">
                     Rs {totalConsumptionCost.toFixed(2)}
-                  </span>
+                  </div>
                 </div>
                 
                 <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-5 shadow-sm flex flex-col justify-between h-28">
-                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
+                  <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
                     Dishes Sold Count (فروخت شدہ ڈشز)
-                  </span>
-                  <span className="text-2xl font-black text-slate-850 font-mono">
+                  </div>
+                  <div className="text-2xl font-black text-slate-850 font-mono">
                     {salesItems.length} items
-                  </span>
+                  </div>
                 </div>
 
                 <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100 rounded-2xl p-5 shadow-sm flex flex-col justify-between h-28">
-                  <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                  <div className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">
                     Total Menu Revenue (کل فروخت)
-                  </span>
-                  <span className="text-2xl font-black text-slate-850 font-mono">
-                    Rs {salesItems.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2)}
-                  </span>
+                  </div>
+                  <div className="text-2xl font-black text-slate-850 font-mono">
+                    Rs {ledgerSales > 0 ? ledgerSales.toFixed(2) : salesItems.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2)}
+                  </div>
                 </div>
               </div>
 
@@ -515,9 +669,9 @@ export default function RestaurantReportsPage() {
                   <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
                     {language === "en" ? "Theoretical Raw Material Consumed" : "مینو ڈشز کے فروخت کی بنیاد پر خام مال کا خرچ"}
                   </h3>
-                  <span className="text-xs font-semibold text-slate-500 font-nastaleeq">
-                    {language === "en" ? "Calculated by mapping recipe formulas against paid sales." : "یہ رپورٹ ریسیپی (BOM) کی بنیاد پر نکالی گئی ہے۔"}
-                  </span>
+                  <div className="text-xs font-semibold text-slate-500 font-nastaleeq">
+                    {language === "en" ? "Recipe BOM per dish size; ledger totals match settle on Order History." : "سائز کے مطابق BOM؛ اوپر والی فروخت سیٹل ریکارڈ سے"}
+                  </div>
                 </div>
 
                 {consumptionData.length === 0 ? (
@@ -648,8 +802,8 @@ export default function RestaurantReportsPage() {
                     </h3>
                   </div>
                   <div className="bg-red-50 text-red-600 px-3 py-1.5 rounded-xl border border-red-100 flex items-center gap-1 text-xs font-black">
-                    <span>Total Loss:</span>
-                    <span className="font-mono">Rs {totalWastageCost.toFixed(2)}</span>
+                    <div>Total Loss:</div>
+                    <div className="font-mono">Rs {totalWastageCost.toFixed(2)}</div>
                   </div>
                 </div>
 
@@ -680,7 +834,7 @@ export default function RestaurantReportsPage() {
                               </td>
                               <td className="p-3 font-bold text-slate-800">{log.product?.name || "Unknown Product"}</td>
                               <td className="p-3 text-center font-extrabold text-red-600 font-mono">
-                                {Number(log.quantity).toFixed(3)} <span className="text-[10px] text-slate-400 font-semibold uppercase">{log.product?.unit || 'unit'}</span>
+                                {Number(log.quantity).toFixed(3)} <div className="text-[10px] text-slate-400 font-semibold uppercase">{log.product?.unit || 'unit'}</div>
                               </td>
                               <td className="p-3 text-center font-medium text-slate-600">{log.reason}</td>
                               <td className="p-3 text-right font-black text-slate-800 font-mono">Rs {computedLoss.toFixed(2)}</td>
@@ -704,6 +858,27 @@ export default function RestaurantReportsPage() {
               exit={{ opacity: 0, y: -15 }}
               className="space-y-4"
             >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between h-28">
+                  <div className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                    {language === "en" ? "Settled sales (POS ledger)" : "مکمل آرڈرز - کل فروخت"}
+                  </div>
+                  <div className="text-2xl font-black text-slate-850 font-mono">Rs {ledgerSales.toFixed(2)}</div>
+                </div>
+                <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-5 shadow-sm flex flex-col justify-between h-28">
+                  <div className="text-[10px] font-bold text-orange-600 uppercase tracking-wider">
+                    {language === "en" ? "Recorded COGS at settle" : "ریکارڈ شدہ لاگت (سیٹل پر)"}
+                  </div>
+                  <div className="text-2xl font-black text-slate-850 font-mono">Rs {ledgerCost.toFixed(2)}</div>
+                </div>
+                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-5 shadow-sm flex flex-col justify-between h-28">
+                  <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
+                    {language === "en" ? "Recorded net profit" : "ریکارڈ شدہ منافع"}
+                  </div>
+                  <div className="text-2xl font-black text-emerald-700 font-mono">Rs {ledgerProfit.toFixed(2)}</div>
+                </div>
+              </div>
+
               {/* Profitability Table */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
                 
@@ -752,7 +927,14 @@ export default function RestaurantReportsPage() {
                           const marginColor = item.profitPercent >= 40 ? "bg-emerald-50 text-emerald-700 border-emerald-100" : item.profitPercent >= 20 ? "bg-amber-50 text-amber-700 border-amber-100" : "bg-red-50 text-red-700 border-red-100";
                           return (
                             <tr key={item.product.id} className="border-b border-slate-50 text-xs text-slate-700 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors/40">
-                              <td className="p-3.5 font-bold text-slate-800">{item.product.name}</td>
+                              <td className="p-3.5 text-slate-800">
+                                <div className="font-bold">{item.product.name}</div>
+                                {item.dealIncludesSample ? (
+                                  <div className="text-[10px] font-normal text-slate-500 mt-0.5 leading-snug">
+                                    Includes: {item.dealIncludesSample}
+                                  </div>
+                                ) : null}
+                              </td>
                               <td className="p-3.5 text-center font-extrabold text-slate-700 font-mono">{item.soldQty}</td>
                               <td className="p-3.5 text-center text-slate-500 font-mono">Rs {item.recipeCost.toFixed(2)}</td>
                               <td className="p-3.5 text-center text-slate-500 font-mono">Rs {item.product.sale_price_single}</td>
@@ -760,9 +942,9 @@ export default function RestaurantReportsPage() {
                               <td className="p-3.5 text-center text-slate-500 font-mono">Rs {item.totalCOGS.toFixed(2)}</td>
                               <td className={`p-3.5 text-right font-black font-mono ${profitColor}`}>Rs {item.profit.toFixed(2)}</td>
                               <td className="p-3.5 text-center">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${marginColor}`}>
+                                <div className={`px-2 py-0.5 rounded text-[10px] font-bold border ${marginColor}`}>
                                   {item.profitPercent.toFixed(1)}%
-                                </span>
+                                </div>
                               </td>
                             </tr>
                           );

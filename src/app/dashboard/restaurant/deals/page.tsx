@@ -11,9 +11,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { type RestaurantDeal, dealSavingsPercent } from "@/lib/restaurant-deals";
+import { DealSlotProductPicker } from "@/components/restaurant/DealSlotProductPicker";
+import {
+  type DealSlotForm,
+  dealItemToSlotForm,
+  normalizeDealItem,
+  parseAllowedProductIds,
+  sizeOptionsForAllowedProducts,
+  sizeOptionsForFixedProduct,
+  slotLabelDisplay,
+  productMatchesDealSize,
+  sizeOptionsForFirstSlot,
+} from "@/lib/restaurant-deal-slots";
+import {
+  computeDealCatalogOriginal,
+  type MenuSizePriceRow,
+} from "@/lib/restaurant-deal-pricing";
 
 type Product = { id: string; name: string; sale_price_single: number };
-type DealItemForm = { product_id: string; quantity: number; size_name: string; item_type: string };
 
 export default function RestaurantDealsPage() {
   const { shopId } = useShop();
@@ -25,6 +40,8 @@ export default function RestaurantDealsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<RestaurantDeal | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sizeNamesByProduct, setSizeNamesByProduct] = useState<Record<string, string[]>>({});
+  const [menuSizeRows, setMenuSizeRows] = useState<MenuSizePriceRow[]>([]);
 
   const [form, setForm] = useState({
     name: "",
@@ -33,18 +50,23 @@ export default function RestaurantDealsPage() {
     deal_price: 0,
     discount_percentage: 0,
     is_active: true,
-    items: [] as DealItemForm[],
+    items: [] as DealSlotForm[],
   });
 
   const load = useCallback(async () => {
     if (!shopId) return;
     setLoading(true);
     try {
-      const [dealsRes, prodRes] = await Promise.all([
+      const [dealsRes, prodRes, sizesRes] = await Promise.all([
         supabase.from("restaurant_deals").select(`
-          *, restaurant_deal_items ( id, product_id, quantity, size_name, item_type, products ( name ) )
+          *, restaurant_deal_items ( id, product_id, quantity, size_name, item_type, slot_label, allowed_product_ids, products ( name ) )
         `).eq("shop_id", shopId).order("name"),
         supabase.from("products").select("id, name, sale_price_single, is_ingredient").eq("shop_id", shopId).order("name"),
+        supabase
+          .from("restaurant_menu_sizes")
+          .select("id, product_id, size_name, price")
+          .eq("shop_id", shopId)
+          .eq("is_available", true),
       ]);
 
       if (dealsRes.error && !dealsRes.error.message.includes("does not exist")) throw dealsRes.error;
@@ -53,6 +75,23 @@ export default function RestaurantDealsPage() {
         (prodRes.data || []).filter(
           (p: any) => p.is_ingredient !== true && String(p.is_ingredient) !== "true"
         )
+      );
+      const byProduct: Record<string, string[]> = {};
+      for (const row of sizesRes.data || []) {
+        const pid = row.product_id as string;
+        const name = String(row.size_name || "").trim();
+        if (!pid || !name) continue;
+        if (!byProduct[pid]) byProduct[pid] = [];
+        if (!byProduct[pid].includes(name)) byProduct[pid].push(name);
+      }
+      setSizeNamesByProduct(byProduct);
+      setMenuSizeRows(
+        (sizesRes.data || []).map((row: any) => ({
+          id: row.id,
+          product_id: row.product_id,
+          size_name: String(row.size_name || "").trim(),
+          price: Number(row.price) || 0,
+        }))
       );
     } catch (e: any) {
       if (e.message?.includes("does not exist")) {
@@ -82,29 +121,97 @@ export default function RestaurantDealsPage() {
       deal_price: Number(deal.deal_price),
       discount_percentage: Number(deal.discount_percentage),
       is_active: deal.is_active,
-      items: (deal.restaurant_deal_items || []).map((i) => ({
-        product_id: i.product_id || "",
-        quantity: Number(i.quantity),
-        size_name: i.size_name || "Medium",
-        item_type: i.item_type || "item",
-      })),
+      items: (deal.restaurant_deal_items || []).map((i) => dealItemToSlotForm(normalizeDealItem(i))),
     });
     setIsModalOpen(true);
   };
 
+  const sizeChoicesForProduct = (productId: string) => {
+    return sizeOptionsForFixedProduct(productId, sizeNamesByProduct).map((o) => o.value);
+  };
+
+  const pickSizeOptionsForSlot = (it: DealSlotForm) => {
+    if (it.item_type === "fixed" && it.product_id) {
+      return sizeOptionsForFixedProduct(it.product_id, sizeNamesByProduct).map((o) => ({
+        ...o,
+        allHave: true,
+        count: 1,
+      }));
+    }
+    return sizeOptionsForAllowedProducts(it.allowed_product_ids, sizeNamesByProduct);
+  };
+
+  const syncSlotSizeAfterProductsChange = (items: DealSlotForm[], idx: number) => {
+    const opts = pickSizeOptionsForSlot(items[idx]);
+    const current = items[idx].size_name;
+    if (opts.some((o) => o.value === current)) return items;
+    const preferred = opts.find((o) => o.allHave) || opts[0];
+    items[idx].size_name = preferred?.value || "Standard";
+    return items;
+  };
+
   const addItemToDeal = () => {
-    if (!products.length) return;
+    if (!products.length) {
+      toast.error("Add menu items first (Menu Management)");
+      return;
+    }
     setForm((f) => ({
       ...f,
-      items: [...f.items, { product_id: products[0].id, quantity: 1, size_name: "Medium", item_type: "item" }],
+      items: [
+        ...f.items,
+        {
+          slot_label: `Slot ${f.items.length + 1}`,
+          item_type: "choice",
+          product_id: "",
+          allowed_product_ids: [],
+          quantity: 1,
+          size_name: "Standard",
+        },
+      ],
     }));
   };
 
+  const removeSlot = (idx: number) => {
+    setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
+  };
+
+  const suggestedCatalogTotal = React.useMemo(
+    () => computeDealCatalogOriginal(form.items, products, menuSizeRows),
+    [form.items, products, menuSizeRows]
+  );
+
+  const productsForDealSize = React.useCallback(
+    (slotIndex: number) => {
+      const slot = form.items[slotIndex];
+      if (!slot) return products;
+      const sz = (slot.size_name || "Standard").trim();
+      if (sz === "Standard") return products;
+      return products.filter((p) => productMatchesDealSize(p.id, sz, sizeNamesByProduct));
+    },
+    [form.items, products, sizeNamesByProduct]
+  );
+
+  const setSlotSize = (idx: number, size: string) => {
+    setForm((f) => {
+      const items = [...f.items];
+      const slot = { ...items[idx], size_name: size };
+      if (slot.item_type === "choice") {
+        slot.allowed_product_ids = slot.allowed_product_ids.filter((id) =>
+          productMatchesDealSize(id, size, sizeNamesByProduct)
+        );
+      } else if (
+        slot.product_id &&
+        !productMatchesDealSize(slot.product_id, size, sizeNamesByProduct)
+      ) {
+        slot.product_id = "";
+      }
+      items[idx] = slot;
+      return { ...f, items };
+    });
+  };
+
   const recalcFromDiscount = (pct: number) => {
-    const orig = form.original_price || form.items.reduce((s, it) => {
-      const p = products.find((x) => x.id === it.product_id);
-      return s + (p?.sale_price_single || 0) * it.quantity;
-    }, 0);
+    const orig = suggestedCatalogTotal || form.original_price;
     setForm((f) => ({
       ...f,
       discount_percentage: pct,
@@ -115,12 +222,28 @@ export default function RestaurantDealsPage() {
 
   const saveDeal = async () => {
     if (!form.name.trim()) { toast.error("Deal name required"); return; }
+    for (const it of form.items) {
+      if (it.item_type === "fixed" && !it.product_id) {
+        toast.error(`Fixed slot "${it.slot_label}" needs a menu item`);
+        return;
+      }
+      if (it.item_type === "choice") {
+        if (!it.slot_label.trim()) {
+          toast.error("Every customer-choice slot needs a label (e.g. Medium Pizza)");
+          return;
+        }
+        if (it.allowed_product_ids.length === 0) {
+          toast.error(`Add at least one searchable item for "${it.slot_label}"`);
+          return;
+        }
+      }
+    }
     setSaving(true);
     try {
-      const orig = form.original_price || form.items.reduce((s, it) => {
-        const p = products.find((x) => x.id === it.product_id);
-        return s + (p?.sale_price_single || 0) * it.quantity;
-      }, 0);
+      const orig =
+        form.original_price > 0
+          ? form.original_price
+          : computeDealCatalogOriginal(form.items, products, menuSizeRows);
       const payload = {
         shop_id: shopId,
         name: form.name.trim(),
@@ -146,10 +269,12 @@ export default function RestaurantDealsPage() {
         await supabase.from("restaurant_deal_items").insert(
           form.items.map((it) => ({
             deal_id: dealId,
-            product_id: it.product_id,
+            product_id: it.item_type === "fixed" ? it.product_id : null,
             quantity: it.quantity,
             size_name: it.size_name,
             item_type: it.item_type,
+            slot_label: it.slot_label.trim() || null,
+            allowed_product_ids: it.item_type === "choice" ? it.allowed_product_ids : null,
           }))
         );
       }
@@ -180,10 +305,11 @@ export default function RestaurantDealsPage() {
     <div className="space-y-6 font-sans animate-in fade-in">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
         <p>
-          Combo deals for Restaurant POS. Menu items, categories, and size prices live in{" "}
-          <Link href="/dashboard/restaurant/menu" className="text-blue-600 font-semibold inline-flex items-center gap-1">
-            Menu Management <ExternalLink size={12} />
+          Sizes are <strong>per menu item</strong> (pizza ≠ drink). Set them in{" "}
+          <Link href="/dashboard/restaurant/menu?tab=sizes" className="text-blue-600 font-semibold inline-flex items-center gap-1">
+            Menu → Sizes &amp; Pricing <ExternalLink size={12} />
           </Link>
+          , then pick a size on each combo slot that matches those items.
         </p>
       </div>
 
@@ -209,9 +335,25 @@ export default function RestaurantDealsPage() {
                   <div className="text-lg font-black text-orange-700">Rs {Number(deal.deal_price).toLocaleString()}</div>
                 </div>
                 <ul className="mt-2 text-[10px] text-slate-600 space-y-0.5">
-                  {(deal.restaurant_deal_items || []).map((i) => (
-                    <li key={i.id}>{Number(i.quantity)}x {i.products?.name}{i.size_name ? ` (${i.size_name})` : ""}</li>
-                  ))}
+                  {(deal.restaurant_deal_items || []).map((i) => {
+                    const n = normalizeDealItem(i);
+                    const label = slotLabelDisplay(n);
+                    if (n.item_type === "choice") {
+                      const nOpt = parseAllowedProductIds(n.allowed_product_ids).length;
+                      return (
+                        <li key={i.id}>
+                          {Number(i.quantity)}× {label}
+                          {i.size_name ? ` (${i.size_name})` : ""} - {nOpt} options
+                        </li>
+                      );
+                    }
+                    return (
+                      <li key={i.id}>
+                        {Number(i.quantity)}× {n.products?.name || label}
+                        {i.size_name ? ` (${i.size_name})` : ""}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <div className="flex gap-2 mt-4">
                   <Button size="sm" variant="outline" onClick={() => openEditDeal(deal)}><Edit size={12} /></Button>
@@ -228,7 +370,7 @@ export default function RestaurantDealsPage() {
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/40" onClick={() => setIsModalOpen(false)} />
-            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-lg relative z-10 max-h-[90vh] overflow-y-auto p-6 space-y-4">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl relative z-10 max-h-[90vh] overflow-y-auto p-6 space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="font-bold text-lg flex items-center gap-2"><Pizza size={18} />{editingDeal ? "Edit Deal" : "New Deal / Combo"}</h3>
                 <button type="button" onClick={() => setIsModalOpen(false)}><X size={18} /></button>
@@ -248,32 +390,141 @@ export default function RestaurantDealsPage() {
                   <label className="text-[10px] font-bold text-slate-500">Deal Price Rs</label>
                   <Input type="number" value={form.deal_price || ""} onChange={(e) => setForm({ ...form, deal_price: parseFloat(e.target.value) || 0 })} />
                 </div>
+              <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-[11px] text-slate-600">
+                Menu total by slot sizes (choice slots use highest allowed price at that size):{" "}
+                <strong className="text-slate-900">Rs {suggestedCatalogTotal.toLocaleString()}</strong>
+                <button
+                  type="button"
+                  className="ml-2 text-orange-700 font-bold underline"
+                  onClick={() => setForm((f) => ({ ...f, original_price: suggestedCatalogTotal }))}
+                >
+                  Apply as Original
+                </button>
+              </div>
               </div>
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <div className="text-xs font-bold text-slate-600">Deal Items</div>
-                  <Button size="sm" variant="outline" onClick={addItemToDeal}><Plus size={12} className="mr-1" /> Add Item</Button>
-                </div>
-                {form.items.map((it, idx) => (
-                  <div key={idx} className="grid grid-cols-4 gap-2 mb-2">
-                    <select value={it.product_id} onChange={(e) => {
-                      const items = [...form.items];
-                      items[idx].product_id = e.target.value;
-                      setForm({ ...form, items });
-                    }} className="col-span-2 border rounded text-xs p-1.5">
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                    <Input type="number" value={it.quantity} onChange={(e) => {
-                      const items = [...form.items];
-                      items[idx].quantity = parseFloat(e.target.value) || 1;
-                      setForm({ ...form, items });
-                    }} className="text-xs" />
-                    <Input value={it.size_name} onChange={(e) => {
-                      const items = [...form.items];
-                      items[idx].size_name = e.target.value;
-                      setForm({ ...form, items });
-                    }} className="text-xs" placeholder="Size" />
+                  <div>
+                    <div className="text-xs font-bold text-slate-600">Combo slots</div>
+                    <p className="text-[10px] text-slate-500">Each slot = one line in the combo. Use <strong>Customer picks</strong> for flavors (e.g. Medium pizza).</p>
                   </div>
+                  <Button size="sm" variant="outline" onClick={addItemToDeal}><Plus size={12} className="mr-1" /> Add slot</Button>
+                </div>
+                {form.items.length === 0 && (
+                  <div className="border border-dashed rounded-xl p-6 text-center text-xs text-slate-500">
+                    Each slot has its <strong>own size</strong> (Half pizza + Full drink, etc.). Pick allowed items for that slot, then choose size for that slot only.
+                  </div>
+                )}
+                {form.items.map((it, idx) => (
+                  <motion.div
+                    key={idx}
+                    layout="position"
+                    transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                    className="mb-3 rounded-xl border border-slate-200 p-3 space-y-2 bg-slate-50/80"
+                  >
+                    <div className="flex flex-wrap gap-2 items-center justify-between">
+                      <div className="text-[10px] font-black text-orange-700">SLOT {idx + 1}</div>
+                      <button type="button" onClick={() => removeSlot(idx)} className="text-[10px] text-red-600 font-bold">
+                        Remove
+                      </button>
+                    </div>
+                    <Input
+                      placeholder="Slot label e.g. Medium Pizza"
+                      value={it.slot_label}
+                      onChange={(e) => {
+                        const items = [...form.items];
+                        items[idx].slot_label = e.target.value;
+                        setForm({ ...form, items });
+                      }}
+                      className="text-sm font-semibold"
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <select
+                        value={it.item_type}
+                        onChange={(e) => {
+                          const items = [...form.items];
+                          items[idx].item_type = e.target.value as "fixed" | "choice";
+                          if (items[idx].item_type === "choice") items[idx].product_id = "";
+                          setForm({ ...form, items });
+                        }}
+                        className="border rounded text-xs p-2 font-bold"
+                      >
+                        <option value="choice">Customer picks (search at POS)</option>
+                        <option value="fixed">Fixed item</option>
+                      </select>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={it.quantity}
+                        onChange={(e) => {
+                          const items = [...form.items];
+                          items[idx].quantity = parseFloat(e.target.value) || 1;
+                          setForm({ ...form, items });
+                        }}
+                        className="text-xs"
+                        placeholder="Qty"
+                      />
+                      <select
+                        value={it.size_name}
+                        onChange={(e) => setSlotSize(idx, e.target.value)}
+                        className="border rounded text-xs p-2 font-bold text-violet-900"
+                        title={`Size for slot ${idx + 1} only`}
+                      >
+                        {sizeOptionsForFirstSlot(it, sizeNamesByProduct).map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      {it.size_name && it.size_name !== "Standard" ? (
+                        <>
+                          This slot uses size <strong>{it.size_name}</strong> - search shows items that have this size on the menu.
+                        </>
+                      ) : (
+                        <>
+                          <strong>Standard</strong> size for this slot (items with no extra sizes). Add menu picks below, or change size when Half/Full apply.
+                        </>
+                      )}
+                    </p>
+                    {it.item_type === "fixed" ? (
+                      <SearchableSelect
+                        options={productsForDealSize(idx).map((p) => ({ value: p.id, label: p.name }))}
+                        value={it.product_id}
+                        onChange={(pid) => {
+                          const items = [...form.items];
+                          items[idx].product_id = pid;
+                          syncSlotSizeAfterProductsChange(items, idx);
+                          setForm({ ...form, items });
+                        }}
+                        placeholder="Search fixed menu item…"
+                        className="text-xs"
+                      />
+                    ) : (
+                      <DealSlotProductPicker
+                        products={productsForDealSize(idx)}
+                        selectedIds={it.allowed_product_ids}
+                        applySizeFilter={(it.size_name || "Standard") !== "Standard"}
+                        onChange={(ids) => {
+                          const items = [...form.items];
+                          const sz = items[idx].size_name || "Standard";
+                          items[idx].allowed_product_ids =
+                            sz === "Standard"
+                              ? ids
+                              : ids.filter((id) =>
+                                  productMatchesDealSize(id, sz, sizeNamesByProduct)
+                                );
+                          syncSlotSizeAfterProductsChange(items, idx);
+                          setForm({ ...form, items });
+                        }}
+                        sizeHint={
+                          (it.size_name || "Standard") !== "Standard" ? it.size_name : undefined
+                        }
+                        sizeNamesByProduct={sizeNamesByProduct}
+                      />
+                    )}
+                  </motion.div>
                 ))}
               </div>
               <Button onClick={saveDeal} disabled={saving} className="w-full bg-orange-600 text-white">

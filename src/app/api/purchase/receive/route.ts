@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { usesLocalDatabase } from "@/lib/config";
+import { localShopExists, receivePurchaseLocal } from "@/lib/local-sqlite/receive-purchase";
 import type { ReceivePurchasePayload } from "@/lib/money/types";
 
 // ─── Standard JSON response helpers ──────────────────────────────────────────
@@ -17,20 +18,7 @@ function err(message: string, code: string, status = 400) {
 
 export async function POST(req: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (pairs) =>
-          pairs.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          ),
-      },
-    }
-  );
+  const supabase = await createServerSupabaseClient();
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
@@ -57,42 +45,62 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Shop ownership check (RLS defence in depth) ────────────────────────────
-  const { data: shopRow, error: shopErr } = await supabase
-    .from("shops")
-    .select("id")
-    .eq("id", payload.shop_id)
-    .single();
+  const shopOk = usesLocalDatabase()
+    ? localShopExists(payload.shop_id)
+    : (
+        await supabase.from("shops").select("id").eq("id", payload.shop_id).single()
+      ).data != null;
 
-  if (shopErr || !shopRow) {
+  if (!shopOk) {
     return err("Shop not found or access denied", "SHOP_NOT_FOUND", 403);
   }
 
-  // ── Call atomic Postgres function ──────────────────────────────────────────
-  const { data, error: rpcErr } = await supabase.rpc("atomic_receive_purchase", {
-    p_payload: {
-      purchase_order_id: payload.purchase_order_id ?? null,
-      shop_id:           payload.shop_id,
-      supplier_id:       payload.supplier_id ?? null,
-      total_amount:      payload.total_amount,
-      paid_amount:       payload.paid_amount ?? 0,
-      discount:          payload.discount ?? 0,
-      tax_amount:        payload.tax_amount ?? 0,
-      status:            payload.status,
-      payment_mode:      payload.payment_mode,
-      notes:             payload.notes ?? null,
-      invoice_number:    payload.invoice_number ?? null,
-      account_id:        payload.account_id ?? null,
-      items:             payload.items,
-    },
-  });
+  const rpcPayload = {
+    purchase_order_id: payload.purchase_order_id ?? null,
+    shop_id: payload.shop_id,
+    supplier_id: payload.supplier_id ?? null,
+    total_amount: payload.total_amount,
+    paid_amount: payload.paid_amount ?? 0,
+    discount: payload.discount ?? 0,
+    tax_amount: payload.tax_amount ?? 0,
+    status: payload.status,
+    payment_mode: payload.payment_mode,
+    notes: payload.notes ?? null,
+    invoice_number: payload.invoice_number ?? null,
+    account_id: payload.account_id ?? null,
+    items: payload.items,
+  };
 
-  if (rpcErr) {
-    const msg = rpcErr.message ?? "atomic_receive_purchase failed";
-    console.error("[/api/purchase/receive] RPC error:", msg);
-    return err(msg, "RPC_ERROR", 500);
+  let result: { status?: string; purchase_order_id: string };
+
+  if (usesLocalDatabase()) {
+    try {
+      result = receivePurchaseLocal({ ...payload, ...rpcPayload, purchase_order_id: rpcPayload.purchase_order_id ?? payload.purchase_order_id });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "receive_purchase failed";
+      console.error("[/api/purchase/receive] local SQLite error:", msg);
+      return err(msg, "RPC_ERROR", 500);
+    }
+  } else {
+    // ── Call atomic Postgres function (fallback: receive_purchase) ──
+    let { data, error: rpcErr } = await supabase.rpc("atomic_receive_purchase", {
+      p_payload: rpcPayload,
+    });
+
+    if (rpcErr) {
+      const fallback = await supabase.rpc("receive_purchase", { p_payload: rpcPayload });
+      data = fallback.data;
+      rpcErr = fallback.error;
+    }
+
+    if (rpcErr) {
+      const msg = rpcErr.message ?? "atomic_receive_purchase failed";
+      console.error("[/api/purchase/receive] RPC error:", msg);
+      return err(msg, "RPC_ERROR", 500);
+    }
+
+    result = data as { status?: string; purchase_order_id: string };
   }
-
-  const result = data as { status: string; purchase_order_id: string };
 
   // Guarantee product_batches rows exist for all items with batch_number
   try {
@@ -143,6 +151,6 @@ export async function POST(req: NextRequest) {
 
   return ok({
     purchase_order_id: result.purchase_order_id,
-    status:            result.status,
+    status: result.status ?? payload.status,
   }, 201);
 }

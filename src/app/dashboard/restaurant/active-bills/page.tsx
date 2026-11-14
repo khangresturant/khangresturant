@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Receipt, Search, Printer, CreditCard, ChevronRight, 
@@ -22,24 +22,20 @@ import {
   canSettleOrder,
   markBillPrinted,
   settleRestaurantOrder,
-  applyRestaurantOrderCostAndStock,
-  invoiceLinesForCost,
 } from "@/lib/restaurant-orders";
 import {
   countKitchenTicketsForInvoice,
   dispatchKitchenTicket,
+  KITCHEN_POLL_INTERVAL_MS,
+  shouldPollKitchenLive,
 } from "@/lib/restaurant-kitchen";
 import { printRestaurantPaidReceipt } from "@/lib/restaurant-receipt-print";
 import {
-  restoreStockForInvoiceLines,
-  type InvoiceLineForCost,
-} from "@/lib/restaurant-recipe-cost";
-import {
-  buildRestaurantEditHistoryEntry,
   computeKitchenDispatchDelta,
   loadRestaurantBillEditPrefs,
   mapInvoiceRowsToHistoryItems,
   parseRestaurantEditHistory,
+  persistRestaurantDraftBillEdit,
   saveRestaurantBillEditPrefs,
   type RestaurantBillEditHistoryEntry,
   type RestaurantBillEditPrefs,
@@ -124,6 +120,54 @@ type CashAccount = {
   current_balance: number;
 };
 
+const DRAFT_INVOICE_SELECT = `
+  id,
+  created_at,
+  order_number,
+  total_amount,
+  discount,
+  tax_rate,
+  tax_amount,
+  party_id,
+  payment_mode,
+  status,
+  is_edited,
+  edit_history,
+  waiter_id,
+  rider_id,
+  restaurant_order_status,
+  bill_printed_at,
+  service_type,
+  stock_deducted,
+  customer_name,
+  customer_phone,
+  customer_address,
+  special_instructions,
+  delivery_fee,
+  additional_charges,
+  parties ( name, phone ),
+  invoice_items (
+    id,
+    product_id,
+    quantity,
+    unit_price,
+    subtotal,
+    packing_name,
+    menu_size_id,
+    products ( name, purchase_price_single )
+  )
+`;
+
+function mapRowToDraftInvoice(inv: any, tablesData: DBTable[]): DraftInvoice {
+  const associatedTable = (tablesData || []).find((t: any) => t.active_invoice_id === inv.id);
+  return {
+    ...inv,
+    edit_history: parseRestaurantEditHistory(inv.edit_history),
+    tableName: associatedTable ? associatedTable.name : "Takeaway Order",
+    tableId: associatedTable ? associatedTable.id : undefined,
+  };
+}
+
 type Party = {
   id: string;
   name: string;
@@ -135,8 +179,11 @@ export default function ActiveBillsPage() {
   const { shopId, userId, shopName, shopPhone, shopAddress, shopEmail, userName } = useShop();
   const { t, language } = useLanguage();
   const supabase = createClient();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const billFromUrl = searchParams.get("bill");
+  const editFromUrl =
+    searchParams.get("edit") === "1" || searchParams.get("edit") === "true";
 
   const [mounted, setMounted] = useState(false);
   const [bills, setBills] = useState<DraftInvoice[]>([]);
@@ -172,6 +219,7 @@ export default function ActiveBillsPage() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSubmittingCheckout, setIsSubmittingCheckout] = useState(false);
   const [isSendingKot, setIsSendingKot] = useState(false);
+  const loadDataRef = useRef<() => Promise<void>>(async () => {});
   const [kitchenTicketCount, setKitchenTicketCount] = useState(0);
   const [paymentMode, setPaymentMode] = useState<RestaurantPaymentMode>("cash");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
@@ -224,65 +272,43 @@ export default function ActiveBillsPage() {
       // 2. Fetch draft invoices
       const { data: invData, error: invErr } = await supabase
         .from("invoices")
-        .select(`
-          id,
-          created_at,
-          order_number,
-          total_amount,
-          discount,
-          tax_rate,
-          tax_amount,
-          party_id,
-          payment_mode,
-          status,
-          is_edited,
-          edit_history,
-          waiter_id,
-          rider_id,
-          restaurant_order_status,
-          bill_printed_at,
-          service_type,
-          stock_deducted,
-          customer_name,
-          customer_phone,
-          customer_address,
-          special_instructions,
-          delivery_fee,
-          additional_charges,
-          parties ( name, phone ),
-          invoice_items (
-            id,
-            product_id,
-            quantity,
-            unit_price,
-            subtotal,
-            packing_name,
-            menu_size_id,
-            products ( name, purchase_price_single )
-          )
-        `)
+        .select(DRAFT_INVOICE_SELECT)
         .eq("shop_id", shopId)
         .eq("status", "draft")
         .order("created_at", { ascending: false });
 
       if (invErr) throw invErr;
 
-      // Map tables to draft invoices
-      const mappedBills: DraftInvoice[] = (invData || []).map((inv: any) => {
-        const associatedTable = (tablesData || []).find((t: any) => t.active_invoice_id === inv.id);
-        return {
-          ...inv,
-          edit_history: parseRestaurantEditHistory(inv.edit_history),
-          tableName: associatedTable ? associatedTable.name : "Takeaway Order",
-          tableId: associatedTable ? associatedTable.id : undefined
-        };
-      });
+      let mappedBills: DraftInvoice[] = (invData || []).map((inv: any) =>
+        mapRowToDraftInvoice(inv, tablesData || [])
+      );
+
+      if (billFromUrl && !mappedBills.some((b) => b.id === billFromUrl)) {
+        const { data: deepBill, error: deepErr } = await supabase
+          .from("invoices")
+          .select(DRAFT_INVOICE_SELECT)
+          .eq("shop_id", shopId)
+          .eq("id", billFromUrl)
+          .eq("status", "draft")
+          .maybeSingle();
+        if (!deepErr && deepBill) {
+          mappedBills = [mapRowToDraftInvoice(deepBill, tablesData || []), ...mappedBills];
+        } else if (billFromUrl) {
+          toast.error(
+            language === "en"
+              ? "Active bill not found - it may be settled or cancelled."
+              : "بل نہیں ملا - شاید سیٹل یا منسوخ ہو چکا ہے۔"
+          );
+        }
+      }
 
       setBills(mappedBills);
 
-      // Keep selection in sync or default to first
-      if (selectedBill) {
-        const updated = mappedBills.find(b => b.id === selectedBill.id);
+      if (billFromUrl) {
+        const target = mappedBills.find((b) => b.id === billFromUrl);
+        setSelectedBill(target || null);
+      } else if (selectedBill) {
+        const updated = mappedBills.find((b) => b.id === selectedBill.id);
         setSelectedBill(updated || null);
       } else if (mappedBills.length > 0) {
         setSelectedBill(mappedBills[0]);
@@ -381,31 +407,56 @@ export default function ActiveBillsPage() {
     }
   };
 
+  loadDataRef.current = loadData;
+
   useEffect(() => {
     if (!shopId) return;
-    loadData();
+    void loadDataRef.current();
+
+    let pollId: ReturnType<typeof setInterval> | undefined;
+    if (shouldPollKitchenLive()) {
+      pollId = setInterval(() => {
+        void loadDataRef.current();
+      }, KITCHEN_POLL_INTERVAL_MS);
+    }
+    const refreshOnFocus = () => void loadDataRef.current();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadDataRef.current();
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", onVisibility);
 
     // Subscribe to live tables and invoices changes
     const realtimeChannel = supabase
       .channel("active_bills_realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "restaurant_tables", filter: `shop_id=eq.${shopId}` }, () => {
-        loadData();
+        void loadDataRef.current();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "invoices", filter: `shop_id=eq.${shopId}` }, () => {
-        loadData();
+        void loadDataRef.current();
       })
       .subscribe();
 
     return () => {
+      if (pollId) clearInterval(pollId);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
       supabase.removeChannel(realtimeChannel);
     };
-  }, [shopId]);
+  }, [shopId, supabase]);
 
   useEffect(() => {
-    if (!billFromUrl || bills.length === 0) return;
+    if (!billFromUrl) return;
     const match = bills.find((b) => b.id === billFromUrl);
-    if (match) setSelectedBill(match);
-  }, [billFromUrl, bills]);
+    if (match && selectedBill?.id !== billFromUrl) {
+      setSelectedBill(match);
+    }
+  }, [billFromUrl, bills, selectedBill?.id]);
+
+  useEffect(() => {
+    if (!editFromUrl || !billFromUrl) return;
+    router.replace(`/dashboard/restaurant/pos?resumeInvoice=${encodeURIComponent(billFromUrl)}`);
+  }, [editFromUrl, billFromUrl, router]);
 
   useEffect(() => {
     if (!selectedBill?.id) {
@@ -473,10 +524,7 @@ export default function ActiveBillsPage() {
   // Edit Mode Operations
   const startEditing = () => {
     if (!selectedBill) return;
-    setEditItems(JSON.parse(JSON.stringify(selectedBill.invoice_items)));
-    setIsEditing(true);
-    setProductSearch("");
-    setShowProductDropdown(false);
+    router.push(`/dashboard/restaurant/pos?resumeInvoice=${encodeURIComponent(selectedBill.id)}`);
   };
 
   const adjustEditQty = (productId: string, amount: number) => {
@@ -530,101 +578,40 @@ export default function ActiveBillsPage() {
     try {
       const invoiceId = selectedBill.id;
 
-      const { data: prevInv } = await supabase
-        .from("invoices")
-        .select("total_amount, tax_amount, discount, tax_rate, status, paid_amount, edit_history, stock_deducted, restaurant_order_status, bill_printed_at")
-        .eq("id", invoiceId)
-        .single();
-
-      const previousItems = mapInvoiceRowsToHistoryItems(selectedBill.invoice_items || []);
-      const nextItems = mapInvoiceRowsToHistoryItems(
-        editItems.map((item) => ({
+      const {
+        historyEntry,
+        updatedHistory,
+        newSubtotal,
+        newTaxAmount,
+        newNetTotal,
+        previousItems,
+        nextItems,
+      } = await persistRestaurantDraftBillEdit(supabase, {
+        invoiceId,
+        previousItemRows: (selectedBill.invoice_items || []).map((item) => ({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+          subtotal: item.subtotal,
+          packing_name: item.packing_name,
+          menu_size_id: item.menu_size_id,
+          products: item.products,
+        })),
+        nextItemRows: editItems.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity,
           unit_price: item.unit_price,
           subtotal: item.subtotal,
           packing_name: item.packing_name,
+          menu_size_id: item.menu_size_id,
           products: item.products,
-        }))
-      );
-
-      const historyEntry = buildRestaurantEditHistoryEntry({
-        invoice: prevInv || selectedBill,
-        previousItems,
-        nextItems,
-        editedBy: userName,
+        })),
+        discount: selectedBill.discount || 0,
+        taxRate: selectedBill.tax_rate || 0,
+        editedBy: userName ?? undefined,
+        nextOrderStatus: "pending",
+        clearBillPrintedAt: true,
       });
-
-      const oldHistory = parseRestaurantEditHistory(prevInv?.edit_history);
-      const updatedHistory = [historyEntry, ...oldHistory];
-
-      if (prevInv?.stock_deducted && selectedBill.invoice_items?.length) {
-        await restoreStockForInvoiceLines(
-          supabase,
-          invoiceLinesForCost(
-            selectedBill.invoice_items.map((it) => ({
-              product_id: it.product_id,
-              quantity: it.quantity,
-              packing_name: it.packing_name,
-              menu_size_id: it.menu_size_id,
-            }))
-          )
-        );
-      }
-
-      await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
-
-      const itemsToInsert = editItems.map((item) => ({
-        invoice_id: invoiceId,
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        subtotal: item.unit_price * item.quantity,
-        packing_name: item.packing_name || null,
-        menu_size_id: item.menu_size_id || null,
-      }));
-
-      const { error: insertErr } = await supabase.from("invoice_items").insert(itemsToInsert);
-      if (insertErr) throw insertErr;
-
-      const newSubtotal = editItems.reduce((sum, item) => sum + item.subtotal, 0);
-      const newTaxAmount = (newSubtotal * (selectedBill.tax_rate || 0)) / 100;
-      const newNetTotal = Math.max(0, newSubtotal + newTaxAmount - (selectedBill.discount || 0));
-
-      const wasBillPrinted = prevInv?.restaurant_order_status === "bill_printed";
-      const nextOrderStatus =
-        wasBillPrinted || prevInv?.bill_printed_at
-          ? "ready"
-          : prevInv?.restaurant_order_status || selectedBill.restaurant_order_status;
-
-      const { error: invErr } = await supabase
-        .from("invoices")
-        .update({
-          total_amount: newNetTotal,
-          tax_amount: newTaxAmount,
-          is_edited: true,
-          edit_history: updatedHistory,
-          restaurant_order_status: nextOrderStatus,
-          bill_printed_at: wasBillPrinted ? null : prevInv?.bill_printed_at,
-          stock_deducted: false,
-        })
-        .eq("id", invoiceId);
-
-      if (invErr) throw invErr;
-
-      await applyRestaurantOrderCostAndStock(
-        supabase,
-        invoiceId,
-        invoiceLinesForCost(
-          itemsToInsert.map((it) => ({
-            product_id: it.product_id,
-            quantity: it.quantity,
-            packing_name: it.packing_name,
-            menu_size_id: it.menu_size_id,
-          }))
-        ),
-        newNetTotal
-      );
 
       toast.success(
         language === "en"
@@ -661,7 +648,7 @@ export default function ActiveBillsPage() {
             shopDetails: shopDetailsForPrint(),
             companyRow: companyDetails,
             revisionNumber: updatedHistory.length,
-            previousTotal: Number(prevInv?.total_amount ?? selectedBill.total_amount),
+            previousTotal: Number(selectedBill.total_amount),
             editedAt: historyEntry.edited_at,
             editedBy: historyEntry.edited_by,
             changes: historyEntry.changes,
@@ -829,7 +816,7 @@ export default function ActiveBillsPage() {
         netTotal,
         taxAmount,
         taxRate: taxRateVal,
-        discount: discountVal,
+          discount: discountVal,
         paymentMode,
         receivedAmount,
         partyId: selectedCustomerId === "walkin" ? null : selectedCustomerId,
@@ -948,8 +935,8 @@ export default function ActiveBillsPage() {
         }
       } catch (e: any) {
         toast.error(e.message);
-        return;
-      }
+      return;
+    }
     }
 
     const lines = mapDbInvoiceItemsToReceiptLines(billObj.invoice_items || []);
@@ -1014,11 +1001,21 @@ export default function ActiveBillsPage() {
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-6">
       {/* Top Header Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4 border-b border-slate-100 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-3">
+        <div>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight">
+            {language === "en" ? "Restaurant Billing Desk" : "ریستوراں بلنگ ڈیسک"}
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5 max-w-xl">
+            {language === "en"
+              ? "Settle, print, and queue bills - use POS (full menu) for bill edits with version history."
+              : "سیٹل و پرنٹ - بل ایڈٹ مکمل مینو کے لیے POS استعمال کریں۔"}
+          </p>
+        </div>
         <div className="flex items-center gap-3 flex-wrap">
           <Link href="/dashboard/restaurant/pos">
             <Button variant="outline" className="border-slate-200 text-slate-600">
-              POS Desk
+              {language === "en" ? "Restaurant POS Desk" : "ریستوراں POS ڈیسک"}
             </Button>
           </Link>
           <Link href="/dashboard/restaurant/kds">
@@ -1215,6 +1212,20 @@ export default function ActiveBillsPage() {
                               {language === "en"
                                 ? RESTAURANT_ORDER_STATUS_LABELS[bill.restaurant_order_status].en
                                 : RESTAURANT_ORDER_STATUS_LABELS[bill.restaurant_order_status].ur}
+                            </div>
+                          )}
+                          {(bill.is_edited || (bill.edit_history?.length ?? 0) > 0) && (
+                            <div
+                              className={`inline-block mt-1 ml-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${
+                                isSelected
+                                  ? "bg-amber-500/20 text-amber-200 border-amber-400/40"
+                                  : "bg-amber-50 text-amber-800 border-amber-200"
+                              }`}
+                            >
+                              {language === "en" ? "Edited" : "ایڈٹ شدہ"}
+                              {(bill.edit_history?.length ?? 0) > 0
+                                ? ` · v${bill.edit_history!.length}`
+                                : ""}
                             </div>
                           )}
                         </div>
@@ -1566,7 +1577,7 @@ export default function ActiveBillsPage() {
                       }}
                       className={`py-2 px-1 text-[10px] font-bold border rounded-xl transition-all ${
                         paymentMode === mode.id
-                          ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                          ? "bg-slate-900 text-white border-slate-900 shadow-sm" 
                           : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                       }`}
                     >
@@ -1759,7 +1770,11 @@ export default function ActiveBillsPage() {
             : null
         }
         currentItems={(selectedBill?.invoice_items || []).map((i) => ({
-          name: i.products?.name || "Item",
+          name: i.products?.name
+            ? i.packing_name
+              ? `${i.products.name} (${i.packing_name})`
+              : i.products.name
+            : "Item",
           quantity: i.quantity,
           unit_price: i.unit_price,
         }))}

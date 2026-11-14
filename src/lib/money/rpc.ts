@@ -16,7 +16,31 @@ export function isMoneyRpcEnabled(): boolean {
 
 function rpcErrorMessage(error: { message?: string; details?: string; hint?: string }): string {
   const parts = [error.message, error.details, error.hint].filter(Boolean);
-  return parts.join(" — ") || "Money RPC failed";
+  return parts.join(" - ") || "Money RPC failed";
+}
+
+async function parseMoneyApiJson(res: Response): Promise<Record<string, unknown> | null> {
+  const text = await res.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(`Server returned invalid JSON (HTTP ${res.status})`);
+  }
+}
+
+async function receivePurchaseViaSupabaseRpc(
+  supabase: SupabaseClient,
+  payload: ReceivePurchasePayload
+): Promise<{ purchase_order_id: string; ok?: boolean; idempotent?: boolean }> {
+  const { data, error } = await supabase.rpc("receive_purchase", { p_payload: payload });
+  if (error) throw new Error(rpcErrorMessage(error));
+  const row = (data ?? {}) as { purchase_order_id?: string; idempotent?: boolean };
+  return {
+    purchase_order_id: row.purchase_order_id ?? payload.purchase_order_id ?? "",
+    ok: true,
+    idempotent: row.idempotent,
+  };
 }
 
 export async function posCheckout(
@@ -48,7 +72,7 @@ export async function voidInvoiceRpc(
   invoiceId: string,
   reason = "Voided by operator"
 ): Promise<{ invoice_id: string; voided?: boolean; already_voided?: boolean }> {
-  // ── Primary path: /api/void (atomic_void_invoice — stock + credit reversal) ──
+  // ── Primary path: /api/void (atomic_void_invoice - stock + credit reversal) ──
   try {
     const res = await fetch("/api/void", {
       method: "POST",
@@ -68,7 +92,7 @@ export async function voidInvoiceRpc(
   } catch (apiErr: any) {
     // If the fetch itself failed (network error / route not deployed yet), fall back
     if (apiErr.message === "VOID_API_FAILED" || apiErr.message?.includes("ALREADY_VOIDED")) {
-      throw apiErr; // real error — don't swallow
+      throw apiErr; // real error - don't swallow
     }
     console.warn("[voidInvoiceRpc] /api/void unavailable, falling back to void_invoice RPC:", apiErr.message);
   }
@@ -108,21 +132,36 @@ export async function receivePurchaseRpc(
   supabase: SupabaseClient,
   payload: ReceivePurchasePayload
 ): Promise<{ purchase_order_id: string; ok?: boolean; idempotent?: boolean }> {
-  const res = await fetch("/api/purchase/receive", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const res = await fetch("/api/purchase/receive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
 
-  const json = await res.json();
-  if (!res.ok || !json.success) {
-    throw new Error(json.error?.message || "Purchase receiving failed");
+    const json = await parseMoneyApiJson(res);
+    if (!json) {
+      return receivePurchaseViaSupabaseRpc(supabase, payload);
+    }
+
+    if (!res.ok || !json.success) {
+      const errBody = json.error as { message?: string } | undefined;
+      throw new Error(errBody?.message || "Purchase receiving failed");
+    }
+
+    const data = json.data as { purchase_order_id?: string } | undefined;
+    return {
+      purchase_order_id: data?.purchase_order_id ?? payload.purchase_order_id ?? "",
+      ok: true,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("invalid JSON") || msg.includes("Empty response") || msg.includes("Failed to fetch")) {
+      return receivePurchaseViaSupabaseRpc(supabase, payload);
+    }
+    throw e instanceof Error ? e : new Error(msg);
   }
-
-  return {
-    purchase_order_id: json.data?.purchase_order_id,
-    ok: true,
-  };
 }
 
 /**
@@ -139,13 +178,18 @@ export async function updatePurchaseRpc(
     body: JSON.stringify(payload),
   });
 
-  const json = await res.json();
+  const json = await parseMoneyApiJson(res);
+  if (!json) {
+    throw new Error("Empty response from purchase update API");
+  }
   if (!res.ok || !json.success) {
-    throw new Error(json.error?.message || "Purchase update failed");
+    const errBody = json.error as { message?: string } | undefined;
+    throw new Error(errBody?.message || "Purchase update failed");
   }
 
+  const data = json.data as { purchase_order_id?: string } | undefined;
   return {
-    purchase_order_id: json.data?.purchase_order_id,
+    purchase_order_id: data?.purchase_order_id ?? payload.purchase_order_id ?? "",
     ok: true,
     updated: true,
   };

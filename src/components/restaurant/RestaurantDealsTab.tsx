@@ -7,24 +7,13 @@ import { createClient } from "@/lib/supabase/client";
 import { useShop } from "@/context/ShopContext";
 import { Button } from "@/components/ui/button";
 import { type RestaurantDeal, dealSavingsPercent } from "@/lib/restaurant-deals";
-
-type CartDealPayload = {
-  cartItemId: string;
-  productId: string;
-  name: string;
-  price: number;
-  purchasePrice: number;
-  quantity: number;
-  remarks: string;
-  isDeal: boolean;
-  dealId: string;
-};
+import { dealIsPosReady, normalizeDealItem, parseAllowedProductIds, slotLabelDisplay } from "@/lib/restaurant-deal-slots";
 
 type Props = {
-  onAddDeal: (item: CartDealPayload) => void;
+  onConfigureDeal: (deal: RestaurantDeal) => void;
 };
 
-export function RestaurantDealsTab({ onAddDeal }: Props) {
+export function RestaurantDealsTab({ onConfigureDeal }: Props) {
   const { shopId } = useShop();
   const supabase = createClient();
   const [deals, setDeals] = useState<RestaurantDeal[]>([]);
@@ -36,7 +25,7 @@ export function RestaurantDealsTab({ onAddDeal }: Props) {
     (async () => {
       const { data, error } = await supabase
         .from("restaurant_deals")
-        .select(`*, restaurant_deal_items ( id, product_id, quantity, size_name, products ( name ) )`)
+        .select(`*, restaurant_deal_items ( id, product_id, quantity, size_name, item_type, slot_label, allowed_product_ids, products ( name ) )`)
         .eq("shop_id", shopId)
         .eq("is_active", true)
         .order("name");
@@ -45,26 +34,9 @@ export function RestaurantDealsTab({ onAddDeal }: Props) {
     })();
   }, [shopId, supabase]);
 
-  const addDeal = (deal: RestaurantDeal) => {
-    const firstItem = deal.restaurant_deal_items?.[0];
-    const anchorProductId = firstItem?.product_id;
-    if (!anchorProductId) {
-      return;
-    }
-    const itemsDesc = (deal.restaurant_deal_items || [])
-      .map((i) => `${Number(i.quantity)}x ${i.products?.name}${i.size_name ? ` (${i.size_name})` : ""}`)
-      .join(", ");
-    onAddDeal({
-      cartItemId: `deal-${deal.id}-${Date.now()}`,
-      productId: anchorProductId,
-      name: `🎯 ${deal.name}`,
-      price: Number(deal.deal_price),
-      purchasePrice: 0,
-      quantity: 1,
-      remarks: `DEAL_ID:${deal.id}|${itemsDesc}`,
-      isDeal: true,
-      dealId: deal.id,
-    });
+  const openDeal = (deal: RestaurantDeal) => {
+    if (!dealIsPosReady(deal)) return;
+    onConfigureDeal(deal);
     setSelectedId(deal.id);
     setTimeout(() => setSelectedId(null), 800);
   };
@@ -82,11 +54,11 @@ export function RestaurantDealsTab({ onAddDeal }: Props) {
     );
   }
 
-  const dealsWithProducts = deals.filter((d) => d.restaurant_deal_items?.some((i) => i.product_id));
+  const dealsWithProducts = deals.filter((d) => dealIsPosReady(d));
   if (dealsWithProducts.length === 0) {
     return (
       <div className="text-center py-12 text-slate-500 text-sm">
-        Deals need at least one menu item. Edit deals in <strong>Deals & Sizes</strong>.
+        Each deal needs slots with fixed items or customer-choice options. Edit in <strong>Deals & Combos</strong>.
       </div>
     );
   }
@@ -96,7 +68,7 @@ export function RestaurantDealsTab({ onAddDeal }: Props) {
       {dealsWithProducts.map((deal) => (
         <button
           key={deal.id}
-          onClick={() => addDeal(deal)}
+          onClick={() => openDeal(deal)}
           className={`w-full text-left bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4 hover:border-orange-400 transition-all ${
             selectedId === deal.id ? "ring-2 ring-orange-500" : ""
           }`}
@@ -106,9 +78,25 @@ export function RestaurantDealsTab({ onAddDeal }: Props) {
               <h4 className="font-bold text-slate-800">{deal.name}</h4>
               {deal.description && <p className="text-[10px] text-slate-500 mt-0.5">{deal.description}</p>}
               <ul className="mt-2 text-[10px] text-slate-600">
-                {(deal.restaurant_deal_items || []).map((i) => (
-                  <li key={i.id}>• {Number(i.quantity)}x {i.products?.name}{i.size_name ? ` (${i.size_name})` : ""}</li>
-                ))}
+                {(deal.restaurant_deal_items || []).map((i) => {
+                  const n = normalizeDealItem(i);
+                  const label = slotLabelDisplay(n);
+                  if (n.item_type === "choice") {
+                    const nOpt = parseAllowedProductIds(n.allowed_product_ids).length;
+                    return (
+                      <li key={i.id}>
+                        • {Number(i.quantity)}× {label}
+                        {i.size_name ? ` (${i.size_name})` : ""} - <div className="text-violet-700">{nOpt} choices</div>
+                      </li>
+                    );
+                  }
+                  return (
+                    <li key={i.id}>
+                      • {Number(i.quantity)}× {n.products?.name || label}
+                      {i.size_name ? ` (${i.size_name})` : ""}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
             <div className="text-right shrink-0 ml-2">
@@ -118,7 +106,7 @@ export function RestaurantDealsTab({ onAddDeal }: Props) {
             </div>
           </div>
           <div className="mt-3 flex items-center gap-1 text-[10px] font-bold text-orange-700">
-            <Plus size={12} /> Tap to add to order
+            <Plus size={12} /> Tap to configure & add
           </div>
         </button>
       ))}

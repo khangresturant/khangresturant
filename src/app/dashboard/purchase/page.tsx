@@ -186,6 +186,8 @@ export default function PurchasePage() {
 
   const isPharmacyOrAgri = industryType === "pharmacy" || industryType === "fertilizer";
   const isElectronics = industryType === "electronics";
+  /** Restaurant stock-in: raw ingredients only (not menu items for sale). */
+  const isRestaurantPurchase = industryType === "restaurant";
 
   const handleOpenAIModal = () => {
     if (!isPremium) {
@@ -348,12 +350,17 @@ export default function PurchasePage() {
   const projectedGrossProfit = Math.max(0, totalExpectedRetail - total);
   const grossMarginPercent = totalExpectedRetail > 0 ? Math.round((projectedGrossProfit / totalExpectedRetail) * 100) : 0;
 
+  const purchaseCatalog = useMemo(() => {
+    if (!isRestaurantPurchase) return products;
+    return products.filter((p) => p.is_ingredient === true);
+  }, [products, isRestaurantPurchase]);
+
   // ── Filtered products (Multi-token Word Order Agnostic & Ranked) ──
   const filteredProducts = useMemo(() => {
-    return filterAndRankProducts(products, searchQuery, {
+    return filterAndRankProducts(purchaseCatalog, searchQuery, {
       categoryId: selectedCategoryId
     });
-  }, [products, selectedCategoryId, searchQuery]);
+  }, [purchaseCatalog, selectedCategoryId, searchQuery]);
 
   // ── Autocomplete Results ──
   const autocompleteResults = useMemo(() => {
@@ -369,11 +376,17 @@ export default function PurchasePage() {
     const timer = setTimeout(async () => {
       try {
         const tokens = trimmed.split(/\s+/).filter(Boolean);
-        const selectStr = "id,name,code,unit,purchase_price_single,sale_price_single,current_stock,category_id,pack_size,measurement_type,has_imei,product_variants(id,packing_name,purchase_price,sale_price,stock_quantity,is_packing,pack_size)";
+        const selectStr = isRestaurantPurchase
+          ? "id,name,code,unit,purchase_price_single,sale_price_single,current_stock,category_id,pack_size,measurement_type,has_imei,is_ingredient,product_variants(id,packing_name,purchase_price,sale_price,stock_quantity,is_packing,pack_size)"
+          : "id,name,code,unit,purchase_price_single,sale_price_single,current_stock,category_id,pack_size,measurement_type,has_imei,product_variants(id,packing_name,purchase_price,sale_price,stock_quantity,is_packing,pack_size)";
         let q = supabase
           .from("products")
           .select(selectStr)
           .eq("shop_id", shopId);
+
+        if (isRestaurantPurchase) {
+          q = q.eq("is_ingredient", true);
+        }
 
         if (tokens.length === 1) {
           q = q.or(`name.ilike.%${tokens[0]}%,code.ilike.%${tokens[0]}%`);
@@ -401,7 +414,7 @@ export default function PurchasePage() {
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, shopId, supabase]);
+  }, [searchQuery, shopId, supabase, isRestaurantPurchase]);
 
   // ── Modal Choices for Variations ──
   const modalChoices = useMemo<any[]>(() => {
@@ -702,6 +715,9 @@ export default function PurchasePage() {
               .limit(1000);
             initialProducts = fallbackRes.data || [];
           }
+          if (industryType === "restaurant") {
+            initialProducts = initialProducts.filter((p: { is_ingredient?: boolean }) => p.is_ingredient === true);
+          }
 
           // Trigger asynchronous background stream if shop has >= 1000 items without blocking the UI
           if (initialProducts.length >= 1000) {
@@ -718,9 +734,13 @@ export default function PurchasePage() {
                     .range(offset, offset + limit - 1);
                   const chunk = data || [];
                   if (chunk.length > 0) {
+                    const eligible =
+                      industryType === "restaurant"
+                        ? chunk.filter((p: { is_ingredient?: boolean }) => p.is_ingredient === true)
+                        : chunk;
                     setProducts(prev => {
                       const existingIds = new Set(prev.map((p: any) => p.id));
-                      const newItems = chunk.filter((p: any) => !existingIds.has(p.id));
+                      const newItems = eligible.filter((p: any) => !existingIds.has(p.id));
                       return [...prev, ...newItems];
                     });
                   }
@@ -1017,6 +1037,10 @@ export default function PurchasePage() {
     batchNumber?: string,
     expiryDate?: string
   ) {
+    if (isRestaurantPurchase && product.is_ingredient !== true) {
+      toast.error("Restaurant purchase: sirf ingredients (raw stock) add ho sakte hain.");
+      return;
+    }
     let finalVariantId = variantId;
     let finalVariantName = variantName;
     let finalPurchasePrice = variantPrice;
@@ -1067,7 +1091,11 @@ export default function PurchasePage() {
         name: product.name,
         packingName: finalVariantName,
         purchasePrice: finalVariantId ? (finalPurchasePrice ?? product.purchase_price_single ?? 0) : (product.purchase_price_single || 0),
-        salePrice: finalVariantId ? (finalSalePrice ?? 0) : (product.sale_price_single || 0),
+        salePrice: isRestaurantPurchase
+          ? 0
+          : finalVariantId
+            ? (finalSalePrice ?? 0)
+            : (product.sale_price_single || 0),
         quantity: 1,
         stock: product.current_stock,
         batchNumber: itemBatch,
@@ -1269,17 +1297,29 @@ export default function PurchasePage() {
           const v = item.variantId
             ? parentProd?.product_variants?.find((x) => x.id === item.variantId)
             : undefined;
-          const lineGross = item.purchasePrice * item.quantity;
-          const lineDisc = item.discountType === "percentage" 
-            ? (lineGross * (item.discount || 0)) / 100 
+          const q = item.quantity || 1;
+          const b = item.bonusQty || 0;
+          const p = item.purchasePrice || 0;
+          const lineGross = p * q;
+          const lineDisc = item.discountType === "percentage"
+            ? (lineGross * (item.discount || 0)) / 100
             : (item.discount || 0);
+          const netBeforeTax = Math.max(0, lineGross - lineDisc);
+          const taxVal = item.taxPercent || 0;
+          const lineTax =
+            item.taxType === "flat" ? taxVal : netBeforeTax * (taxVal / 100);
+          const lineLandedTotal = netBeforeTax + lineTax;
+          const receivedUnits = q + b;
+          const landedUnitCost =
+            receivedUnits > 0 ? lineLandedTotal / receivedUnits : p;
           return {
             product_id: item.productId,
             variant_id: item.variantId || null,
             quantity: item.quantity,
             bonus_quantity: item.bonusQty || 0,
             purchase_price: item.purchasePrice,
-            sale_price: item.salePrice ?? null,
+            landed_unit_cost: Math.round(landedUnitCost * 10000) / 10000,
+            sale_price: isRestaurantPurchase ? null : (item.salePrice ?? null),
             discount_amount: lineDisc,
             batch_number: item.batchNumber || null,
             expiry_date: item.expiryDate || null,
@@ -1772,11 +1812,13 @@ export default function PurchasePage() {
                       <Input 
                         id="purchase-search-input"
                         placeholder={
-                          isElectronics 
-                            ? "Search product by name, barcode or IMEI/Serial... (F1, Arrows to nav, Enter to select)" 
-                            : isPharmacyOrAgri 
-                              ? "Search product by name, barcode or generic formula... (F1, Arrows to nav, Enter to select)" 
-                              : "Search product by name, barcode or SKU... (F1, Arrows to nav, Enter to select)"
+                          isRestaurantPurchase
+                            ? "Search ingredient by name or code... (F1, arrows, Enter)"
+                            : isElectronics
+                              ? "Search product by name, barcode or IMEI/Serial... (F1, Arrows to nav, Enter to select)"
+                              : isPharmacyOrAgri
+                                ? "Search product by name, barcode or generic formula... (F1, Arrows to nav, Enter to select)"
+                                : "Search product by name, barcode or SKU... (F1, Arrows to nav, Enter to select)"
                         } 
                         value={searchQuery}
                         onChange={(e) => {
@@ -2076,12 +2118,17 @@ export default function PurchasePage() {
                   <div className="h-full flex flex-col items-center justify-center text-slate-400 py-16">
                     <ShoppingCart size={40} className="text-slate-200 mb-3" />
                     <p className="text-sm font-extrabold text-slate-700">Purchase grid is empty</p>
-                    <p className="text-xs text-slate-450 mt-1">Search products above or scan barcodes to populate Excel stock-in spreadsheet.</p>
+                    <p className="text-xs text-slate-450 mt-1">
+                      {isRestaurantPurchase
+                        ? "Ingredient search karein - yahan sirf khareedne wali raw stock (ingredients) dikhti hai."
+                        : "Search products above or scan barcodes to populate Excel stock-in spreadsheet."}
+                    </p>
                   </div>
                 ) : (
                   <>
                   <PurchaseCartMobile
                     cart={cart}
+                    hideSalePrice={isRestaurantPurchase}
                     onUpdateQty={(idx, qty) =>
                       setCart((prev) =>
                         prev.map((c, i) => (i === idx ? { ...c, quantity: qty } : c))
@@ -2102,9 +2149,13 @@ export default function PurchasePage() {
                           <th className="py-2.5 px-2 w-[100px] text-right border-r border-slate-200">Trade Cost (Rs)</th>
                           <th className="py-2.5 px-2 w-[105px] text-center border-r border-slate-200">Extra Disc</th>
                           <th className="py-2.5 px-2 w-[95px] text-center border-r border-slate-200 text-blue-700">Tax</th>
-                          <th className="py-2.5 px-2 w-[100px] text-right border-r border-slate-200">Sale Retail (Rs)</th>
+                          {!isRestaurantPurchase && (
+                            <th className="py-2.5 px-2 w-[100px] text-right border-r border-slate-200">Sale Retail (Rs)</th>
+                          )}
                           <th className="py-2.5 px-2 w-[85px] text-right border-r border-slate-200">Eff. Cost</th>
-                          <th className="py-2.5 px-2 w-[80px] text-center border-r border-slate-200 text-purple-700">Profit %</th>
+                          {!isRestaurantPurchase && (
+                            <th className="py-2.5 px-2 w-[80px] text-center border-r border-slate-200 text-purple-700">Profit %</th>
+                          )}
                           <th className="py-2.5 px-2.5 w-[105px] text-right border-r border-slate-200">Net Total (Rs)</th>
                           <th className="py-2.5 px-2 w-[40px] text-center">Action</th>
                         </tr>
@@ -2395,26 +2446,27 @@ export default function PurchasePage() {
                                 </div>
                               </td>
 
-                              {/* Sale Retail (Rs) */}
-                              <td className="py-2 px-2 border-r border-slate-100">
-                                <input
-                                  id={`purchase-salerate-${idx}`}
-                                  type="number"
-                                  step="any"
-                                  value={item.salePrice || 0}
-                                  onChange={(e) => {
-                                    const val = parseFloat(e.target.value);
-                                    setCart(prev => prev.map((c, i) => i === idx ? { ...c, salePrice: isNaN(val) ? 0 : Math.max(0, val) } : c));
-                                  }}
-                                  onFocus={(e) => {
-                                    e.target.select();
-                                    setIsCartFocused(true);
-                                    setSelectedCartIdx(idx);
-                                  }}
-                                  className="no-spin w-full h-8 bg-white border-2 border-emerald-250 rounded-lg px-2 text-[11.5px] font-extrabold focus:outline-none focus:border-emerald-500 text-slate-900 text-right shadow-2xs"
-                                  placeholder="0"
-                                />
-                              </td>
+                              {!isRestaurantPurchase && (
+                                <td className="py-2 px-2 border-r border-slate-100">
+                                  <input
+                                    id={`purchase-salerate-${idx}`}
+                                    type="number"
+                                    step="any"
+                                    value={item.salePrice || 0}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value);
+                                      setCart(prev => prev.map((c, i) => i === idx ? { ...c, salePrice: isNaN(val) ? 0 : Math.max(0, val) } : c));
+                                    }}
+                                    onFocus={(e) => {
+                                      e.target.select();
+                                      setIsCartFocused(true);
+                                      setSelectedCartIdx(idx);
+                                    }}
+                                    className="no-spin w-full h-8 bg-white border-2 border-emerald-250 rounded-lg px-2 text-[11.5px] font-extrabold focus:outline-none focus:border-emerald-500 text-slate-900 text-right shadow-2xs"
+                                    placeholder="0"
+                                  />
+                                </td>
+                              )}
 
                               {/* Eff. Cost Badge */}
                               <td className="py-2 px-2 text-right border-r border-slate-100">
@@ -2423,20 +2475,21 @@ export default function PurchasePage() {
                                 </div>
                               </td>
 
-                              {/* Profit Margin % Editable Input */}
-                              <td className="py-2 px-2 text-center border-r border-slate-100">
-                                <input
-                                  type="number"
-                                  value={marginPct}
-                                  onChange={(e) => {
-                                    const newMargin = parseFloat(e.target.value) || 0;
-                                    const newSalePrice = Math.round(effRate * (1 + newMargin / 100));
-                                    setCart(prev => prev.map((c, i) => i === idx ? { ...c, salePrice: newSalePrice } : c));
-                                  }}
-                                  onFocus={(e) => e.target.select()}
-                                  className="w-full h-8 px-1 bg-purple-50/60 border border-purple-200 text-purple-900 font-extrabold rounded-lg text-center text-[11px] focus:outline-none focus:ring-2 focus:ring-purple-400/40 shadow-2xs"
-                                />
-                              </td>
+                              {!isRestaurantPurchase && (
+                                <td className="py-2 px-2 text-center border-r border-slate-100">
+                                  <input
+                                    type="number"
+                                    value={marginPct}
+                                    onChange={(e) => {
+                                      const newMargin = parseFloat(e.target.value) || 0;
+                                      const newSalePrice = Math.round(effRate * (1 + newMargin / 100));
+                                      setCart(prev => prev.map((c, i) => i === idx ? { ...c, salePrice: newSalePrice } : c));
+                                    }}
+                                    onFocus={(e) => e.target.select()}
+                                    className="w-full h-8 px-1 bg-purple-50/60 border border-purple-200 text-purple-900 font-extrabold rounded-lg text-center text-[11px] focus:outline-none focus:ring-2 focus:ring-purple-400/40 shadow-2xs"
+                                  />
+                                </td>
+                              )}
 
                               {/* Line Subtotal */}
                               <td className="py-2 px-3 text-right font-black text-slate-900 text-[11.5px] border-r border-slate-100">
@@ -2937,7 +2990,7 @@ export default function PurchasePage() {
       <AIInvoiceModal
         isOpen={isAIModalOpen}
         onClose={() => setIsAIModalOpen(false)}
-        products={products}
+        products={purchaseCatalog}
         onImport={handleAIImport}
         shopId={shopId || ""}
         industryType={industryType || undefined}

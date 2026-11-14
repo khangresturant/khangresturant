@@ -4,8 +4,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { usesLocalDatabase } from "@/lib/config";
 import {
   computeInvoiceIngredientCost,
+  computeLineUnitCogsMap,
   deductStockForInvoiceLines,
+  invoiceLineCostKey,
+  isRestaurantInvoiceCostFrozen,
   restoreStockForInvoiceLines,
+  roundMoney,
   type InvoiceLineForCost,
 } from "@/lib/restaurant-recipe-cost";
 import { isSupabaseMissingColumnError } from "@/lib/restaurant-ops";
@@ -88,6 +92,13 @@ export function canSettleOrder(status: RestaurantOrderStatus | null | undefined)
   return status === "ready" || status === "delivered" || status === "bill_printed";
 }
 
+/** After guest bill is printed, item/qty edits belong on Restaurant Billing Desk (version history). */
+export function requiresBillingDeskForItemEdits(
+  status: RestaurantOrderStatus | null | undefined
+): boolean {
+  return status === "bill_printed" || status === "ready" || status === "delivered";
+}
+
 /** Order History: mark paid when kitchen is done (ready) or guest bill printed. */
 export function canMarkPaidInHistory(
   orderStatus: RestaurantOrderStatus | null | undefined,
@@ -168,6 +179,51 @@ export function normalizeOrderStatus(raw: string | null | undefined): Restaurant
   return map[raw] || (raw as RestaurantOrderStatus);
 }
 
+type KitchenTicketStatus = "cooking" | "ready" | "served" | "voided";
+
+/** Map order history status → kitchen_orders.status (KDS / KOT queue). */
+export function restaurantStatusToKitchenStatus(
+  orderStatus: RestaurantOrderStatus
+): KitchenTicketStatus | null {
+  switch (orderStatus) {
+    case "pending":
+    case "preparing":
+      return "cooking";
+    case "ready":
+      return "ready";
+    case "delivered":
+    case "bill_printed":
+    case "settled":
+      return "served";
+    case "cancelled":
+      return "voided";
+    default:
+      return null;
+  }
+}
+
+/** Keep kitchen panel in sync when status changes from Order History (or POS). */
+export async function syncKitchenOrdersForRestaurantStatus(
+  supabase: SupabaseClient,
+  invoiceId: string,
+  orderStatus: RestaurantOrderStatus
+): Promise<void> {
+  const kitchenStatus = restaurantStatusToKitchenStatus(orderStatus);
+  if (!kitchenStatus) return;
+
+  let query = supabase
+    .from("kitchen_orders")
+    .update({ status: kitchenStatus })
+    .eq("invoice_id", invoiceId);
+
+  if (kitchenStatus !== "voided") {
+    query = query.not("status", "eq", "voided");
+  }
+
+  const { error } = await query;
+  if (error) throw error;
+}
+
 export async function syncRestaurantOrderStatus(
   supabase: SupabaseClient,
   invoiceId: string
@@ -229,6 +285,7 @@ export async function updateOrderStatus(
     .from("invoices")
     .update({ restaurant_order_status: newStatus })
     .eq("id", invoiceId);
+  await syncKitchenOrdersForRestaurantStatus(supabase, invoiceId, newStatus);
 }
 
 export async function startOrderPreparation(
@@ -239,6 +296,7 @@ export async function startOrderPreparation(
     .from("invoices")
     .update({ restaurant_order_status: "preparing" })
     .eq("id", invoiceId);
+  await syncKitchenOrdersForRestaurantStatus(supabase, invoiceId, "preparing");
 }
 
 export function invoiceLinesForCost(
@@ -259,25 +317,43 @@ export function invoiceLinesForCost(
   }));
 }
 
-/** Store recipe COGS and deduct ingredient stock once (POSRESTURANT order-process). */
+export type ApplyRestaurantCostOpts = {
+  /** Ingredient stock is reduced only when the bill is settled (payment). */
+  deductStock?: boolean;
+};
+
+/** Store estimated recipe COGS on the draft invoice; stock moves only on settle unless deductStock. */
 export async function applyRestaurantOrderCostAndStock(
   supabase: SupabaseClient,
   invoiceId: string,
   lines: InvoiceLineForCost[],
   netTotal: number,
-  alreadyDeducted?: boolean
+  opts?: ApplyRestaurantCostOpts
 ): Promise<{ cost: number; profit: number }> {
-  const cost = await computeInvoiceIngredientCost(supabase, lines);
-  const profit = netTotal - cost;
+  const { data: invMeta } = await supabase
+    .from("invoices")
+    .select("status, restaurant_order_status, cost_amount, total_amount")
+    .eq("id", invoiceId)
+    .maybeSingle();
 
-  if (!alreadyDeducted) {
+  if (invMeta && isRestaurantInvoiceCostFrozen(invMeta)) {
+    const frozenCost = Number(invMeta.cost_amount || 0);
+    const billTotal = Number(invMeta.total_amount ?? netTotal);
+    return { cost: frozenCost, profit: roundMoney(billTotal - frozenCost) };
+  }
+
+  const cost = await computeInvoiceIngredientCost(supabase, lines);
+  const profit = roundMoney(netTotal - cost);
+  const deductStock = opts?.deductStock === true;
+
+  if (deductStock) {
     await deductStockForInvoiceLines(supabase, lines);
   }
 
   const payload: Record<string, unknown> = {
     cost_amount: cost,
     profit_amount: profit,
-    stock_deducted: true,
+    ...(deductStock ? { stock_deducted: true } : {}),
   };
   const { error } = await supabase.from("invoices").update(payload).eq("id", invoiceId);
   if (error && isSupabaseMissingColumnError(error.message, "stock_deducted")) {
@@ -305,6 +381,7 @@ export async function markBillPrinted(
       bill_printed_at: new Date().toISOString(),
     })
     .eq("id", invoiceId);
+  await syncKitchenOrdersForRestaurantStatus(supabase, invoiceId, "bill_printed");
 }
 
 export async function markOrderSettled(
@@ -315,6 +392,7 @@ export async function markOrderSettled(
     .from("invoices")
     .update({ restaurant_order_status: "settled" })
     .eq("id", invoiceId);
+  await syncKitchenOrdersForRestaurantStatus(supabase, invoiceId, "settled");
 }
 
 export type SettleRestaurantOrderInput = {
@@ -420,12 +498,36 @@ export async function settleRestaurantOrder(
     packing_name: item.packing_name,
   }));
   const ingredientCost = await computeInvoiceIngredientCost(supabase, costLines);
-  const profitAmount = Math.max(0, netTotal - ingredientCost);
+  const profitAmount = roundMoney(Math.max(0, netTotal - ingredientCost));
+  const lineCogsMap = await computeLineUnitCogsMap(supabase, costLines);
+
+  let linesToRestore: InvoiceLineForCost[] = [];
+  if (invoiceRow.stock_deducted) {
+    const { data: prevItems } = await supabase
+      .from("invoice_items")
+      .select("product_id, quantity, packing_name, menu_size_id")
+      .eq("invoice_id", invoiceId);
+    linesToRestore = invoiceLinesForCost(
+      (prevItems || []).map((it: any) => ({
+        product_id: it.product_id,
+        quantity: Number(it.quantity),
+        packing_name: it.packing_name,
+        menu_size_id: it.menu_size_id,
+      }))
+    );
+  }
 
   await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
   if (items.length > 0) {
-    await supabase.from("invoice_items").insert(
-      items.map((item) => ({
+    const rows = items.map((item) => {
+      const costKey = invoiceLineCostKey({
+        product_id: item.product_id,
+        quantity: item.quantity,
+        menu_size_id: item.menu_size_id,
+        packing_name: item.packing_name || item.menu_size_name,
+      });
+      const unitCogs = lineCogsMap[costKey] ?? null;
+      return {
         invoice_id: invoiceId,
         product_id: item.product_id,
         quantity: item.quantity,
@@ -433,8 +535,17 @@ export async function settleRestaurantOrder(
         subtotal: item.unit_price * item.quantity,
         packing_name: item.packing_name || item.menu_size_name || null,
         menu_size_id: item.menu_size_id || null,
-      }))
-    );
+        ...(unitCogs != null ? { purchase_price: unitCogs } : {}),
+      };
+    });
+    const { error: lineErr } = await supabase.from("invoice_items").insert(rows);
+    if (lineErr?.message?.includes("purchase_price")) {
+      await supabase.from("invoice_items").insert(
+        rows.map(({ purchase_price: _p, ...rest }) => rest)
+      );
+    } else if (lineErr) {
+      throw lineErr;
+    }
   }
 
   const { error: invErr } = await supabase
@@ -455,14 +566,18 @@ export async function settleRestaurantOrder(
       waiter_id: waiterId || null,
       rider_id: riderId || null,
       restaurant_order_status: "settled",
+      stock_deducted: true,
     })
     .eq("id", invoiceId);
 
   if (invErr) throw invErr;
 
-  if (!invoiceRow.stock_deducted) {
-    await deductStockForInvoiceLines(supabase, costLines);
+  await syncKitchenOrdersForRestaurantStatus(supabase, invoiceId, "settled");
+
+  if (linesToRestore.length) {
+    await restoreStockForInvoiceLines(supabase, linesToRestore);
   }
+  await deductStockForInvoiceLines(supabase, costLines);
 
   if ((paymentMode !== "credit" || paidAmt > 0) && accountId) {
     const { data: acc } = await supabase

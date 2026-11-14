@@ -1,136 +1,86 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Trash2, Layers } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Layers, Loader2, Search, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useShop } from "@/context/ShopContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { fetchRestaurantMenuProducts } from "@/lib/restaurant-deals";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SearchableSelect } from "@/components/ui/searchable-select";
-import { MENU_SIZE_OPTIONS } from "@/lib/restaurant-deals";
+import { MenuItemSizesPanel } from "@/components/restaurant/menu/MenuItemSizesPanel";
 
-type Product = { id: string; name: string; sale_price_single: number };
+type SizeRow = {
+  id: string;
+  product_id: string;
+  size_name: string;
+  price: number;
+  sort_order: number;
+};
 
 export function MenuSizesTab() {
   const { shopId } = useShop();
   const { language } = useLanguage();
   const supabase = createClient();
   const isEn = language === "en";
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [sizes, setSizes] = useState<any[]>([]);
-  const [sizeSearch, setSizeSearch] = useState("");
-  const [sizeProductId, setSizeProductId] = useState("");
-  const [sizeForm, setSizeForm] = useState({
-    size_name: "Medium",
-    price: 0,
-    size_description: "",
-    crust_options: "Regular, Thin Crust, Pan, Cheese Burst",
-  });
+  const [products, setProducts] = useState<{ id: string; name: string; sale_price_single: number }[]>([]);
+  const [sizes, setSizes] = useState<SizeRow[]>([]);
+  const [search, setSearch] = useState("");
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [sizesVersion, setSizesVersion] = useState(0);
 
   const load = useCallback(async () => {
     if (!shopId) return;
     setLoading(true);
     try {
-      const [prodRes, sizesRes] = await Promise.all([
-        supabase
-          .from("products")
-          .select("id, name, sale_price_single, is_ingredient")
-          .eq("shop_id", shopId)
-          .order("name"),
+      const [salePack, sizesRes] = await Promise.all([
+        fetchRestaurantMenuProducts(supabase, shopId, { posSaleOnly: false }),
         supabase
           .from("restaurant_menu_sizes")
-          .select(
-            `id, product_id, size_name, size_description, price, is_available, sort_order, products ( name )`
-          )
+          .select("id, product_id, size_name, price, sort_order")
           .eq("shop_id", shopId)
           .order("sort_order"),
       ]);
-
-      if (sizesRes.error?.message?.includes("does not exist")) {
-        toast.error(isEn ? "Run Restaurant DB Setup migration first" : "مائیگریشن چلائیں");
-        return;
-      }
-
-      const menuProducts = (prodRes.data || []).filter(
-        (p: any) => p.is_ingredient !== true && String(p.is_ingredient) !== "true"
+      setProducts(
+        salePack.products.map((p) => ({
+          id: p.id,
+          name: p.name,
+          sale_price_single: Number(p.sale_price_single) || 0,
+        }))
       );
-      setProducts(menuProducts);
-      setSizes(sizesRes.data || []);
-      if (menuProducts.length && !sizeProductId) setSizeProductId(menuProducts[0].id);
-    } catch (e: any) {
-      toast.error(e.message);
+      if (sizesRes.error && !sizesRes.error.message?.includes("does not exist")) {
+        throw sizesRes.error;
+      }
+      setSizes((sizesRes.data as SizeRow[]) || []);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+      setProducts([]);
+      setSizes([]);
     } finally {
       setLoading(false);
     }
-  }, [shopId, supabase, sizeProductId, isEn]);
+  }, [shopId, supabase]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const filteredSizes = sizes.filter((s: any) => {
-    const q = sizeSearch.toLowerCase();
-    if (!q) return true;
-    const item = (s.products?.name || "").toLowerCase();
-    const sz = (s.size_name || "").toLowerCase();
-    return item.includes(q) || sz.includes(q) || String(s.price).includes(q);
-  });
+  useEffect(() => {
+    const pid = searchParams.get("product");
+    if (pid) setSelectedProductId(pid);
+  }, [searchParams]);
 
-  const addSize = async () => {
-    if (!sizeProductId || !shopId) return;
-    try {
-      const { error } = await supabase.from("restaurant_menu_sizes").insert({
-        shop_id: shopId,
-        product_id: sizeProductId,
-        size_name: sizeForm.size_name,
-        size_description: sizeForm.size_description || null,
-        price: sizeForm.price,
-        crust_options: sizeForm.crust_options || null,
-        is_available: true,
-        sort_order: sizes.length,
-      });
-      if (error) throw error;
-      toast.success(isEn ? "Size added" : "سائز شامل");
-      load();
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-  };
+  const filteredProducts = useMemo(() => {
+    const q = search.toLowerCase();
+    return products.filter((p) => !q || p.name.toLowerCase().includes(q));
+  }, [products, search]);
 
-  const deleteSize = async (id: string) => {
-    await supabase.from("restaurant_menu_sizes").delete().eq("id", id);
-    toast.success(isEn ? "Removed" : "حذف");
-    load();
-  };
-
-  const quickAddStandardSizes = async () => {
-    if (!sizeProductId || !shopId) return;
-    const base = products.find((p) => p.id === sizeProductId)?.sale_price_single || 0;
-    const presets = [
-      { size_name: "Small", price: Math.round(base * 0.85) },
-      { size_name: "Medium", price: base || 0 },
-      { size_name: "Large", price: Math.round(base * 1.25) || 0 },
-      { size_name: "XL", price: Math.round(base * 1.5) || 0 },
-    ];
-    for (const s of presets) {
-      await supabase.from("restaurant_menu_sizes").upsert(
-        {
-          shop_id: shopId,
-          product_id: sizeProductId,
-          size_name: s.size_name,
-          price: s.price,
-          is_available: true,
-        },
-        { onConflict: "shop_id,product_id,size_name", ignoreDuplicates: false }
-      );
-    }
-    toast.success(isEn ? "Standard sizes created" : "سائز بن گئے");
-    load();
-  };
+  const selectedProduct = products.find((p) => p.id === selectedProductId);
 
   if (loading) {
     return (
@@ -140,108 +90,118 @@ export function MenuSizesTab() {
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <p className="text-xs text-slate-500">
-        {isEn
-          ? "Selling prices per size. POS uses these when staff picks a size; base price on the menu item is used for Standard when no size row applies."
-          : "ہر سائز کی فروخت قیمت۔"}
+  if (products.length === 0) {
+    return (
+      <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+        {isEn ? (
+          <>
+            No menu items yet. Add dishes under{" "}
+            <Link href="/dashboard/restaurant/menu?tab=items" className="font-bold underline">
+              Menu Items
+            </Link>{" "}
+            tab first, then set sizes here per item.
+          </>
+        ) : (
+          "پہلے Menu Items میں آئٹم بنائیں۔"
+        )}
       </p>
+    );
+  }
 
-      <div className="bg-white border rounded-xl p-5 space-y-4">
-        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-          <Layers size={16} className="text-blue-600" />
-          {isEn ? "Add size & price" : "سائز اور قیمت"}
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-          <div>
-            <label className="text-xs font-bold text-slate-500">{isEn ? "Menu item" : "آئٹم"}</label>
-            <div className="mt-1">
-              <SearchableSelect
-                options={products.map((p) => ({ value: p.id, label: p.name }))}
-                value={sizeProductId}
-                onChange={setSizeProductId}
-                placeholder={isEn ? "Select item…" : "منتخب…"}
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500">{isEn ? "Size" : "سائز"}</label>
-            <select
-              value={sizeForm.size_name}
-              onChange={(e) => setSizeForm({ ...sizeForm, size_name: e.target.value })}
-              className="w-full mt-1 border rounded-lg px-2 py-2 text-sm"
-            >
-              {MENU_SIZE_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500">{isEn ? "Price (Rs)" : "قیمت"}</label>
-            <Input
-              type="number"
-              value={sizeForm.price || ""}
-              onChange={(e) => setSizeForm({ ...sizeForm, price: parseFloat(e.target.value) || 0 })}
-              className="mt-1"
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={addSize} className="bg-blue-600 text-white flex-1">
-              <Plus size={14} className="mr-1" /> {isEn ? "Add" : "شامل"}
-            </Button>
-            <Button variant="outline" onClick={quickAddStandardSizes}>
-              S-XL
-            </Button>
-          </div>
-        </div>
-        <div>
-          <label className="text-xs font-bold text-slate-500">{isEn ? "Description (optional)" : "تفصیل"}</label>
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <div className="lg:col-span-4 space-y-3">
+        <p className="text-xs text-slate-600 bg-slate-50 border rounded-xl px-3 py-2">
+          {isEn
+            ? "Pick one dish - sizes & prices are only for that item (not shared)."
+            : "ایک آئٹم چنیں - سائز اسی کے ہیں۔"}
+        </p>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
           <Input
-            value={sizeForm.size_description}
-            onChange={(e) => setSizeForm({ ...sizeForm, size_description: e.target.value })}
-            className="mt-1"
-            placeholder={isEn ? "Family size, 12 slices…" : ""}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={isEn ? "Search items…" : "تلاش…"}
+            className="pl-9 h-9 text-sm"
           />
         </div>
+        <ul className="border rounded-xl bg-white max-h-[420px] overflow-y-auto divide-y text-sm">
+          {filteredProducts.map((p) => {
+            const itemSizes = sizes
+              .filter((s) => s.product_id === p.id)
+              .sort((a, b) => a.sort_order - b.sort_order);
+            const active = p.id === selectedProductId;
+            return (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProductId(p.id)}
+                  className={`w-full text-left px-3 py-2.5 gap-2 ${
+                    active ? "bg-blue-50 text-blue-900" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="font-semibold truncate">{p.name}</div>
+                    <div className="text-[10px] font-bold text-slate-500 shrink-0">
+                      {itemSizes.length
+                        ? `${itemSizes.length} ${isEn ? "sizes" : "سائز"}`
+                        : isEn
+                          ? "base only"
+                          : "-"}
+                    </div>
+                  </div>
+                  {itemSizes.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {itemSizes.map((s) => (
+                        <div
+                          key={s.id}
+                          className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700"
+                        >
+                          {s.size_name} · Rs {Number(s.price).toLocaleString()}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[9px] text-amber-700 mt-1">
+                      {isEn ? "No extra sizes - POS uses base price only" : "-"}
+                    </p>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
-      <Input
-        placeholder={isEn ? "Search sizes (item / size / price)…" : "تلاش…"}
-        value={sizeSearch}
-        onChange={(e) => setSizeSearch(e.target.value)}
-        className="max-w-md h-9 text-sm"
-      />
-
-      <div className="overflow-x-auto border rounded-xl bg-white">
-        <table className="w-full text-xs min-w-[480px]">
-          <thead>
-            <tr className="bg-slate-100 text-left">
-              <th className="p-2">{isEn ? "Item" : "آئٹم"}</th>
-              <th className="p-2">{isEn ? "Size" : "سائز"}</th>
-              <th className="p-2">{isEn ? "Description" : "تفصیل"}</th>
-              <th className="p-2 text-right">{isEn ? "Price" : "قیمت"}</th>
-              <th className="p-2 w-12" />
-            </tr>
-          </thead>
-          <tbody>
-            {filteredSizes.map((s: any) => (
-              <tr key={s.id} className="border-t">
-                <td className="p-2 font-semibold">{s.products?.name}</td>
-                <td className="p-2">{s.size_name}</td>
-                <td className="p-2 text-slate-500">{s.size_description || "-"}</td>
-                <td className="p-2 text-right font-mono">Rs {Number(s.price).toLocaleString()}</td>
-                <td className="p-2 text-right">
-                  <button type="button" onClick={() => deleteSize(s.id)} className="text-red-500">
-                    <Trash2 size={12} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="lg:col-span-8 border rounded-xl bg-white p-4 min-h-[280px]">
+        {!selectedProductId ? (
+          <div className="h-full flex flex-col items-center justify-center text-slate-500 text-sm gap-2 py-12">
+            <Layers className="text-blue-400" size={28} />
+            {isEn ? "Select an item from the list" : "بائیں سے آئٹم چنیں"}
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <h3 className="font-bold text-slate-800">{selectedProduct?.name}</h3>
+              <Link
+                href={`/dashboard/restaurant/menu?tab=items&product=${selectedProductId}`}
+                className="text-xs font-semibold text-violet-700 inline-flex items-center gap-1"
+              >
+                <Pencil size={12} />
+                {isEn ? "Full edit (recipe per size)" : "مکمل ترمیم"}
+              </Link>
+            </div>
+            <MenuItemSizesPanel
+              key={`${selectedProductId}-${sizesVersion}`}
+              productId={selectedProductId}
+              basePrice={selectedProduct?.sale_price_single || 0}
+              onSizesChanged={() => {
+                setSizesVersion((v) => v + 1);
+                load();
+              }}
+            />
+          </>
+        )}
       </div>
     </div>
   );

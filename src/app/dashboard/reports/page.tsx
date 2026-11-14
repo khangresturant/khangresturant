@@ -18,9 +18,14 @@ import { Input } from "@/components/ui/input";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { SubscriptionBlocker } from "@/components/dashboard/SubscriptionBlocker";
-import { AIDeadStockWidget } from "@/components/dashboard/AIDeadStockWidget";
 import { saveReportSnapshot, getReportSnapshot, isBrowserOffline } from "@/lib/sync/offlineReportsEngine";
 import { isControlledDrug } from "@/lib/pharmacy/controlledDrugs";
+import { isBaseSizeLabel } from "@/lib/restaurant-recipe-cost";
+import {
+  isDealInvoicePacking,
+  parseDealStockMeta,
+  restaurantReceiptItemLabels,
+} from "@/lib/restaurant-deal-slots";
 
 export type ReportTab =
   | "sales"
@@ -50,6 +55,189 @@ export type ReportTab =
   | "salesman"
   | "register_shifts";
 
+function lineItemCogsFromInvoice(
+  inv: any,
+  variantCostDict: Record<string, number>,
+  productCostDict: Record<string, number>
+): number {
+  let cogs = 0;
+  (inv.invoice_items || []).forEach((it: any) => {
+    const c =
+      Number(it.purchase_price || 0) ||
+      (it.variant_id && variantCostDict[it.variant_id]
+        ? variantCostDict[it.variant_id]
+        : productCostDict[it.product_id] || 0);
+    cogs += c * Number(it.quantity || 0);
+  });
+  return cogs;
+}
+
+/** Matches restaurant Order History: frozen cost_amount at settle, else line COGS. */
+function resolveInvoiceCostAndProfit(
+  inv: any,
+  variantCostDict: Record<string, number>,
+  productCostDict: Record<string, number>
+): { cogs: number; profit: number } {
+  const lineCogs = lineItemCogsFromInvoice(inv, variantCostDict, productCostDict);
+  const total = Number(inv.total_amount || 0);
+  const frozenCost =
+    inv.cost_amount != null && inv.cost_amount !== "" ? Number(inv.cost_amount) : null;
+  const frozenProfit =
+    inv.profit_amount != null && inv.profit_amount !== "" ? Number(inv.profit_amount) : null;
+  const cogs =
+    frozenCost != null && !Number.isNaN(frozenCost) ? frozenCost : lineCogs;
+  const profit =
+    frozenProfit != null && !Number.isNaN(frozenProfit)
+      ? frozenProfit
+      : total - cogs;
+  return { cogs, profit };
+}
+
+type ProductSalesAggRow = {
+  key: string;
+  name: string;
+  detail?: string | null;
+  qty: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+};
+
+function productSalesLineKey(it: any): string {
+  if (it.variant_id) return `v:${it.variant_id}`;
+  const pack = (it.packing_name || "").trim();
+  if (isDealInvoicePacking(pack)) {
+    return `p:${it.product_id}::deal::${pack}`;
+  }
+  return `p:${it.product_id}::${pack}::${it.menu_size_id || ""}`;
+}
+
+function productSalesExportLabel(row: ProductSalesAggRow): string {
+  return row.detail ? `${row.name} - Includes: ${row.detail}` : row.name;
+}
+
+function unitCostForLine(
+  it: any,
+  maps: { productCostMap: Record<string, number>; variantCostMap: Record<string, number> }
+): number {
+  const lineSnap = Number(it.purchase_price || 0);
+  if (lineSnap > 0) return lineSnap;
+  if (it.variant_id && maps.variantCostMap[it.variant_id]) {
+    return maps.variantCostMap[it.variant_id];
+  }
+  return maps.productCostMap[it.product_id] || 0;
+}
+
+function aggregateProductSalesFromInvoices(
+  salesData: any[],
+  maps: {
+    productNameMap: Record<string, string>;
+    variantNameMap: Record<string, string>;
+    productCostMap: Record<string, number>;
+    variantCostMap: Record<string, number>;
+    dealNameMap?: Record<string, string>;
+  }
+): ProductSalesAggRow[] {
+  const agg: Record<string, ProductSalesAggRow> = {};
+
+  const displayLabels = (it: any): { title: string; detail: string | null } => {
+    if (it.variant_id && maps.variantNameMap[it.variant_id]) {
+      return { title: maps.variantNameMap[it.variant_id], detail: null };
+    }
+    const base = maps.productNameMap[it.product_id] || it.products?.name || "Unknown";
+  if (isDealInvoicePacking(it.packing_name)) {
+      const labels = restaurantReceiptItemLabels(
+        base,
+        it.packing_name,
+        it.custom_name,
+        maps.dealNameMap
+      );
+      return { title: labels.title, detail: labels.detail };
+    }
+    const pack = (it.packing_name || "").trim();
+    if (pack && !isBaseSizeLabel(pack)) {
+      return { title: `${base} (${pack})`, detail: null };
+    }
+    return { title: base, detail: null };
+  };
+
+  salesData.forEach((inv: any) => {
+    const items = inv.invoice_items || [];
+    const invoiceTotal = Number(inv.total_amount || 0);
+    const itemsSubtotal = items.reduce(
+      (s: number, it: any) => s + Number(it.subtotal || 0),
+      0
+    );
+    const discountRatio = itemsSubtotal > 0 ? invoiceTotal / itemsSubtotal : 1;
+    const frozenCost =
+      inv.cost_amount != null && inv.cost_amount !== "" ? Number(inv.cost_amount) : null;
+
+    type LineRow = {
+      it: any;
+      qty: number;
+      subtotal: number;
+      rev: number;
+      rawCost: number;
+      key: string;
+      name: string;
+      detail: string | null;
+    };
+
+    const lineRows: LineRow[] = [];
+    items.forEach((it: any) => {
+      if (!it.product_id && !it.variant_id) return;
+      const qty = Number(it.quantity || 0);
+      const subtotal = Number(it.subtotal || 0);
+      const rev = subtotal * discountRatio;
+      const uc = unitCostForLine(it, maps);
+      const rawCost = uc * qty;
+      const key = productSalesLineKey(it);
+      const labels = displayLabels(it);
+      lineRows.push({
+        it,
+        qty,
+        subtotal,
+        rev,
+        rawCost,
+        key,
+        name: labels.title,
+        detail: labels.detail,
+      });
+    });
+
+    const sumRawCost = lineRows.reduce((s, r) => s + r.rawCost, 0);
+    const useInvoiceCostSplit =
+      frozenCost != null &&
+      !Number.isNaN(frozenCost) &&
+      itemsSubtotal > 0 &&
+      (sumRawCost <= 0 || frozenCost > sumRawCost * 1.02);
+
+    lineRows.forEach((row) => {
+      const cost = useInvoiceCostSplit
+        ? frozenCost! * (row.subtotal / itemsSubtotal)
+        : row.rawCost;
+      const profit = row.rev - cost;
+      if (!agg[row.key]) {
+        agg[row.key] = {
+          key: row.key,
+          name: row.name,
+          detail: row.detail,
+          qty: 0,
+          revenue: 0,
+          cost: 0,
+          profit: 0,
+        };
+      }
+      agg[row.key].qty += row.qty;
+      agg[row.key].revenue += row.rev;
+      agg[row.key].cost += cost;
+      agg[row.key].profit += profit;
+    });
+  });
+
+  return Object.values(agg).sort((a, b) => b.revenue - a.revenue);
+}
+
 export default function ReportsPage() {
   const { shopId, userName, shopName, allowReports, industryType } = useShop();
   const { t, language } = useLanguage();
@@ -70,6 +258,7 @@ export default function ReportsPage() {
 
   // Core Data States
   const [salesData, setSalesData] = useState<any[]>([]);
+  const [dealNameMap, setDealNameMap] = useState<Record<string, string>>({});
   const [purchasesData, setPurchasesData] = useState<any[]>([]);
   const [expensesData, setExpensesData] = useState<any[]>([]);
   const [productsData, setProductsData] = useState<any[]>([]);
@@ -165,25 +354,71 @@ export default function ReportsPage() {
       let fetchedAccounts: any[] = [];
 
       if (needSales) {
-        const { data: sales, error: sErr } = await supabase
-          .from("invoices")
-          .select(`id, total_amount, paid_amount, status, payment_mode, created_at, party_id, tax_amount, discount, register_session_id, is_voided,
+        const salesSelectWithLedger = `id, total_amount, paid_amount, status, payment_mode, created_at, party_id, tax_amount, discount, register_session_id, is_voided,
+            cost_amount, profit_amount,
             parties ( name, phone ),
-            invoice_items ( id, product_id, variant_id, quantity, unit_price, subtotal, purchase_price, products ( name, brand_id, brands ( name ) ) )`)
+            invoice_items ( id, product_id, variant_id, quantity, unit_price, subtotal, purchase_price, packing_name, menu_size_id, custom_name, products ( name, brand_id, brands ( name ) ) )`;
+        const salesSelectBasic = `id, total_amount, paid_amount, status, payment_mode, created_at, party_id, tax_amount, discount, register_session_id, is_voided,
+            parties ( name, phone ),
+            invoice_items ( id, product_id, variant_id, quantity, unit_price, subtotal, purchase_price, products ( name, brand_id, brands ( name ) ) )`;
+        const salesSelectNoSize = `id, total_amount, paid_amount, status, payment_mode, created_at, party_id, tax_amount, discount, register_session_id, is_voided,
+            cost_amount, profit_amount,
+            parties ( name, phone ),
+            invoice_items ( id, product_id, variant_id, quantity, unit_price, subtotal, purchase_price, packing_name, custom_name, products ( name, brand_id, brands ( name ) ) )`;
+
+        let sales: any[] | null = null;
+        let sErr: { message?: string } | null = null;
+        const full = await supabase
+          .from("invoices")
+          .select(salesSelectWithLedger)
           .eq("shop_id", shopId)
-          .gte("created_at", startDateTime).lte("created_at", endDateTime)
+          .gte("created_at", startDateTime)
+          .lte("created_at", endDateTime)
           .order("created_at", { ascending: false });
+        sales = full.data;
+        sErr = full.error;
+        if (
+          sErr?.message &&
+          (sErr.message.includes("cost_amount") ||
+            sErr.message.includes("profit_amount") ||
+            sErr.message.includes("menu_size_id") ||
+            sErr.message.includes("packing_name"))
+        ) {
+          const tryNoSize = await supabase
+            .from("invoices")
+            .select(salesSelectNoSize)
+            .eq("shop_id", shopId)
+            .gte("created_at", startDateTime)
+            .lte("created_at", endDateTime)
+            .order("created_at", { ascending: false });
+          sales = tryNoSize.data;
+          sErr = tryNoSize.error;
+        }
+        if (
+          sErr?.message &&
+          (sErr.message.includes("cost_amount") || sErr.message.includes("profit_amount"))
+        ) {
+          const fb = await supabase
+            .from("invoices")
+            .select(salesSelectBasic)
+            .eq("shop_id", shopId)
+            .gte("created_at", startDateTime)
+            .lte("created_at", endDateTime)
+            .order("created_at", { ascending: false });
+          sales = fb.data;
+          sErr = fb.error;
+        }
         if (sErr) throw sErr;
 
         fetchedSales = (sales || [])
           .filter((inv: any) => activeTab === "returns_damage" ? true : (inv.status !== "quotation" && inv.status !== "draft" && inv.payment_mode !== "quotation" && !inv.is_voided))
           .map((inv: any) => {
-            let cogs = 0;
-            (inv.invoice_items || []).forEach((it: any) => {
-              const c = Number(it.purchase_price || 0) || (it.variant_id && variantCostDict[it.variant_id] ? variantCostDict[it.variant_id] : (productCostDict[it.product_id] || 0));
-              cogs += c * Number(it.quantity || 0);
-            });
-            return { ...inv, cogs, profit: Number(inv.total_amount || 0) - cogs };
+            const { cogs, profit } = resolveInvoiceCostAndProfit(
+              inv,
+              variantCostDict,
+              productCostDict
+            );
+            return { ...inv, cogs, profit };
           });
         setSalesData(fetchedSales);
       }
@@ -388,16 +623,12 @@ export default function ReportsPage() {
         const compEndStr   = compEnd.toISOString().split("T")[0] + "T23:59:59.999Z";
 
         const [{ data: cSales }, { data: cExp }] = await Promise.all([
-          supabase.from("invoices").select("total_amount, invoice_items(purchase_price, quantity, product_id, variant_id)").eq("shop_id", shopId).eq("is_voided", false).gte("created_at", compStartStr).lte("created_at", compEndStr),
+          supabase.from("invoices").select("total_amount, cost_amount, profit_amount, invoice_items(purchase_price, quantity, product_id, variant_id)").eq("shop_id", shopId).eq("is_voided", false).gte("created_at", compStartStr).lte("created_at", compEndStr),
           supabase.from("expenses").select("amount").eq("shop_id", shopId).gte("created_at", compStartStr).lte("created_at", compEndStr)
         ]);
 
         const cSalesFormatted = (cSales || []).map((inv: any) => {
-          let cogs = 0;
-          (inv.invoice_items || []).forEach((it: any) => {
-            const c = Number(it.purchase_price || 0) || (it.variant_id && variantCostDict[it.variant_id] ? variantCostDict[it.variant_id] : (productCostDict[it.product_id] || 0));
-            cogs += c * Number(it.quantity || 0);
-          });
+          const { cogs } = resolveInvoiceCostAndProfit(inv, variantCostDict, productCostDict);
           return { ...inv, cogs };
         });
 
@@ -512,30 +743,52 @@ export default function ReportsPage() {
   }, [productsData]);
 
   // ── Advanced Client-Side Report Aggregations ──────────────────────────────
-  const salesByProduct = useMemo(() => {
-    const agg: Record<string, { name: string; qty: number; revenue: number; cost: number; profit: number }> = {};
-    salesData.forEach((inv: any) => {
-      const invoiceTotal = Number(inv.total_amount || 0);
-      const itemsSubtotal = (inv.invoice_items || []).reduce((s: number, it: any) => s + Number(it.subtotal || 0), 0);
-      const discountRatio = itemsSubtotal > 0 ? invoiceTotal / itemsSubtotal : 1;
-
+  useEffect(() => {
+    if (!shopId || !salesData.length) {
+      setDealNameMap({});
+      return;
+    }
+    const ids = new Set<string>();
+    salesData.forEach((inv) => {
       (inv.invoice_items || []).forEach((it: any) => {
-        const key = it.variant_id || it.product_id || "unknown";
-        if (key === "unknown") return;
-        const name = (it.variant_id && variantNameMap[it.variant_id]) ? variantNameMap[it.variant_id] : (productNameMap[it.product_id] || "Unknown");
-        const cp   = Number(it.purchase_price || 0) || ((it.variant_id && variantCostMap[it.variant_id]) ? variantCostMap[it.variant_id] : (productCostMap[it.product_id] || 0));
-        const qty  = Number(it.quantity || 0);
-        const rev  = Number(it.subtotal || 0) * discountRatio;
-        const cost = qty * cp;
-        if (!agg[key]) agg[key] = { name, qty: 0, revenue: 0, cost: 0, profit: 0 };
-        agg[key].qty     += qty;
-        agg[key].revenue += rev;
-        agg[key].cost    += cost;
-        agg[key].profit  += rev - cost;
+        const meta = parseDealStockMeta(it.packing_name);
+        if (meta?.dealId && !meta.dealName) ids.add(meta.dealId);
       });
     });
-    return Object.values(agg).sort((a, b) => b.revenue - a.revenue);
-  }, [salesData, productNameMap, variantNameMap, productCostMap, variantCostMap]);
+    if (!ids.size) {
+      setDealNameMap({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("restaurant_deals")
+        .select("id, name")
+        .eq("shop_id", shopId)
+        .in("id", [...ids]);
+      if (cancelled) return;
+      const map: Record<string, string> = {};
+      (data || []).forEach((d: any) => {
+        map[d.id] = String(d.name || "").trim();
+      });
+      setDealNameMap(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [salesData, shopId, supabase]);
+
+  const salesByProduct = useMemo(
+    () =>
+      aggregateProductSalesFromInvoices(salesData, {
+        productNameMap,
+        variantNameMap,
+        productCostMap,
+        variantCostMap,
+        dealNameMap,
+      }),
+    [salesData, productNameMap, variantNameMap, productCostMap, variantCostMap, dealNameMap]
+  );
 
   // 1. Hourly Peak Rush Analysis
   const hourlyRushData = useMemo(() => {
@@ -625,13 +878,36 @@ export default function ReportsPage() {
     const compMap: Record<string, { name: string; units: number; revenue: number; cost: number; profit: number }> = {};
 
     salesData.forEach((inv: any) => {
-      (inv.invoice_items || []).forEach((it: any) => {
+      const items = inv.invoice_items || [];
+      const invoiceTotal = Number(inv.total_amount || 0);
+      const itemsSubtotal = items.reduce(
+        (s: number, it: any) => s + Number(it.subtotal || 0),
+        0
+      );
+      const discountRatio = itemsSubtotal > 0 ? invoiceTotal / itemsSubtotal : 1;
+
+      const frozenCost =
+        inv.cost_amount != null && inv.cost_amount !== "" ? Number(inv.cost_amount) : null;
+      const sumRaw = items.reduce(
+        (s: number, x: any) =>
+          s + unitCostForLine(x, { productCostMap, variantCostMap }) * Number(x.quantity || 0),
+        0
+      );
+      const useSplit =
+        frozenCost != null &&
+        !Number.isNaN(frozenCost) &&
+        itemsSubtotal > 0 &&
+        (sumRaw <= 0 || frozenCost > sumRaw * 1.02);
+
+      items.forEach((it: any) => {
         const pId = it.product_id;
         const brand = productBrandMap[pId] || it.products?.brands?.name || "Generic / Local Pharma";
         const qty = Number(it.quantity || 0);
-        const rev = Number(it.subtotal || 0);
-        const cp = Number(it.purchase_price || 0) || (productCostMap[pId] || 0);
-        const cost = qty * cp;
+        const rev = Number(it.subtotal || 0) * discountRatio;
+        const rawCost = unitCostForLine(it, { productCostMap, variantCostMap }) * qty;
+        const cost = useSplit
+          ? frozenCost! * (Number(it.subtotal || 0) / itemsSubtotal)
+          : rawCost;
 
         if (!compMap[brand]) {
           compMap[brand] = { name: brand, units: 0, revenue: 0, cost: 0, profit: 0 };
@@ -644,7 +920,7 @@ export default function ReportsPage() {
     });
 
     return Object.values(compMap).sort((a, b) => b.revenue - a.revenue);
-  }, [salesData, productBrandMap, productCostMap]);
+  }, [salesData, productBrandMap, productCostMap, variantCostMap]);
 
   // 5. Inactive Khata Recovery Report
   const inactiveKhataData = useMemo(() => {
@@ -853,7 +1129,7 @@ export default function ReportsPage() {
       let rows: any[][] = [];
 
       if (activeTab === "sales") {
-        head = [["Date","Invoice ID","Customer","Mode","Received (Rs)","Total (Rs)","Profit (Rs)"]];
+        head = [["Date","Invoice ID","Customer","Mode","Received (Rs)","Total (Rs)","Cost (Rs)","Profit (Rs)"]];
         rows = salesData.map(s => [
           new Date(s.created_at).toLocaleDateString(),
           s.id.substring(0,8).toUpperCase(),
@@ -861,12 +1137,13 @@ export default function ReportsPage() {
           (s.payment_mode || "cash").toUpperCase(),
           Math.round(s.paid_amount || 0).toLocaleString(),
           Math.round(s.total_amount || 0).toLocaleString(),
+          Math.round(s.cogs || 0).toLocaleString(),
           Math.round(s.profit || 0).toLocaleString()
         ]);
       } else if (activeTab === "sales_by_product") {
         head = [["Product Name", "Units Sold", "Avg Price (Rs)", "Revenue (Rs)", "COGS Cost (Rs)", "Profit (Rs)", "Margin %"]];
         rows = salesByProduct.map(p => [
-          p.name,
+          productSalesExportLabel(p),
           p.qty.toLocaleString(),
           Math.round(p.revenue / (p.qty || 1)).toLocaleString(),
           Math.round(p.revenue).toLocaleString(),
@@ -1182,7 +1459,7 @@ export default function ReportsPage() {
       let rows: string[][] = [];
 
       if (activeTab === "sales") {
-        headers = ["Date", "Invoice ID", "Customer", "Payment Mode", "Paid Amount (Rs)", "Total Amount (Rs)", "Profit (Rs)"];
+        headers = ["Date", "Invoice ID", "Customer", "Payment Mode", "Paid Amount (Rs)", "Total Amount (Rs)", "Cost (Rs)", "Profit (Rs)"];
         rows = salesData.map(s => [
           new Date(s.created_at).toLocaleDateString(),
           s.id.substring(0, 8).toUpperCase(),
@@ -1190,12 +1467,13 @@ export default function ReportsPage() {
           s.payment_mode || "cash",
           Math.round(s.paid_amount || 0).toString(),
           Math.round(s.total_amount || 0).toString(),
+          Math.round(s.cogs || 0).toString(),
           Math.round(s.profit || 0).toString()
         ]);
       } else if (activeTab === "sales_by_product") {
         headers = ["Product Name", "Units Sold", "Average Price (Rs)", "Revenue (Rs)", "Cost (Rs)", "Gross Profit (Rs)", "Margin %"];
         rows = salesByProduct.map(p => [
-          p.name,
+          productSalesExportLabel(p),
           p.qty.toString(),
           Math.round(p.revenue / (p.qty || 1)).toString(),
           Math.round(p.revenue).toString(),
@@ -1880,11 +2158,14 @@ function KpiCard({
 // ── Dynamic KPI Cards Section ──────────────────────────────────────────────
 function ReportKpiSection({ activeTab, salesData, salesByProduct, salesByCustomer, salesByPayment, purchasesData, purchasesBySupplier, expensesData, expenseByCategory, plSummary, stockSummary, partiesData, agingReport, balanceSheetReport, taxReportData, salesmanPerformanceData, controlledLogs, productBatches, temperatureLogs, shortBookItems, doctorCommissions, hourlyRushData, returnsDamageData, abcDeadStockData, pharmaCompanyMarginData, inactiveKhataData, sessionsData }: any) {
   if (activeTab === "sales") {
+    const grossMarginPct =
+      plSummary.revenue > 0 ? (plSummary.grossProfit / plSummary.revenue) * 100 : 0;
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <KpiCard label="Total Invoices" value={`${salesData.length}`} sub="Confirmed billing transactions" color="slate" icon={<ShoppingBag size={13}/>}/>
         <KpiCard label="Total Gross Revenue" value={`Rs ${Math.round(plSummary.revenue).toLocaleString()}`} sub="Total sales billing" color="blue" icon={<CreditCard size={13}/>}/>
-        <KpiCard label="Estimated Gross Profit" value={`Rs ${Math.round(plSummary.grossProfit).toLocaleString()}`} sub={`Margin: ${plSummary.marginPct.toFixed(1)}%`} color="green" icon={<TrendingDown size={13} className="rotate-180"/>}/>
+        <KpiCard label="Total Order Cost (COGS)" value={`Rs ${Math.round(plSummary.cogs).toLocaleString()}`} sub="Per-invoice cost (settled snapshot when available)" color="amber" icon={<Package size={13}/>}/>
+        <KpiCard label="Estimated Gross Profit" value={`Rs ${Math.round(plSummary.grossProfit).toLocaleString()}`} sub={`Gross margin: ${grossMarginPct.toFixed(1)}%`} color="green" icon={<TrendingDown size={13} className="rotate-180"/>}/>
       </div>
     );
   }
@@ -2067,12 +2348,17 @@ function ReportKpiSection({ activeTab, salesData, salesByProduct, salesByCustome
 
   if (activeTab === "sales_by_product") {
     const topProd = salesByProduct && salesByProduct[0];
-    const totalQty = (salesByProduct || []).reduce((s: number, x: any) => s + Number(x.quantity || 0), 0);
+    const totalQty = (salesByProduct || []).reduce((s: number, x: any) => s + Number(x.qty || 0), 0);
+    const totalCost = (salesByProduct || []).reduce((s: number, x: any) => s + Number(x.cost || 0), 0);
+    const totalProfit = (salesByProduct || []).reduce((s: number, x: any) => s + Number(x.profit || 0), 0);
+    const totalRev = (salesByProduct || []).reduce((s: number, x: any) => s + Number(x.revenue || 0), 0);
+    const marginPct = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0;
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <KpiCard label="Unique Products Sold" value={`${(salesByProduct || []).length}`} sub="Different items billed" color="blue" icon={<Package size={13}/>}/>
         <KpiCard label="Total Units Sold" value={`${Math.round(totalQty).toLocaleString()}`} sub="Total volume moved" color="slate" icon={<Layers size={13}/>}/>
-        <KpiCard label="Top Selling Item" value={topProd ? topProd.name : "N/A"} sub={topProd ? `${topProd.quantity} units | Rs ${Math.round(topProd.revenue).toLocaleString()}` : "No items sold"} color="green" icon={<Zap size={13}/>}/>
+        <KpiCard label="Total COGS" value={`Rs ${Math.round(totalCost).toLocaleString()}`} sub="Settled / line cost (matches invoices)" color="amber" icon={<Truck size={13}/>}/>
+        <KpiCard label="Gross Profit" value={`Rs ${Math.round(totalProfit).toLocaleString()}`} sub={`Margin ${marginPct.toFixed(1)}% · Top: ${topProd ? topProd.name : "-"}`} color="green" icon={<Zap size={13}/>}/>
       </div>
     );
   }
@@ -2165,7 +2451,7 @@ function ReportTableHead({ activeTab }: { activeTab: ReportTab }) {
 
   switch (activeTab) {
     case "sales":
-      return <tr>{th("Date")}{th("Invoice ID")}{th("Customer")}{th("Mode")}{th("Received", true)}{th("Total Amount", true)}{th("Profit", true)}</tr>;
+      return <tr>{th("Date")}{th("Invoice ID")}{th("Customer")}{th("Mode")}{th("Received", true)}{th("Total Amount", true)}{th("Cost", true)}{th("Profit", true)}</tr>;
     case "sales_by_product":
       return <tr>{th("Product Name")}{th("Units Sold", true)}{th("Avg Price", true)}{th("Revenue", true)}{th("COGS", true)}{th("Profit", true)}{th("Margin %", true)}</tr>;
     case "sales_by_customer":
@@ -2234,7 +2520,7 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
   );
 
   if (activeTab === "sales") {
-    if (!salesData.length) return empty(7, "No invoices in selected date range.");
+    if (!salesData.length) return empty(8, "No invoices in selected date range.");
     return <>{salesData.map((s: any) => (
       <tr key={s.id} className="hover:bg-slate-50/70 transition-colors">
         {td(new Date(s.created_at).toLocaleDateString(), false, false, "text-slate-500")}
@@ -2243,7 +2529,22 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
         {td(badge(s.payment_mode || "cash", s.payment_mode === "credit" ? "bg-rose-50 text-rose-700" : s.payment_mode === "card" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"))}
         {td(`Rs ${Math.round(s.paid_amount || 0).toLocaleString()}`, true)}
         {td(`Rs ${Math.round(s.total_amount || 0).toLocaleString()}`, true, true)}
-        {td(<div className="font-bold text-emerald-600">Rs {Math.round(s.profit || 0).toLocaleString()}</div>, true)}
+        {td(
+          <div className="font-mono font-semibold text-slate-700">
+            {s.cost_amount != null || (s.cogs != null && Number(s.cogs) > 0)
+              ? `Rs ${Math.round(Number(s.cogs || 0)).toLocaleString()}`
+              : "-"}
+          </div>,
+          true
+        )}
+        {td(
+          <div className="font-bold text-emerald-600">
+            {s.profit_amount != null || s.profit != null
+              ? `Rs ${Math.round(Number(s.profit || 0)).toLocaleString()}`
+              : "-"}
+          </div>,
+          true
+        )}
       </tr>
     ))}</>;
   }
@@ -2486,17 +2787,45 @@ function ReportTableBody({ activeTab, salesData, salesByProduct, salesByCustomer
 
   if (activeTab === "sales_by_product") {
     if (!salesByProduct.length) return empty(7, "No product sales in selected date range.");
-    return <>{salesByProduct.map((p: any) => (
-      <tr key={p.name} className="hover:bg-slate-50/70 transition-colors">
-        {td(p.name, false, true)}
-        {td(`${p.qty.toLocaleString()} units`, true, false, "text-slate-500 font-mono text-[10px]")}
-        {td(`Rs ${Math.round(p.revenue / (p.qty || 1)).toLocaleString()}`, true)}
-        {td(`Rs ${Math.round(p.revenue).toLocaleString()}`, true, true)}
-        {td(`Rs ${Math.round(p.cost).toLocaleString()}`, true, false, "text-slate-400")}
-        {td(<div className="font-black text-emerald-600">Rs {Math.round(p.profit).toLocaleString()}</div>, true)}
-        {td(`${(p.revenue > 0 ? (p.profit / p.revenue) * 100 : 0).toFixed(1)}%`, true, false, "text-slate-500 font-bold")}
-      </tr>
-    ))}</>;
+    const totQty = salesByProduct.reduce((s: number, p: any) => s + p.qty, 0);
+    const totRev = salesByProduct.reduce((s: number, p: any) => s + p.revenue, 0);
+    const totCost = salesByProduct.reduce((s: number, p: any) => s + p.cost, 0);
+    const totProfit = salesByProduct.reduce((s: number, p: any) => s + p.profit, 0);
+    return (
+      <>
+        {salesByProduct.map((p: any) => (
+          <tr key={p.key || p.name} className="hover:bg-slate-50/70 transition-colors">
+            {td(
+              <div>
+                <div className="font-semibold">{p.name}</div>
+                {p.detail ? (
+                  <div className="text-[10px] font-normal text-slate-500 mt-0.5 leading-snug">
+                    Includes: {p.detail}
+                  </div>
+                ) : null}
+              </div>,
+              false,
+              true
+            )}
+            {td(`${p.qty.toLocaleString()} units`, true, false, "text-slate-500 font-mono text-[10px]")}
+            {td(`Rs ${Math.round(p.revenue / (p.qty || 1)).toLocaleString()}`, true)}
+            {td(`Rs ${Math.round(p.revenue).toLocaleString()}`, true, true)}
+            {td(`Rs ${Math.round(p.cost).toLocaleString()}`, true, false, "text-slate-700 font-semibold")}
+            {td(<div className="font-black text-emerald-600">Rs {Math.round(p.profit).toLocaleString()}</div>, true)}
+            {td(`${(p.revenue > 0 ? (p.profit / p.revenue) * 100 : 0).toFixed(1)}%`, true, false, "text-slate-500 font-bold")}
+          </tr>
+        ))}
+        <tr className="bg-slate-100 border-t-2 border-slate-300">
+          {td("Total (all products)", false, true)}
+          {td(`${totQty.toLocaleString()} units`, true, true)}
+          {td("-", true)}
+          {td(`Rs ${Math.round(totRev).toLocaleString()}`, true, true)}
+          {td(`Rs ${Math.round(totCost).toLocaleString()}`, true, true, "text-slate-800")}
+          {td(<div className="font-black text-emerald-700">Rs {Math.round(totProfit).toLocaleString()}</div>, true, true)}
+          {td(`${totRev > 0 ? ((totProfit / totRev) * 100).toFixed(1) : "0.0"}%`, true, true)}
+        </tr>
+      </>
+    );
   }
 
   if (activeTab === "sales_by_customer") {

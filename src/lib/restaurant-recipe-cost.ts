@@ -1,4 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { expandInvoiceLinesForRestaurantStock } from "@/lib/restaurant-deal-invoice-lines";
+
+/** Money / COGS display (4 dp - recipe floats stay full precision until here). */
+export function roundMoney(value: number, decimals = 4): number {
+  if (!Number.isFinite(value)) return 0;
+  const f = 10 ** decimals;
+  return Math.round((value + Number.EPSILON) * f) / f;
+}
+
+/** Ingredient stock qty - keeps recipe fractions (e.g. 0.25 kg) without drift. */
+export function roundStockQty(value: number, decimals = 6): number {
+  if (!Number.isFinite(value)) return 0;
+  const f = 10 ** decimals;
+  return Math.round((value + Number.EPSILON) * f) / f;
+}
 
 /** Mirrors POSRESTURANT `is_base_size_label` / Standard recipe rows. */
 export function isBaseSizeLabel(sizeName: string | null | undefined): boolean {
@@ -39,23 +54,25 @@ export function pickRecipeRowsForSize(
 ): ProductRecipeRow[] {
   if (!allRows.length) return [];
 
+  const baseRows = allRows.filter((r) => !r.menu_size_id);
+  const sizedRows = allRows.filter((r) => r.menu_size_id);
+  const hasPerSizeRecipes = sizedRows.length > 0;
+  const sellingSized =
+    Boolean(menuSizeId) || (!isBaseSizeLabel(menuSizeName) && Boolean(menuSizeName?.trim()));
+
   if (menuSizeId) {
-    const sized = allRows.filter((r) => r.menu_size_id === menuSizeId);
-    if (sized.length) return sized;
+    const match = sizedRows.filter((r) => r.menu_size_id === menuSizeId);
+    if (match.length) return match;
+    if (hasPerSizeRecipes) return [];
   }
 
-  if (!isBaseSizeLabel(menuSizeName)) {
-    const nameKey = (menuSizeName || "").trim().toLowerCase();
-    if (nameKey) {
-      // Name-only fallback when menu_size_id was not persisted on the line
-      const byName = allRows.filter(
-        (r) => r.menu_size_id && String(r.menu_size_id).toLowerCase() === nameKey
-      );
-      if (byName.length) return byName;
-    }
+  if (hasPerSizeRecipes && sellingSized) {
+    return [];
   }
 
-  return allRows.filter((r) => !r.menu_size_id);
+  if (baseRows.length) return baseRows;
+
+  return allRows;
 }
 
 export function lineIngredientCostPerUnit(
@@ -158,13 +175,61 @@ export async function computeCartIngredientCost(
   return total;
 }
 
+export function invoiceLineCostKey(line: InvoiceLineForCost): string {
+  return `${line.product_id}:${line.menu_size_id || ""}:${line.packing_name || ""}`;
+}
+
+/** Per-unit COGS for each invoice line at current ingredient prices (snapshot at settle). */
+export async function computeLineUnitCogsMap(
+  supabase: SupabaseClient,
+  lines: InvoiceLineForCost[]
+): Promise<Record<string, number>> {
+  if (!lines.length) return {};
+
+  const productIds = [...new Set(lines.map((l) => l.product_id).filter(Boolean))];
+  const recipesByProduct = await fetchRecipesForProducts(supabase, productIds);
+  const ingredientIds = Object.values(recipesByProduct)
+    .flat()
+    .map((r) => r.ingredient_product_id);
+  const prices = await loadIngredientPurchasePrices(supabase, ingredientIds);
+
+  const map: Record<string, number> = {};
+  for (const line of lines) {
+    const key = invoiceLineCostKey(line);
+    const all = recipesByProduct[line.product_id] || [];
+    const sizeName = sizeNameFromLine(line);
+    const picked = pickRecipeRowsForSize(all, line.menu_size_id, sizeName);
+    let unit = lineIngredientCostPerUnit(picked, prices);
+    if (!picked.length) {
+      const { data: prod } = await supabase
+        .from("products")
+        .select("purchase_price_single")
+        .eq("id", line.product_id)
+        .maybeSingle();
+      unit = Number(prod?.purchase_price_single || 0);
+    }
+    map[key] = roundMoney(unit);
+  }
+  return map;
+}
+
+export function isRestaurantInvoiceCostFrozen(invoice: {
+  status?: string | null;
+  restaurant_order_status?: string | null;
+}): boolean {
+  if (invoice.restaurant_order_status === "settled") return true;
+  const st = (invoice.status || "").toLowerCase();
+  return st === "paid" || st === "partial" || st === "unpaid";
+}
+
 export async function computeInvoiceIngredientCost(
   supabase: SupabaseClient,
   lines: InvoiceLineForCost[]
 ): Promise<number> {
   if (!lines.length) return 0;
 
-  const productIds = lines.map((l) => l.product_id);
+  const expanded = await expandInvoiceLinesForRestaurantStock(supabase, lines);
+  const productIds = expanded.map((l) => l.product_id);
   const recipesByProduct = await fetchRecipesForProducts(supabase, productIds);
 
   const ingredientIds = Object.values(recipesByProduct)
@@ -173,7 +238,7 @@ export async function computeInvoiceIngredientCost(
   const prices = await loadIngredientPurchasePrices(supabase, ingredientIds);
 
   let total = 0;
-  for (const line of lines) {
+  for (const line of expanded) {
     const all = recipesByProduct[line.product_id] || [];
     const sizeName = sizeNameFromLine(line);
     const picked = pickRecipeRowsForSize(all, line.menu_size_id, sizeName);
@@ -189,7 +254,7 @@ export async function computeInvoiceIngredientCost(
       total += Number(prod?.purchase_price_single || 0) * line.quantity;
     }
   }
-  return total;
+  return roundMoney(total);
 }
 
 export type StockRequirement = { ingredient_product_id: string; quantity: number };
@@ -208,11 +273,11 @@ export async function buildStockRequirementsForLine(
   if (picked.length) {
     return picked.map((r) => ({
       ingredient_product_id: r.ingredient_product_id,
-      quantity: Number(r.quantity) * quantity,
+      quantity: roundStockQty(Number(r.quantity) * quantity),
     }));
   }
 
-  return [{ ingredient_product_id: productId, quantity }];
+  return [{ ingredient_product_id: productId, quantity: roundStockQty(quantity) }];
 }
 
 async function applyStockDeltaForInvoiceLines(
@@ -220,8 +285,9 @@ async function applyStockDeltaForInvoiceLines(
   lines: InvoiceLineForCost[],
   direction: "deduct" | "restore"
 ): Promise<void> {
+  const expanded = await expandInvoiceLinesForRestaurantStock(supabase, lines);
   const rpc = direction === "deduct" ? "decrement_product_stock" : "increment_product_stock";
-  for (const line of lines) {
+  for (const line of expanded) {
     const reqs = await buildStockRequirementsForLine(
       supabase,
       line.product_id,
@@ -230,9 +296,11 @@ async function applyStockDeltaForInvoiceLines(
       sizeNameFromLine(line)
     );
     for (const req of reqs) {
+      const qty = roundStockQty(req.quantity);
+      if (qty <= 0) continue;
       await supabase.rpc(rpc, {
         p_id: req.ingredient_product_id,
-        qty: req.quantity,
+        qty,
       });
     }
   }

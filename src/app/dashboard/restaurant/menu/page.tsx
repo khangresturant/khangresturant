@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { UtensilsCrossed, Layers, FolderOpen } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { UtensilsCrossed, FolderOpen, Layers } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { Button } from "@/components/ui/button";
 import { MenuItemsTab } from "@/components/restaurant/menu/MenuItemsTab";
@@ -15,13 +15,21 @@ type TabId = "items" | "categories" | "sizes";
 export default function RestaurantMenuManagementPage() {
   const { language } = useLanguage();
   const isEn = language === "en";
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab") as TabId | null;
+  const tabParam = searchParams.get("tab");
 
   const [tab, setTab] = useState<TabId>("items");
 
+  const selectTab = (id: TabId) => {
+    setTab(id);
+    const product = searchParams.get("product");
+    const qs = product ? `?tab=${id}&product=${product}` : `?tab=${id}`;
+    router.replace(`/dashboard/restaurant/menu${qs}`);
+  };
+
   useEffect(() => {
-    if (tabParam === "categories" || tabParam === "sizes" || tabParam === "items") {
+    if (tabParam === "categories" || tabParam === "items" || tabParam === "sizes") {
       setTab(tabParam);
     }
   }, [tabParam]);
@@ -34,17 +42,17 @@ export default function RestaurantMenuManagementPage() {
 
   return (
     <div className="space-y-6 font-sans animate-in fade-in max-w-6xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200">
-        <p className="text-xs text-slate-600 font-medium">
+      <div className="rounded-2xl bg-gradient-to-r from-blue-600 to-blue-800 text-white p-5 shadow-lg">
+        <h1 className="text-xl font-black tracking-tight">
+          {isEn ? "Fast Food Menu" : "فاسٹ فوڈ مینو"}
+        </h1>
+        <p className="text-blue-100 text-sm mt-1 max-w-2xl">
           {isEn
-            ? "Sales menu items, categories, and size prices. Raw ingredients stay under Products (ingredient flag) or Recipes for BOM."
-            : "فروخت مینو، کیٹگریز اور سائز قیمتیں۔"}
+            ? "Tabs: Items, Categories, Sizes (per dish). Recipe per size in Menu Items → Edit."
+            : "آئٹمز، کیٹگریز، سائز - ہر ڈش کے الگ سائز۔"}
         </p>
-        <div className="flex flex-wrap gap-3 text-xs">
-          <Link href="/dashboard/restaurant/recipes" className="underline text-blue-600 hover:text-blue-800 font-semibold">
-            {isEn ? "Recipes & food cost →" : "ریسیپی →"}
-          </Link>
-          <Link href="/dashboard/restaurant/deals" className="underline text-blue-600 hover:text-blue-800 font-semibold">
+        <div className="flex flex-wrap gap-3 mt-3 text-xs">
+          <Link href="/dashboard/restaurant/deals" className="underline text-blue-100 hover:text-white">
             {isEn ? "Deals & combos →" : "ڈیلز →"}
           </Link>
         </div>
@@ -56,11 +64,11 @@ export default function RestaurantMenuManagementPage() {
             key={t.id}
             variant={tab === t.id ? "default" : "outline"}
             size="sm"
-            onClick={() => setTab(t.id)}
+            onClick={() => selectTab(t.id)}
             className={tab === t.id ? "bg-slate-900" : ""}
           >
             {t.icon}
-            <div className="ml-1.5 inline-block">{t.label}</div>
+            <div className="ml-1.5">{t.label}</div>
           </Button>
         ))}
       </div>
