@@ -1,10 +1,10 @@
 # Supabase PostgreSQL Database Schema Documentation
 
 > **System:** The Accounts / Cafe Master ERP Database Architecture
-> **Generated At:** 2026-11-14T07:46:55.745Z
+> **Generated At:** 2026-11-14T14:06:29.533Z
 > **Database Version:** PostgreSQL 17.6
 > **Total Tables:** 109
-> **Total Foreign Key Relationships:** 207
+> **Total Foreign Key Relationships:** 208
 
 ## Table of Contents
 
@@ -272,6 +272,7 @@ Restaurant tables, floors/sections, KDS kitchen orders, dual kitchen stations, m
 | **`created_at`** | `timestamp with time zone` | Yes | `now()` | - |
 | **`floor_name`** | `varchar(50)` | Yes | `'Ground'` | - |
 | **`section_name`** | `varchar(50)` | Yes | - | - |
+| **`table_number`** | `varchar(50)` | Yes | - | - |
 
 **Foreign Keys Outgoing:**
 - `active_invoice_id` references [`invoices.id`](#table-invoices) (ON DELETE SET NULL, ON UPDATE NO ACTION)
@@ -640,6 +641,7 @@ Products, size-based BOM recipe costing, barcodes, batches, IMEIs, variants, cat
 | **`stock_quantity`** | `double precision` | Yes | `0` | - |
 | **`purchase_price`** | `double precision` | Yes | `0` | - |
 | **`created_at`** | `timestamp with time zone` | Yes | `now()` | - |
+| **`sale_price`** | `numeric(15,2)` | Yes | - | - |
 
 **Foreign Keys Outgoing:**
 - `product_id` references [`products.id`](#table-products) (ON DELETE CASCADE, ON UPDATE NO ACTION)
@@ -1077,6 +1079,7 @@ Sales invoices, invoice line items, retail sales, returns, customer/supplier par
 - [`installment_plans.customer_id`](#table-installment_plans) -> `id`
 - [`invoices.party_id`](#table-invoices) -> `id`
 - [`pending_payments.customer_id`](#table-pending_payments) -> `id`
+- [`purchase_orders.party_id`](#table-purchase_orders) -> `id`
 - [`purchase_orders.supplier_id`](#table-purchase_orders) -> `id`
 - [`repair_tickets.party_id`](#table-repair_tickets) -> `id`
 - [`returns.party_id`](#table-returns) -> `id`
@@ -1527,10 +1530,12 @@ Purchase orders from vendors, line-item receiving, and supplier expiry claims.
 | **`tax_rate`** | `numeric(5,2)` | Yes | `0` | - |
 | **`closing_book_id`** | `uuid` | Yes | - | FK -> `closing_books.id` (ON DELETE SET NULL) |
 | **`supplier_name`** | `text` | Yes | - | - |
+| **`party_id`** | `uuid` | Yes | - | FK -> `parties.id` (ON DELETE SET NULL) |
 
 **Foreign Keys Outgoing:**
 - `account_id` references [`cash_accounts.id`](#table-cash_accounts) (ON DELETE NO ACTION, ON UPDATE NO ACTION)
 - `closing_book_id` references [`closing_books.id`](#table-closing_books) (ON DELETE SET NULL, ON UPDATE NO ACTION)
+- `party_id` references [`parties.id`](#table-parties) (ON DELETE SET NULL, ON UPDATE NO ACTION)
 - `shop_id` references [`shops.id`](#table-shops) (ON DELETE NO ACTION, ON UPDATE NO ACTION)
 - `supplier_id` references [`parties.id`](#table-parties) (ON DELETE SET NULL, ON UPDATE NO ACTION)
 
@@ -2871,7 +2876,7 @@ Additional platform and utility tables.
 
 ## Complete Foreign Key Relationships Matrix
 
-Total relationships defined in database: **207**.
+Total relationships defined in database: **208**.
 
 | Source Table | Source Column | Target Table | Target Column | On Delete | On Update | Constraint Name |
 |---|---|---|---|:---:|:---:|---|
@@ -2992,6 +2997,7 @@ Total relationships defined in database: **207**.
 | `purchase_order_items` | `variant_id` | `product_variants` | `id` | NO ACTION | NO ACTION | `purchase_order_items_variant_id_fkey` |
 | `purchase_orders` | `account_id` | `cash_accounts` | `id` | NO ACTION | NO ACTION | `purchase_orders_account_id_fkey` |
 | `purchase_orders` | `closing_book_id` | `closing_books` | `id` | SET NULL | NO ACTION | `purchase_orders_closing_book_id_fkey` |
+| `purchase_orders` | `party_id` | `parties` | `id` | SET NULL | NO ACTION | `purchase_orders_party_id_fkey` |
 | `purchase_orders` | `shop_id` | `shops` | `id` | NO ACTION | NO ACTION | `purchase_orders_shop_id_fkey` |
 | `purchase_orders` | `supplier_id` | `parties` | `id` | SET NULL | NO ACTION | `purchase_orders_supplier_id_fkey` |
 | `referral_transactions` | `referred_shop_id` | `shops` | `id` | SET NULL | NO ACTION | `referral_transactions_referred_shop_id_fkey` |
