@@ -142,8 +142,28 @@ async function applyMigrations() {
       ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS kitchen_hub VARCHAR(100);
     `);
 
-    // 11. Reload PostgREST schema cache
-    console.log("11. Reloading PostgREST schema cache...");
+    // 11. Ensure currencies exist to prevent journal_entries foreign key violations
+    console.log("11. Seeding base currencies...");
+    await client.query(`
+      INSERT INTO public.currencies (code, name, symbol) VALUES
+        ('PKR', 'Pakistani Rupee', 'Rs'),
+        ('USD', 'United States Dollar', '$'),
+        ('AED', 'United Arab Emirates Dirham', 'AED'),
+        ('SAR', 'Saudi Riyal', 'SAR'),
+        ('GBP', 'British Pound Sterling', '£'),
+        ('EUR', 'Euro', '€'),
+        ('INR', 'Indian Rupee', '₹'),
+        ('CAD', 'Canadian Dollar', 'CA$'),
+        ('AUD', 'Australian Dollar', 'AU$'),
+        ('OMR', 'Omani Rial', 'OMR'),
+        ('QAR', 'Qatari Riyal', 'QAR'),
+        ('KWD', 'Kuwaiti Dinar', 'KWD'),
+        ('BHD', 'Bahraini Dinar', 'BHD')
+      ON CONFLICT (code) DO NOTHING;
+    `);
+
+    // 12. Reload PostgREST schema cache
+    console.log("12. Reloading PostgREST schema cache...");
     await client.query("NOTIFY pgrst, 'reload schema';");
 
     await client.query("COMMIT;");
