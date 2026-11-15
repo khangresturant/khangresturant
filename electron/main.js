@@ -56,6 +56,7 @@ async function waitForServer(url, timeoutMs = 45000) {
  */
 function startProductionServer(port) {
   const fs = require("fs");
+  const { spawn } = require("child_process");
   const appPath = app.getAppPath();
   let serverScript = path.join(appPath, ".next", "standalone", "server.js");
   if (!fs.existsSync(serverScript) && process.resourcesPath) {
@@ -70,14 +71,16 @@ function startProductionServer(port) {
     PORT: String(port),
     HOSTNAME: "127.0.0.1",
     NODE_ENV: "production",
+    ELECTRON_RUN_AS_NODE: "1",
     NEXT_PUBLIC_USE_LOCAL_SQLITE: "false",
     NEXT_PUBLIC_USE_MOCK: "false",
   };
 
-  serverProcess = fork(serverScript, [], {
+  serverProcess = spawn(process.execPath, [serverScript], {
     env,
     cwd: path.dirname(serverScript),
-    stdio: "inherit",
+    windowsHide: true,
+    stdio: "ignore",
   });
 
   serverProcess.on("error", (err) => {
@@ -176,7 +179,16 @@ app.whenReady().then(async () => {
 
   createMainWindow();
 
-  const isReady = await waitForServer(targetUrl);
+  let isReady = await waitForServer(targetUrl, 25000);
+  if (!isReady) {
+    // If embedded standalone port didn't answer in time, check if local dev server on 3000 is running
+    const devReady = await checkServerReady("http://localhost:3000");
+    if (devReady) {
+      targetUrl = "http://localhost:3000";
+      isReady = true;
+    }
+  }
+
   if (isReady && mainWindow) {
     mainWindow.loadURL(targetUrl);
   } else if (mainWindow) {
