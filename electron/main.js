@@ -55,8 +55,15 @@ async function waitForServer(url, timeoutMs = 45000) {
  * Starts the embedded Next.js standalone server in production mode.
  */
 function startProductionServer(port) {
+  const fs = require("fs");
   const appPath = app.getAppPath();
-  const serverScript = path.join(appPath, ".next", "standalone", "server.js");
+  let serverScript = path.join(appPath, ".next", "standalone", "server.js");
+  if (!fs.existsSync(serverScript) && process.resourcesPath) {
+    const altPath = path.join(process.resourcesPath, "app", ".next", "standalone", "server.js");
+    if (fs.existsSync(altPath)) {
+      serverScript = altPath;
+    }
+  }
 
   const env = {
     ...process.env,
@@ -69,7 +76,7 @@ function startProductionServer(port) {
 
   serverProcess = fork(serverScript, [], {
     env,
-    cwd: path.join(appPath, ".next", "standalone"),
+    cwd: path.dirname(serverScript),
     stdio: "inherit",
   });
 
@@ -79,12 +86,14 @@ function startProductionServer(port) {
 }
 
 function createMainWindow() {
+  const iconPath = path.join(__dirname, "icon.ico");
   mainWindow = new BrowserWindow({
     width: 1366,
     height: 768,
     minWidth: 1024,
     minHeight: 650,
-    title: "The Accounts POS",
+    title: "Cook Swift",
+    icon: iconPath,
     autoHideMenuBar: true,
     show: false,
     backgroundColor: "#0f172a",
