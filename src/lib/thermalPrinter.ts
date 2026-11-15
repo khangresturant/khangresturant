@@ -302,6 +302,23 @@ export async function printThermalReceipt({
   const printer = targetPrinterName?.trim();
 
   if (typeof window !== "undefined") {
+    // 1. Direct Desktop Silent Thermal Printing (Zero Windows Print Dialog / Popup)
+    const electronAPI = window.electronAPI;
+    if (electronAPI?.isDesktop && typeof electronAPI.printThermalSilent === "function") {
+      try {
+        const result = await electronAPI.printThermalSilent(fullHtml, printer);
+        if (result?.success) {
+          onSuccess?.();
+          return;
+        } else if (result?.error) {
+          console.warn("[Electron Silent Print] Notice:", result.error);
+        }
+      } catch (electronErr) {
+        console.warn("[Electron Silent Print] Error:", electronErr);
+      }
+    }
+
+    // 2. Web POS fallback: Local server route
     try {
       const res = await fetch("/api/restaurant/thermal-print", {
         method: "POST",

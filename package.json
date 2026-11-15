@@ -2,8 +2,12 @@
   "name": "the-accounts",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --experimental-https",
+    "electron:dev": "concurrently \"next dev -p 3000\" \"wait-on -t 60000 http://localhost:3000 && electron .\"",
+    "electron:start": "electron .",
+    "electron:build": "npm run build && electron-builder --win",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -53,11 +57,45 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.185.1",
+    "concurrently": "^10.0.7",
     "drizzle-kit": "^0.31.10",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "com.theaccounts.pos",
+    "productName": "The Accounts POS",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      ".next/standalone/**/*",
+      ".next/static/**/*",
+      "public/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "The Accounts POS"
+    }
   },
   "allowScripts": {
     "esbuild@0.18.20": true,

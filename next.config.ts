@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: any = {
+  output: process.env.NEXT_STANDALONE === "false" ? undefined : "standalone",
   serverExternalPackages: ["better-sqlite3"],
   turbopack: {
     root: path.resolve(__dirname),
