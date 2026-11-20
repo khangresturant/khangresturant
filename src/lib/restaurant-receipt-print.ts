@@ -1,9 +1,17 @@
 import { DEFAULT_RECEIPT_SETTINGS, type ReceiptSettings } from "@/components/ReceiptTemplate";
-import { printReceiptDirect } from "@/lib/thermalPrinter";
+import { printThermalReceipt } from "@/lib/thermalPrinter";
 import {
   resolvePrinterNameForRole,
+  resolveRestaurantPrintDispatches,
+  type RestaurantPrintJobType,
   type RestaurantPrintRole,
 } from "@/lib/restaurant-print-profile";
+import {
+  isSimpleKotCategoryConfigured,
+  simpleKotSlipTitle,
+  splitKotLinesForPrint,
+  type KotLineWithMeta,
+} from "@/lib/restaurant-kot-split";
 import { restaurantPaymentLabel } from "@/lib/restaurant-riders";
 import {
   kotChangeTypeLabel,
@@ -69,30 +77,48 @@ function printRestaurantThermalSlip(
   inner: string,
   settings: Partial<ReceiptSettings>,
   title: string,
-  role: RestaurantPrintRole,
+  job: RestaurantPrintJobType,
   companyRow?: Record<string, unknown> | null,
   callbacks?: { onError?: (message: string) => void }
 ): void {
   const merged = { ...DEFAULT_RECEIPT_SETTINGS, ...settings };
-  const targetPrinterName = resolvePrinterNameForRole(role, merged, companyRow);
-  printReceiptDirect({
-    receiptHtml: inner,
-    settings: merged,
-    title,
-    targetPrinterName: targetPrinterName || undefined,
-    onError: (err) => {
-      const base =
-        err instanceof Error
-          ? err.message
-          : role === "kitchen"
-            ? "KOT print failed - set Kitchen printer in Business Details."
-            : "Customer slip print failed - set Customer printer in Business Details or Windows default.";
-      const hint = targetPrinterName
-        ? `${base} (Printer: ${targetPrinterName})`
-        : base;
-      callbacks?.onError?.(hint);
-    },
-  });
+  let dispatches = resolveRestaurantPrintDispatches(job, merged, companyRow);
+
+  if (dispatches.length === 0) {
+    const legacyRole: RestaurantPrintRole =
+      job === "kot" ? "kitchen" : "customer";
+    const fallback = resolvePrinterNameForRole(legacyRole, merged, companyRow);
+    if (fallback) dispatches = [{ printerName: fallback, copies: 1 }];
+  }
+
+  const failHint =
+    job === "kot"
+      ? "KOT print failed - set printer copy counts in Business Details."
+      : job === "paidReceipt"
+        ? "Payment receipt print failed - check printer settings."
+        : "Guest bill print failed - check printer settings.";
+
+  void (async () => {
+    if (dispatches.length === 0) {
+      callbacks?.onError?.(failHint);
+      return;
+    }
+    for (const { printerName, copies } of dispatches) {
+      try {
+        await printThermalReceipt({
+          receiptHtml: inner,
+          settings: merged,
+          title,
+          targetPrinterName: printerName,
+          copies,
+        });
+      } catch (err) {
+        const base = err instanceof Error ? err.message : failHint;
+        const hint = `${base} (Printer: ${printerName}, copies: ${copies})`;
+        callbacks?.onError?.(hint);
+      }
+    }
+  })();
 }
 
 export function restaurantBillLabel(orderNumber: string | null | undefined, invoiceId: string): string {
@@ -341,6 +367,117 @@ function thermalFooterBlock(settings: Partial<ReceiptSettings>): string {
   return `<div style="text-align:center;margin-top:10px;border-top:1px dashed #000;padding-top:6px;">${lines.join("")}</div>`;
 }
 
+/** Minimal roti / nan style ticket — item + qty only. */
+export function printRestaurantSimpleKOTSlip(
+  input: RestaurantKOTInput,
+  callbacks?: { onError?: (message: string) => void }
+): void {
+  const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
+  const billLabel = input.orderNumber?.trim()
+    ? restaurantBillLabel(input.orderNumber, "KOT")
+    : "NEW";
+  const title = simpleKotSlipTitle(settings);
+
+  const rows = input.items
+    .map(
+      (it) => `
+      <tr>
+        <td style="padding:3px 0;font-weight:bold;font-size:13px;border-bottom:1px dotted #000;">${esc(it.name)}</td>
+        <td style="padding:3px 0;text-align:right;font-weight:900;font-size:16px;border-bottom:1px dotted #000;width:40px;">${it.quantity}</td>
+      </tr>`
+    )
+    .join("");
+
+  const meta = [
+    input.tableName?.trim()
+      ? `<div style="font-size:11px;font-weight:bold;">Table: ${esc(input.tableName.trim())}</div>`
+      : "",
+    `<div style="font-size:10px;">Bill ${esc(billLabel)} · ${new Date().toLocaleString()}</div>`,
+    input.waiterName?.trim()
+      ? `<div style="font-size:9px;">Waiter: ${esc(input.waiterName.trim())}</div>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("");
+
+  const inner = `
+    <div style="text-align:center;font-weight:900;font-size:15px;border:2px solid #000;padding:6px 4px;margin-bottom:8px;">
+      ${esc(title)}
+    </div>
+  <div style="margin-bottom:8px;">${meta}</div>
+    <table style="width:100%;border-collapse:collapse;">
+      <tbody>${rows || `<tr><td style="font-size:10px;">No items</td></tr>`}</tbody>
+    </table>
+  `;
+
+  printRestaurantThermalSlip(
+    inner,
+    settings,
+    `${title} ${billLabel}`,
+    "kot",
+    input.companyRow,
+    callbacks
+  );
+}
+
+export type RestaurantKOTDispatchOptions = {
+  productIdToCategoryId?: Map<string, string>;
+  /** Lines with product/category meta; defaults to items only. */
+  lineMeta?: KotLineWithMeta[];
+};
+
+/** Main kitchen KOT + optional simple category KOT (e.g. roti) on Send KOT. */
+export function printRestaurantKOTDispatch(
+  input: RestaurantKOTInput,
+  options?: RestaurantKOTDispatchOptions,
+  callbacks?: { onError?: (message: string) => void }
+): void {
+  const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
+  if (!isSimpleKotCategoryConfigured(settings)) {
+    printRestaurantKOTSlip(input, callbacks);
+    return;
+  }
+
+  const productMap = options?.productIdToCategoryId;
+  const meta: KotLineWithMeta[] =
+    options?.lineMeta?.length && options.lineMeta.length > 0
+      ? options.lineMeta
+      : input.items.map((it) => ({ ...it }));
+
+  const { main, simple } = splitKotLinesForPrint(meta, settings, productMap);
+
+  if (simple.length > 0) {
+    printRestaurantSimpleKOTSlip({ ...input, items: simple }, callbacks);
+  }
+
+  if (main.length > 0) {
+    const next: RestaurantKOTInput = { ...input, items: main };
+    const amend = input.billAmendment;
+    if (amend?.prepareNow?.length) {
+      const prepMeta: KotLineWithMeta[] = amend.prepareNow.map((line) => {
+        const hit =
+          meta.find(
+            (m) => m.name === line.name && m.quantity === line.quantity
+          ) || meta.find((m) => m.name === line.name);
+        return {
+          ...line,
+          product_id: hit?.product_id,
+          category_id: hit?.category_id,
+        };
+      });
+      const { main: prepMain } = splitKotLinesForPrint(
+        prepMeta,
+        settings,
+        productMap
+      );
+      next.billAmendment = { ...amend, prepareNow: prepMain.length ? prepMain : undefined };
+    }
+    printRestaurantKOTSlip(next, callbacks);
+  } else if (simple.length === 0) {
+    printRestaurantKOTSlip(input, callbacks);
+  }
+}
+
 /** Kitchen Order Ticket - matches POSRESTURANT KOT fields (table, waiter, sizes, notes). */
 export function printRestaurantKOTSlip(
   input: RestaurantKOTInput,
@@ -453,7 +590,7 @@ export function printRestaurantKOTSlip(
     inner,
     settings,
     isAmendment ? `KOT AMEND ${billLabel}` : `KOT ${billLabel}`,
-    "kitchen",
+    "kot",
     input.companyRow,
     callbacks
   );
@@ -513,7 +650,7 @@ export function printRestaurantGuestBill(
     inner,
     settings,
     `Guest Bill ${billLabel}`,
-    "customer",
+    "guestBill",
     input.companyRow,
     callbacks
   );
@@ -606,7 +743,7 @@ export function printRestaurantRevisedGuestBill(
     inner,
     settings,
     `Revised Bill ${billLabel} v${input.revisionNumber}`,
-    "customer",
+    "guestBill",
     input.companyRow,
     callbacks
   );
@@ -677,7 +814,7 @@ export function printRestaurantPaidReceipt(
     inner,
     settings,
     `Paid Receipt ${billLabel}`,
-    "customer",
+    "paidReceipt",
     input.companyRow,
     callbacks
   );

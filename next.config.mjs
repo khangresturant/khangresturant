@@ -6,6 +6,7 @@ const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: process.env.NEXT_STANDALONE === "false" ? undefined : "standalone",
   serverExternalPackages: ["better-sqlite3"],
   turbopack: {
     root: path.resolve(__dirname),

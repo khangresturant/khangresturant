@@ -10,6 +10,8 @@ export interface PrintReceiptOptions {
   title?: string;
   /** Windows printer name; empty = try default via API, then browser dialog */
   targetPrinterName?: string;
+  /** Electron / silent print copies (default 1). Ignored when 0 — treated as 1. */
+  copies?: number;
   onSuccess?: () => void;
   onError?: (err: any) => void;
 }
@@ -295,42 +297,94 @@ export async function printThermalReceipt({
   settings,
   title = "Receipt",
   targetPrinterName,
+  copies = 1,
   onSuccess,
   onError,
 }: PrintReceiptOptions): Promise<void> {
   const fullHtml = buildThermalPrintHtml(receiptHtml, settings, title);
   const printer = targetPrinterName?.trim();
+  const copyCount = Math.max(1, Math.min(99, Math.floor(Number(copies) || 1)));
 
-  if (typeof window !== "undefined") {
-    try {
-      const res = await fetch("/api/restaurant/thermal-print", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          html: fullHtml,
-          printerName: printer || undefined,
-          title,
-        }),
-      });
-      const data = (await res.json()) as {
-        ok?: boolean;
-        useBrowser?: boolean;
-        error?: string;
-        printer?: string;
-      };
-      if (data.ok) {
-        onSuccess?.();
+  const runOnce = async (): Promise<boolean> => {
+    if (typeof window !== "undefined") {
+      // 1. Direct Desktop Silent Thermal Printing (Zero Windows Print Dialog / Popup)
+      const electronAPI = window.electronAPI;
+      if (electronAPI?.isDesktop && typeof electronAPI.printThermalSilent === "function") {
+        try {
+          const result = await electronAPI.printThermalSilent(
+            fullHtml,
+            printer,
+            copyCount
+          );
+          if (result?.success) {
+            return true;
+          }
+          if (result?.error) {
+            console.warn("[Electron Silent Print] Notice:", result.error);
+          }
+        } catch (electronErr) {
+          console.warn("[Electron Silent Print] Error:", electronErr);
+        }
+      }
+
+      // 2. Web POS fallback: Local server route (one job per copy)
+      try {
+        const res = await fetch("/api/restaurant/thermal-print", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            html: fullHtml,
+            printerName: printer || undefined,
+            title,
+          }),
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          useBrowser?: boolean;
+          error?: string;
+          printer?: string;
+        };
+        if (data.ok) {
+          return true;
+        }
+        if (data.useBrowser && data.error) {
+          console.warn("Thermal silent print fallback:", data.error);
+        }
+      } catch (fetchErr) {
+        console.warn("Thermal API print unavailable:", fetchErr);
+      }
+    }
+
+    return await new Promise<boolean>((resolve) => {
+      printReceiptViaIframe(
+        fullHtml,
+        title,
+        () => resolve(true),
+        () => resolve(false),
+        printer
+      );
+    });
+  };
+
+  if (typeof window !== "undefined" && window.electronAPI?.isDesktop) {
+    const ok = await runOnce();
+    if (ok) {
+      onSuccess?.();
+      return;
+    }
+  } else {
+    for (let i = 0; i < copyCount; i++) {
+      const ok = await runOnce();
+      if (!ok) {
+        onError?.(new Error("Print failed"));
         return;
       }
-      if (data.useBrowser && data.error) {
-        console.warn("Thermal silent print fallback:", data.error);
-      }
-    } catch (fetchErr) {
-      console.warn("Thermal API print unavailable:", fetchErr);
     }
+    onSuccess?.();
+    return;
   }
 
-  printReceiptViaIframe(fullHtml, title, onSuccess, onError, printer);
+  onError?.(new Error(printer ? `Print failed (${printer})` : "Print failed"));
 }
 
 function printReceiptViaIframe(

@@ -19,7 +19,7 @@ import {
 } from "@/lib/restaurant-kitchen";
 import { DEFAULT_RECEIPT_SETTINGS } from "@/components/ReceiptTemplate";
 import { mergePrintSettingsFromRow } from "@/lib/merge-print-settings";
-import { printRestaurantKOTSlip } from "@/lib/restaurant-receipt-print";
+import { printRestaurantKOTDispatch } from "@/lib/restaurant-receipt-print";
 
 type KOTOrderItem = {
   id: string;
@@ -187,7 +187,7 @@ export default function KitchenOrdersPage() {
       toast.error("Could not load KOT for print.");
       return;
     }
-    printRestaurantKOTSlip(
+    printRestaurantKOTDispatch(
       {
         orderNumber: payload.orderNumber,
         tableName: payload.tableName,
@@ -210,6 +210,7 @@ export default function KitchenOrdersPage() {
         isReprint: true,
         kotTicketId: payload.kotId,
       },
+      { lineMeta: payload.items.map((it) => ({ ...it })) },
       { onError: (msg) => toast.error(msg) }
     );
     toast.success("KOT reprint sent to thermal printer");

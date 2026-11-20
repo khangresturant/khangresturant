@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,6 +14,7 @@ import { RestaurantDealsTab } from "@/components/restaurant/RestaurantDealsTab";
 import { DealConfigureModal } from "@/components/restaurant/DealConfigureModal";
 import type { RestaurantDeal } from "@/lib/restaurant-deals";
 import { SettleOrderDialog, type SettleOrderData } from "@/components/restaurant/SettleOrderDialog";
+import { RestaurantPosPrinterStrip } from "@/components/restaurant/RestaurantPosPrinterStrip";
 import { WaiterNotificationsDialog, useWaiterNotificationCount } from "@/components/restaurant/WaiterNotificationsDialog";
 import type { MenuSize } from "@/lib/restaurant-deals";
 import { useShop } from "@/context/ShopContext";
@@ -30,7 +31,7 @@ import {
 import { filterRiderStaff, riderLabel, staffPhone } from "@/lib/restaurant-riders";
 import {
   printRestaurantGuestBill,
-  printRestaurantKOTSlip,
+  printRestaurantKOTDispatch,
   mapDbInvoiceItemsToReceiptLines,
   type RestaurantReceiptLine,
 } from "@/lib/restaurant-receipt-print";
@@ -293,6 +294,22 @@ export default function RestaurantPOSPage() {
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [printKitchenReceipt, setPrintKitchenReceipt] = useState(true);
 
+  const productCategoryById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of products) {
+      if (p.id && p.category_id) map.set(p.id, p.category_id);
+    }
+    return map;
+  }, [products]);
+
+  const simpleKotCategoryLabels = useMemo(() => {
+    const ids = receiptSettings?.restaurantSimpleKotCategoryIds || [];
+    if (!ids.length) return [];
+    return ids
+      .map((id: string) => categories.find((c) => c.id === id)?.name)
+      .filter(Boolean) as string[];
+  }, [receiptSettings?.restaurantSimpleKotCategoryIds, categories]);
+
   useEffect(() => {
     if (receiptSettings.restaurantPrintKitchenOnKot === false) {
       setPrintKitchenReceipt(false);
@@ -356,15 +373,20 @@ export default function RestaurantPOSPage() {
     return [...map.values()];
   };
 
+  /** Orders / resumeInvoice edit: cart holds the full bill; dbItems is KOT baseline only (do not sum both). */
+  const openBillCartEdit = Boolean(resumeInvoiceId) && cart.length > 0;
+
   const billingCart = React.useMemo(
-    () => mergeCartWithBaseline(dbItems, cart),
-    [dbItems, cart]
+    () => (openBillCartEdit ? cart : mergeCartWithBaseline(dbItems, cart)),
+    [openBillCartEdit, dbItems, cart]
   );
 
   // Calculations - bill = already on KOT (baseline) + new cart lines (do not merge qty for display)
   const baselineSubtotal = dbItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const stagingSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const cartSubtotal = roundMoney(baselineSubtotal + stagingSubtotal);
+  const cartSubtotal = roundMoney(
+    openBillCartEdit ? stagingSubtotal : baselineSubtotal + stagingSubtotal
+  );
   const baselineDishCount = dbItems.reduce((s, i) => s + i.quantity, 0);
   const stagingDishCount = cart.reduce((s, i) => s + i.quantity, 0);
   const discountableSubtotal = cartDiscountableSubtotal(
@@ -427,7 +449,7 @@ export default function RestaurantPOSPage() {
 
   const stagingCostLines = React.useMemo(() => cartItemsToCostLines(cart), [cart]);
   const baselineCostLines = React.useMemo(() => cartItemsToCostLines(dbItems), [dbItems]);
-  const showSplitCogs = cart.length > 0 && dbItems.length > 0;
+  const showSplitCogs = !openBillCartEdit && cart.length > 0 && dbItems.length > 0;
 
   const [stagingCogs, setStagingCogs] = useState(0);
   const [baselineCogs, setBaselineCogs] = useState(0);
@@ -529,13 +551,15 @@ export default function RestaurantPOSPage() {
     };
   }, [dbItems, cart, shopId, supabase]);
 
-  const estimatedIngredientCost = showSplitCogs
-    ? roundMoney(stagingCogs + baselineCogs)
-    : awaitingNextKot
-      ? 0
-      : cart.length > 0
-        ? stagingCogs
-        : baselineCogs;
+  const estimatedIngredientCost = openBillCartEdit
+    ? stagingCogs
+    : showSplitCogs
+      ? roundMoney(stagingCogs + baselineCogs)
+      : awaitingNextKot
+        ? 0
+        : cart.length > 0
+          ? stagingCogs
+          : baselineCogs;
 
   const displayEstimatedProfit = roundMoney(
     Math.max(0, (awaitingNextKot ? displayNetTotal : netTotal) - estimatedIngredientCost)
@@ -849,14 +873,14 @@ export default function RestaurantPOSPage() {
     setCartEpoch((n) => n + 1);
   };
 
+  /** Full bill in staging cart (e.g. resume edit) — never duplicate into dbItems. */
   const applyCartFromInvoiceRows = (
     invoiceItems: any[] | null | undefined,
     meta?: { restaurant_order_status?: string | null; order_number?: string | null }
   ) => {
     const loadedCart = mapInvoiceItemsToCart(invoiceItems);
-    const snapshot = JSON.parse(JSON.stringify(loadedCart)) as CartItem[];
     setCart(loadedCart);
-    setDbItems(snapshot);
+    setDbItems([]);
     if (meta?.restaurant_order_status) {
       setCurrentOrderStatus(normalizeOrderStatus(meta.restaurant_order_status) || "pending");
     }
@@ -944,7 +968,7 @@ export default function RestaurantPOSPage() {
   const refreshCartFromInvoice = async (invoiceId: string) => {
     const snap = await fetchInvoiceCartSnapshot(invoiceId);
     if (snap?.items) {
-      applyCartFromInvoiceRows(snap.items, snap.meta);
+      applyBaselineFromInvoiceRows(snap.items, snap.meta);
       return;
     }
     commitCartBaseline();
@@ -1186,10 +1210,10 @@ export default function RestaurantPOSPage() {
           .single();
 
         if (invData) {
-          const loadedCart = mapInvoiceItemsToCart(invData.invoice_items);
-          setCart(loadedCart);
-          setDbItems(JSON.parse(JSON.stringify(loadedCart)));
-          setCartEpoch((n) => n + 1);
+          applyBaselineFromInvoiceRows(invData.invoice_items, {
+            restaurant_order_status: invData.restaurant_order_status,
+            order_number: invData.order_number,
+          });
           setSelectedCustomerId(invData.party_id || "walkin");
           setDiscount(Number(invData.discount || 0));
           setTaxRate(Number(invData.tax_rate || 0));
@@ -1260,25 +1284,21 @@ export default function RestaurantPOSPage() {
       setPosMode(service);
       setResumeInvoiceId(invoiceId);
 
+      const loadedCart = mapInvoiceItemsToCart(inv.invoice_items);
+      const baseline = JSON.parse(JSON.stringify(loadedCart)) as CartItem[];
+
       if (service === "dining") {
         const table =
           tables.find((t) => t.active_invoice_id === invoiceId) ||
           (inv.table_id ? tables.find((t) => t.id === inv.table_id) : undefined);
-        if (table) {
-          await handleSelectTable(table);
-        } else {
-          const loadedCart = mapInvoiceItemsToCart(inv.invoice_items);
-          setCart(loadedCart);
-          setDbItems(JSON.parse(JSON.stringify(loadedCart)));
-          setCartEpoch((n) => n + 1);
-        }
+        if (table) setSelectedTable(table);
       } else {
         setTakeawayInvoiceId(invoiceId);
-        const loadedCart = mapInvoiceItemsToCart(inv.invoice_items);
-        setCart(loadedCart);
-        setDbItems(JSON.parse(JSON.stringify(loadedCart)));
-        setCartEpoch((n) => n + 1);
       }
+
+      setCart(loadedCart);
+      setDbItems(baseline);
+      setCartEpoch((n) => n + 1);
 
       setSelectedCustomerId(inv.party_id || "walkin");
       setDiscount(Number(inv.discount || 0));
@@ -1567,6 +1587,8 @@ export default function RestaurantPOSPage() {
             : item.remarks;
           return {
             product_id: item.productId,
+            category_id:
+              products.find((p) => p.id === item.productId)?.category_id ?? null,
             name: item.isDeal ? labels.title : item.name,
             quantity: diffQty,
             remarks: kitchenNote,
@@ -1682,7 +1704,7 @@ export default function RestaurantPOSPage() {
 
       // 6. Print KOT Slip
       if (printKitchenReceipt) {
-        printRestaurantKOTSlip(
+        printRestaurantKOTDispatch(
           {
             orderNumber: orderNumber || undefined,
             tableName: selectedTable?.name || null,
@@ -1697,6 +1719,10 @@ export default function RestaurantPOSPage() {
             settings: receiptSettings,
             shopDetails: companyRowToShopDetails(companyDetails, shopName),
             companyRow: companyDetails,
+          },
+          {
+            productIdToCategoryId: productCategoryById,
+            lineMeta: kotItems,
           },
           {
             onError: (msg) =>
@@ -3343,6 +3369,12 @@ export default function RestaurantPOSPage() {
                 </p>
               )}
 
+              <RestaurantPosPrinterStrip
+                receiptSettings={receiptSettings}
+                companyRow={companyDetails}
+                language={language}
+                categoryLabels={simpleKotCategoryLabels}
+              />
               <label className="col-span-full flex items-center justify-between gap-2 cursor-pointer text-[11px] font-semibold text-slate-600">
                 <div className="flex items-center gap-1.5">
                   <input

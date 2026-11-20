@@ -58,6 +58,19 @@ export type ReceiptSettings = {
   restaurantLogoOnKot?: boolean;
   /** POS: auto-print KOT slip when sending to kitchen. */
   restaurantPrintKitchenOnKot?: boolean;
+  /** Desktop: up to 2 printers; copy count 0 = skip that slip type on that printer. */
+  restaurantPrinterSlots?: {
+    name: string;
+    kotCopies: number;
+    guestBillCopies: number;
+    paidReceiptCopies: number;
+  }[];
+  /** Category IDs → separate minimal KOT (qty only), e.g. Roti / Nan. */
+  restaurantSimpleKotCategoryIds?: string[];
+  /** Header on the simple KOT slip (default ROTI / NAN). */
+  restaurantSimpleKotTitle?: string;
+  /** When categories are set, also route lines whose names look like roti/naan. */
+  restaurantSimpleKotMatchNames?: boolean;
 };
 
 // Default Settings
@@ -106,6 +119,9 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   customerPrinterName: "",
   restaurantLogoOnKot: true,
   restaurantPrintKitchenOnKot: true,
+  restaurantSimpleKotCategoryIds: [],
+  restaurantSimpleKotTitle: "ROTI / NAN",
+  restaurantSimpleKotMatchNames: true,
 };
 
 // 15 Template Definitions

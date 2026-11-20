@@ -22,7 +22,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_RECEIPT_SETTINGS } from "@/components/ReceiptTemplate";
 import { mergePrintSettingsFromRow } from "@/lib/merge-print-settings";
-import { printRestaurantKOTSlip } from "@/lib/restaurant-receipt-print";
+import { printRestaurantKOTDispatch } from "@/lib/restaurant-receipt-print";
 import {
   syncRestaurantOrderStatus,
   startOrderPreparation,
@@ -266,7 +266,12 @@ export default function KitchenDisplayPage() {
   }, [shopId, supabase]);
 
   const reprintKot = (t: KdsTicket) => {
-    printRestaurantKOTSlip(
+    const lineMeta = t.items.map((i) => ({
+      name: i.product_name,
+      quantity: i.quantity,
+      remarks: i.remarks,
+    }));
+    printRestaurantKOTDispatch(
       {
         orderNumber: t.order_number,
         tableName: t.table_name,
@@ -275,11 +280,7 @@ export default function KitchenDisplayPage() {
         customerPhone: t.customer_phone,
         customerAddress: t.customer_address,
         specialInstructions: t.special_instructions,
-        items: t.items.map((i) => ({
-          name: i.product_name,
-          quantity: i.quantity,
-          remarks: i.remarks,
-        })),
+        items: lineMeta,
         settings: receiptSettings,
         shopDetails: {
           name: companyDetails?.name || shopName || "Restaurant",
@@ -290,6 +291,7 @@ export default function KitchenDisplayPage() {
         isReprint: true,
         kotTicketId: t.id,
       },
+      { lineMeta },
       {
         onError: (msg) => toast.error(msg),
       }

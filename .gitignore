@@ -65,3 +65,6 @@ run_migration.js
 /data/*.sqlite
 /data/*.sqlite-*
 .neon
+
+# electron packaging output
+/dist-electron/

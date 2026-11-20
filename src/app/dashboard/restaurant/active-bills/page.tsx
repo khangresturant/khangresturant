@@ -56,7 +56,7 @@ import {
 import {
   mapDbInvoiceItemsToReceiptLines,
   printRestaurantGuestBill,
-  printRestaurantKOTSlip,
+  printRestaurantKOTDispatch,
   printRestaurantRevisedGuestBill,
 } from "@/lib/restaurant-receipt-print";
 import { RestaurantBillEditHistoryModal } from "@/components/restaurant/RestaurantBillEditHistoryModal";
@@ -154,7 +154,7 @@ const DRAFT_INVOICE_SELECT = `
     subtotal,
     packing_name,
     menu_size_id,
-    products ( name, purchase_price_single )
+    products ( name, purchase_price_single, category_id )
   )
 `;
 
@@ -228,8 +228,23 @@ export default function ActiveBillsPage() {
   const [discountVal, setDiscountVal] = useState<number>(0);
   const [taxRateVal, setTaxRateVal] = useState<number>(0);
 
+  const billLineSubtotal = (items: InvoiceItem[]) =>
+    items.reduce(
+      (sum, item) =>
+        sum +
+        (item.subtotal != null && Number.isFinite(Number(item.subtotal))
+          ? Number(item.subtotal)
+          : Number(item.unit_price) * Number(item.quantity)),
+      0
+    );
+
+  const checkoutItems =
+    isEditing && editItems.length > 0
+      ? editItems
+      : selectedBill?.invoice_items || [];
+
   // Calculations for Checkout Dialog
-  const subtotal = selectedBill?.invoice_items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0) || 0;
+  const subtotal = billLineSubtotal(checkoutItems);
   const taxAmount = (subtotal * taxRateVal) / 100;
   const netTotal = Math.max(0, subtotal + taxAmount - discountVal);
   const remainingDue = Math.max(0, netTotal - receivedAmount);
@@ -490,24 +505,38 @@ export default function ActiveBillsPage() {
       });
       const count = await countKitchenTicketsForInvoice(supabase, selectedBill.id);
       setKitchenTicketCount(count);
-      printRestaurantKOTSlip(
+      const productCategoryById = new Map<string, string>();
+      for (const row of selectedBill.invoice_items || []) {
+        const cid = (row.products as { category_id?: string } | null)?.category_id;
+        if (row.product_id && cid) productCategoryById.set(row.product_id, cid);
+      }
+      const lineMeta = lines.map((l) => {
+        const prod = selectedBill.invoice_items?.find((i) => i.product_id === l.product_id);
+        return {
+          name: prod?.products?.name || "Item",
+          quantity: l.quantity,
+          sizeLabel: prod?.packing_name || null,
+          product_id: l.product_id,
+          category_id:
+            (prod?.products as { category_id?: string } | null)?.category_id ?? null,
+        };
+      });
+      printRestaurantKOTDispatch(
         {
           orderNumber: selectedBill.order_number,
           tableName: selectedBill.tableName || null,
           serviceType: selectedBill.service_type,
           ...billGuestDetails(selectedBill),
-          items: lines.map((l) => {
-            const prod = selectedBill.invoice_items?.find((i) => i.product_id === l.product_id);
-            return {
-              name: prod?.products?.name || "Item",
-              quantity: l.quantity,
-              sizeLabel: prod?.packing_name || null,
-            };
-          }),
+          items: lineMeta.map(({ name, quantity, sizeLabel }) => ({
+            name,
+            quantity,
+            sizeLabel,
+          })),
           settings: receiptSettings,
           shopDetails: shopDetailsForPrint(),
           companyRow: companyDetails,
         },
+        { productIdToCategoryId: productCategoryById, lineMeta },
         { onError: (msg) => toast.error(msg) }
       );
       toast.success(
@@ -680,12 +709,24 @@ export default function ActiveBillsPage() {
 
       const hasChanges = (historyEntry.changes?.length ?? 0) > 0;
       if (billEditPrefs.autoPrintKotAfterBillEdit && hasChanges) {
+        const productCategoryById = new Map<string, string>();
+        for (const row of selectedBill.invoice_items || []) {
+          const cid = (row.products as { category_id?: string } | null)?.category_id;
+          if (row.product_id && cid) productCategoryById.set(row.product_id, cid);
+        }
         const prepareNow = kitchenDelta.map((d) => ({
           name: d.name,
           quantity: d.quantity,
           sizeLabel: d.packing_name || null,
         }));
-        printRestaurantKOTSlip(
+        const lineMeta = kitchenDelta.map((d) => ({
+          name: d.name,
+          quantity: d.quantity,
+          sizeLabel: d.packing_name || null,
+          product_id: d.product_id,
+          category_id: productCategoryById.get(d.product_id) ?? null,
+        }));
+        printRestaurantKOTDispatch(
           {
             orderNumber: selectedBill.order_number,
             tableName: selectedBill.tableName || null,
@@ -704,6 +745,7 @@ export default function ActiveBillsPage() {
               prepareNow,
             },
           },
+          { productIdToCategoryId: productCategoryById, lineMeta },
           {
             onError: (msg) =>
               toast.error(

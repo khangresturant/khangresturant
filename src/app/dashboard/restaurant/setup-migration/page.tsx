@@ -35,7 +35,7 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stock_deducted BOOLEAN DEFAULT fal
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cost_amount NUMERIC(15, 2);
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS profit_amount NUMERIC(15, 2);
 ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(15, 4);
-COMMENT ON COLUMN invoice_items.purchase_price IS 'Restaurant: per-unit COGS snapshot at settle (frozen; raw price changes do not alter past orders)';
+COMMENT ON COLUMN invoice_items.purchase_price IS 'Restaurant: per-unit COGS snapshot at settle (frozen - raw price changes do not alter past orders)';
 ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS invoice_id UUID REFERENCES invoices(id) ON DELETE SET NULL;
 ALTER TABLE kitchen_orders ADD COLUMN IF NOT EXISTS waiter_id UUID;`;
 
@@ -81,6 +81,11 @@ CREATE TABLE IF NOT EXISTS restaurant_deal_items (
     allowed_product_ids JSONB,
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE restaurant_deal_items ADD COLUMN IF NOT EXISTS slot_label VARCHAR(120);
+ALTER TABLE restaurant_deal_items ADD COLUMN IF NOT EXISTS allowed_product_ids JSONB;
+ALTER TABLE restaurant_tables ADD COLUMN IF NOT EXISTS table_number VARCHAR(50);
+ALTER TABLE product_batches ADD COLUMN IF NOT EXISTS sale_price NUMERIC(15, 2);
 
 CREATE TABLE IF NOT EXISTS restaurant_waiter_calls (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -160,15 +165,17 @@ export default function RestaurantSetupMigrationPage() {
       return;
     }
     setStatus("loading");
-    const [invRes, dealsRes, modRes, stRes] = await Promise.all([
+    const [invRes, dealsRes, dealItemsRes, itemsRes, modRes, stRes] = await Promise.all([
       supabase.from("invoices").select("restaurant_order_status, service_type, rider_id, tip_amount").limit(1),
       supabase.from("restaurant_deals").select("id").limit(1),
+      supabase.from("restaurant_deal_items").select("id, slot_label, allowed_product_ids").limit(1),
+      supabase.from("invoice_items").select("id, purchase_price, menu_size_id").limit(1),
       supabase.from("restaurant_modifiers").select("id").limit(1),
       supabase.from("restaurant_stations").select("id").limit(1),
     ]);
 
-    const wfOk = !invRes.error?.message?.includes("restaurant_order_status");
-    const extOk = !dealsRes.error?.message?.includes("does not exist");
+    const wfOk = !invRes.error?.message?.includes("restaurant_order_status") && !itemsRes.error?.message?.includes("purchase_price");
+    const extOk = !dealsRes.error?.message?.includes("does not exist") && !dealItemsRes.error?.message?.includes("slot_label");
     const modOk = !modRes.error?.message?.includes("does not exist");
     const stOk = !stRes.error?.message?.includes("does not exist");
     setWorkflowOk(wfOk);

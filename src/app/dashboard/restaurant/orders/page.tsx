@@ -38,7 +38,7 @@ import {
   printRestaurantGuestBill,
   printRestaurantRevisedGuestBill,
   printRestaurantPaidReceipt,
-  printRestaurantKOTSlip,
+  printRestaurantKOTDispatch,
 } from "@/lib/restaurant-receipt-print";
 import { loadLatestKOTForInvoice, loadKitchenTicketForPrint } from "@/lib/restaurant-kitchen";
 import { staffPhone } from "@/lib/restaurant-riders";
@@ -537,7 +537,7 @@ export default function RestaurantOrdersPage() {
       toast.error(isEn ? "Could not load KOT." : "KOT لوڈ نہیں ہوا۔");
       return;
     }
-    printRestaurantKOTSlip(
+    printRestaurantKOTDispatch(
       {
         orderNumber: payload.orderNumber,
         tableName: payload.tableName,
@@ -556,6 +556,7 @@ export default function RestaurantOrdersPage() {
         isReprint: true,
         kotTicketId: payload.kotId,
       },
+      { lineMeta: payload.items.map((it) => ({ ...it })) },
       { onError: (msg) => toast.error(msg) }
     );
   };

@@ -22,6 +22,11 @@ import {
   RECEIPT_TEMPLATES 
 } from "@/components/ReceiptTemplate";
 import { printReceiptDirect } from "@/lib/thermalPrinter";
+import {
+  defaultRestaurantPrinterSlotsFromCompany,
+  resolveRestaurantPrinterSlots,
+  type RestaurantPrinterSlot,
+} from "@/lib/restaurant-print-profile";
 import { SidebarThemeSettingsPanel } from "@/components/dashboard/SidebarThemeSettingsPanel";
 import { POPULAR_TIMEZONES, getCurrentTimezonePreview } from "@/lib/timezone";
 
@@ -86,6 +91,7 @@ export default function SettingsPage() {
   const [selectedCurrencyVal, setSelectedCurrencyVal] = useState<string>("PKR");
   const [selectedTimezoneVal, setSelectedTimezoneVal] = useState<string>("auto");
   const [showCostPriceOnPosVal, setShowCostPriceOnPosVal] = useState<boolean>(false);
+  const [menuCategories, setMenuCategories] = useState<{ id: string; name: string }[]>([]);
 
   // Common accent colors
   const colorPresets = [
@@ -117,6 +123,19 @@ export default function SettingsPage() {
         .select("name, phone, address, industry_type, allow_negative_stock, has_emi, has_payroll, has_tax, default_tax_rate, default_tax_type, has_assets_rec, has_loyalty, has_gift_cards, has_ecommerce, store_slug, store_tagline, delivery_fee, delivery_charges")
         .eq("id", shopId)
         .single();
+
+      if (shopRowError) throw shopRowError;
+
+      if (shopId && shopRow?.industry_type === "restaurant") {
+        const { data: cats } = await supabase
+          .from("categories")
+          .select("id, name")
+          .eq("shop_id", shopId)
+          .order("name", { ascending: true });
+        setMenuCategories((cats as { id: string; name: string }[]) || []);
+      } else {
+        setMenuCategories([]);
+      }
 
       // 1. Fetch Company/Shop details
       const { data: company, error: companyError } = await supabase
@@ -185,21 +204,46 @@ export default function SettingsPage() {
           fontSize: print.receipt_font_size || DEFAULT_RECEIPT_SETTINGS.fontSize,
           ...storedCustomSettings
         };
-        setReceiptSettings(mergedReceipt);
-        if (
-          storedCustomSettings.kitchenPrinterName ||
-          storedCustomSettings.customerPrinterName
-        ) {
-          setShopDetails((prev) => ({
-            ...prev,
-            kitchen_printer_name:
-              prev.kitchen_printer_name ||
-              String(storedCustomSettings.kitchenPrinterName || ""),
-            customer_printer_name:
-              prev.customer_printer_name ||
-              String(storedCustomSettings.customerPrinterName || ""),
-          }));
-        }
+        const slots =
+          Array.isArray(storedCustomSettings.restaurantPrinterSlots) &&
+          storedCustomSettings.restaurantPrinterSlots.length > 0
+            ? (storedCustomSettings.restaurantPrinterSlots as RestaurantPrinterSlot[])
+            : defaultRestaurantPrinterSlotsFromCompany(
+                String(
+                  storedCustomSettings.kitchenPrinterName ||
+                    (company as { kitchen_printer_name?: string })
+                      ?.kitchen_printer_name ||
+                    ""
+                ),
+                String(
+                  storedCustomSettings.customerPrinterName ||
+                    (company as { customer_printer_name?: string })
+                      ?.customer_printer_name ||
+                    ""
+                )
+              );
+        setReceiptSettings({
+          ...mergedReceipt,
+          restaurantPrinterSlots: resolveRestaurantPrinterSlots(
+            { ...mergedReceipt, restaurantPrinterSlots: slots },
+            company as Record<string, unknown> | undefined
+          ),
+        });
+        const normalizedSlots = resolveRestaurantPrinterSlots(
+          { ...mergedReceipt, restaurantPrinterSlots: slots },
+          company as Record<string, unknown> | undefined
+        );
+        setShopDetails((prev) => ({
+          ...prev,
+          kitchen_printer_name:
+            prev.kitchen_printer_name ||
+            normalizedSlots[0]?.name ||
+            String(storedCustomSettings.kitchenPrinterName || ""),
+          customer_printer_name:
+            prev.customer_printer_name ||
+            normalizedSlots[1]?.name ||
+            String(storedCustomSettings.customerPrinterName || ""),
+        }));
         setActiveLangs(storedCustomSettings.activeLanguages || ["en", "ur"]);
         setBillingLang(storedCustomSettings.billingLanguage || "en");
         setSelectedCurrencyVal(storedCustomSettings.selectedCurrency || "PKR");
@@ -344,6 +388,13 @@ export default function SettingsPage() {
 
       if (shopUpdateError) throw shopUpdateError;
 
+      const printerSlots = resolveRestaurantPrinterSlots(receiptSettings, {
+        kitchen_printer_name: shopDetails.kitchen_printer_name,
+        customer_printer_name: shopDetails.customer_printer_name,
+      });
+      const kitchenFromSlots = printerSlots[0]?.name?.trim() || "";
+      const customerFromSlots = printerSlots[1]?.name?.trim() || "";
+
       // 2. Save company details
       const dbPayload = {
         shop_id: shopId,
@@ -352,9 +403,9 @@ export default function SettingsPage() {
         phone: shopDetails.phone || null,
         email: shopDetails.email || null,
         website: shopDetails.website || null,
-        kitchen_printer_name: shopDetails.kitchen_printer_name?.trim() || null,
-        customer_printer_name: shopDetails.customer_printer_name?.trim() || null,
-        printer_name: shopDetails.kitchen_printer_name?.trim() || null,
+        kitchen_printer_name: kitchenFromSlots || shopDetails.kitchen_printer_name?.trim() || null,
+        customer_printer_name: customerFromSlots || shopDetails.customer_printer_name?.trim() || null,
+        printer_name: kitchenFromSlots || shopDetails.kitchen_printer_name?.trim() || null,
       };
 
       if (shopDetails.id) {
@@ -392,8 +443,11 @@ export default function SettingsPage() {
       // 3. Save receipt design settings with FBR parameters
       const updatedReceiptSettings: ReceiptSettings = {
         ...receiptSettings,
-        kitchenPrinterName: shopDetails.kitchen_printer_name?.trim() || "",
-        customerPrinterName: shopDetails.customer_printer_name?.trim() || "",
+        restaurantPrinterSlots: printerSlots,
+        kitchenPrinterName:
+          kitchenFromSlots || shopDetails.kitchen_printer_name?.trim() || "",
+        customerPrinterName:
+          customerFromSlots || shopDetails.customer_printer_name?.trim() || "",
         enableFBR: enableFbrVal,
         showCostPriceOnPos: showCostPriceOnPosVal,
         fbrPosId: fbrPosIdVal,
@@ -785,8 +839,8 @@ export default function SettingsPage() {
                           🍽️ Restaurant thermal printers (POSRESTURANT style)
                         </h4>
                         <p className="text-[11px] text-orange-900/90 font-medium leading-relaxed mt-0.5">
-                          KOT → kitchen printer. Guest bill & payment slip → customer printer (blank = Windows default).
-                          Receipt header uses company name / phone / address below.
+                          دو پرنٹر منتخب کریں۔ ہر پرنٹر پر KOT، مہمان بل، اور Payment receipt کے علیحدہ copies (0 = اس
+                          پرنٹر پر نہ نکالیں)۔ Send KOT / دستی بل / ادائیگی کے وقت صرف وہی پرنٹر اور تعداد استعمال ہوگی۔
                         </p>
                       </div>
                       <button
@@ -803,39 +857,189 @@ export default function SettingsPage() {
                         <option key={p} value={p} />
                       ))}
                     </datalist>
-                    <div>
-                      <label className="block text-xs font-semibold text-orange-900 uppercase mb-1.5">
-                        Kitchen / KOT printer name
-                      </label>
-                      <Input
-                        list="windows-printer-list"
-                        value={shopDetails.kitchen_printer_name}
-                        onChange={(e) =>
-                          setShopDetails({
-                            ...shopDetails,
-                            kitchen_printer_name: e.target.value,
-                          })
+                    {(() => {
+                      const slots = resolveRestaurantPrinterSlots(receiptSettings, {
+                        kitchen_printer_name: shopDetails.kitchen_printer_name,
+                        customer_printer_name: shopDetails.customer_printer_name,
+                      });
+                      const parseCopies = (v: string) => {
+                        const n = Math.floor(Number(v));
+                        if (!Number.isFinite(n) || n < 0) return 0;
+                        return Math.min(n, 99);
+                      };
+                      const patchSlot = (
+                        index: number,
+                        patch: Partial<RestaurantPrinterSlot>
+                      ) => {
+                        const next = [...slots];
+                        next[index] = { ...next[index], ...patch };
+                        setReceiptSettings((prev) => ({
+                          ...prev,
+                          restaurantPrinterSlots: next,
+                        }));
+                        if (index === 0 && patch.name !== undefined) {
+                          setShopDetails((prev) => ({
+                            ...prev,
+                            kitchen_printer_name: patch.name ?? "",
+                          }));
                         }
-                        placeholder="e.g. Kitchen 80mm - same as POSRESTURANT Business Details → Printer"
-                        className="h-10 rounded-xl font-mono text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-orange-900 uppercase mb-1.5">
-                        Customer slip printer (guest bill + paid receipt)
-                      </label>
-                      <Input
-                        list="windows-printer-list"
-                        value={shopDetails.customer_printer_name}
-                        onChange={(e) =>
-                          setShopDetails({
-                            ...shopDetails,
-                            customer_printer_name: e.target.value,
-                          })
+                        if (index === 1 && patch.name !== undefined) {
+                          setShopDetails((prev) => ({
+                            ...prev,
+                            customer_printer_name: patch.name ?? "",
+                          }));
                         }
-                        placeholder="Leave empty for Windows default printer"
-                        className="h-10 rounded-xl font-mono text-sm"
+                      };
+                      const copyField = (
+                        label: string,
+                        hint: string,
+                        index: number,
+                        key: "kotCopies" | "guestBillCopies" | "paidReceiptCopies"
+                      ) => (
+                        <div key={`${index}-${key}`}>
+                          <label className="block text-[10px] font-bold text-orange-900 uppercase mb-1">
+                            {label}
+                          </label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={99}
+                            value={slots[index]?.[key] ?? 0}
+                            onChange={(e) =>
+                              patchSlot(index, {
+                                [key]: parseCopies(e.target.value),
+                              })
+                            }
+                            className="h-9 rounded-lg font-mono text-sm"
+                          />
+                          <p className="text-[9px] text-orange-800/80 mt-0.5">{hint}</p>
+                        </div>
+                      );
+                      return [0, 1].map((index) => (
+                        <div
+                          key={index}
+                          className="bg-white/90 border border-orange-200 rounded-xl p-3 space-y-2.5"
+                        >
+                          <div className="text-xs font-black text-orange-950 uppercase tracking-wide">
+                            Printer {index + 1}
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-orange-900 uppercase mb-1">
+                              Windows printer name
+                            </label>
+                            <Input
+                              list="windows-printer-list"
+                              value={slots[index]?.name ?? ""}
+                              onChange={(e) =>
+                                patchSlot(index, { name: e.target.value })
+                              }
+                              placeholder={
+                                index === 0
+                                  ? "e.g. Kitchen 80mm"
+                                  : "e.g. Counter / Customer 58mm"
+                              }
+                              className="h-10 rounded-xl font-mono text-sm"
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {copyField(
+                              "KOT copies",
+                              "Send KOT",
+                              index,
+                              "kotCopies"
+                            )}
+                            {copyField(
+                              "Guest bill",
+                              "Manual guest bill",
+                              index,
+                              "guestBillCopies"
+                            )}
+                            {copyField(
+                              "Paid receipt",
+                              "After Settle",
+                              index,
+                              "paidReceiptCopies"
+                            )}
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                    <div className="bg-white/95 border border-orange-300 rounded-xl p-3 space-y-2.5">
+                      <div>
+                        <h5 className="text-xs font-black text-orange-950 uppercase">
+                          Separate simple KOT (Roti / Nan)
+                        </h5>
+                        <p className="text-[10px] text-orange-900/85 mt-0.5 leading-relaxed">
+                          منتخب کیٹگری کی اشیاء پر عام KOT کے ساتھ الگ سادہ ٹکٹ (صرف نام + مقدار) —
+                          روتیاں، نان وغیرہ ٹنڈور / روٹی سٹیشن کے لیے۔
+                        </p>
+                      </div>
+                      <Input
+                        value={receiptSettings.restaurantSimpleKotTitle || "ROTI / NAN"}
+                        onChange={(e) =>
+                          setReceiptSettings((prev) => ({
+                            ...prev,
+                            restaurantSimpleKotTitle: e.target.value,
+                          }))
+                        }
+                        placeholder="Slip heading e.g. ROTI / NAN"
+                        className="h-9 rounded-lg font-bold text-sm"
                       />
+                      <label className="flex items-center gap-2 text-[11px] font-semibold text-orange-950 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={receiptSettings.restaurantSimpleKotMatchNames !== false}
+                          onChange={(e) =>
+                            setReceiptSettings((prev) => ({
+                              ...prev,
+                              restaurantSimpleKotMatchNames: e.target.checked,
+                            }))
+                          }
+                          className="rounded border-orange-400"
+                        />
+                        Also match product names (roti, naan, paratha spelling)
+                      </label>
+                      <div className="max-h-40 overflow-y-auto rounded-lg border border-orange-200 divide-y">
+                        {menuCategories.length === 0 ? (
+                          <p className="p-3 text-[10px] text-slate-500">
+                            Add menu categories in Restaurant → Menu, then pick which print on the
+                            simple KOT.
+                          </p>
+                        ) : (
+                          menuCategories.map((cat) => {
+                            const selected = (
+                              receiptSettings.restaurantSimpleKotCategoryIds || []
+                            ).includes(cat.id);
+                            return (
+                              <label
+                                key={cat.id}
+                                className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-orange-50"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  onChange={() => {
+                                    setReceiptSettings((prev) => {
+                                      const cur = [
+                                        ...(prev.restaurantSimpleKotCategoryIds || []),
+                                      ];
+                                      const next = selected
+                                        ? cur.filter((id) => id !== cat.id)
+                                        : [...cur, cat.id];
+                                      return {
+                                        ...prev,
+                                        restaurantSimpleKotCategoryIds: next,
+                                      };
+                                    });
+                                  }}
+                                  className="rounded border-orange-400"
+                                />
+                                <span className="font-semibold text-slate-800">{cat.name}</span>
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1502,9 +1706,9 @@ export default function SettingsPage() {
                         </option>
                       ))}
                     </select>
-                    <p className="text-[10px] text-slate-400 font-semibold mt-1">
-                      Active Zone: <div className="font-bold text-slate-600">{getCurrentTimezonePreview(selectedTimezoneVal).resolvedTimezone}</div> - {getCurrentTimezonePreview(selectedTimezoneVal).date}
-                    </p>
+                    <div className="text-[10px] text-slate-400 font-semibold mt-1 flex items-center gap-1 flex-wrap">
+                      Active Zone: <div className="font-bold text-slate-600 inline">{getCurrentTimezonePreview(selectedTimezoneVal).resolvedTimezone}</div> - {getCurrentTimezonePreview(selectedTimezoneVal).date}
+                    </div>
                   </div>
 
                   <div className="bg-blue-50 p-4.5 rounded-2xl border border-blue-100 flex items-start gap-3">
