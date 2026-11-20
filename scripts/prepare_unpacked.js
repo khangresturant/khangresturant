@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 
 const root = path.resolve(__dirname, "..");
 const outDir = path.join(root, "dist-electron", "win-unpacked");
@@ -57,6 +58,25 @@ const cafeElevate = path.join("D:\\peronal\\cafe\\dist-electron\\win-unpacked\\r
 const destElevate = path.join(resourcesDir, "elevate.exe");
 if (!fs.existsSync(destElevate) && fs.existsSync(cafeElevate)) {
   fs.copyFileSync(cafeElevate, destElevate);
+}
+
+// 6. Embed custom icon into Cook Swift.exe using rcedit
+const iconIco = path.join(root, "public", "icon.ico");
+const rceditCandidates = [
+  path.join(process.env.LOCALAPPDATA || "", "electron-builder", "Cache", "winCodeSign", "winCodeSign-2.6.0", "rcedit-x64.exe"),
+  path.join(process.env.LOCALAPPDATA || "", "electron-builder", "Cache", "winCodeSign", "winCodeSign-2.6.0", "rcedit-ia32.exe"),
+  path.join(process.env.LOCALAPPDATA || "", "Programs", "Antigravity IDE", "resources", "app", "node_modules", "rcedit", "bin", "rcedit.exe"),
+];
+
+const rceditPath = rceditCandidates.find(p => fs.existsSync(p));
+if (rceditPath && fs.existsSync(brandedExe) && fs.existsSync(iconIco)) {
+  try {
+    console.log("[prepare_unpacked] Embedding chef icon into Cook Swift.exe using:", rceditPath);
+    execFileSync(rceditPath, [brandedExe, "--set-icon", iconIco]);
+    console.log("[prepare_unpacked] Successfully embedded icon into Cook Swift.exe!");
+  } catch (err) {
+    console.warn("[prepare_unpacked] rcedit warning:", err.message);
+  }
 }
 
 console.log("[prepare_unpacked] Ready! Cook Swift executable prepared at:", brandedExe);

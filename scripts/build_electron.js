@@ -16,26 +16,37 @@ if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });
 }
 
-// 2. Extract official Electron 32.2.8 runtime if not present
+// 2. Generate updated icons if script exists
+const iconScript = path.join(root, "scripts", "generate_icons.py");
+if (fs.existsSync(iconScript)) {
+  try {
+    console.log("[1/4] Generating high-resolution icons with white background...");
+    execSync(`python "${iconScript}"`, { cwd: root, stdio: "inherit" });
+  } catch (err) {
+    console.warn("Notice: generate_icons python script warning:", err.message);
+  }
+}
+
+// 3. Extract official Electron 32.2.8 runtime if not present
 const electronMarker = path.join(outDir, "Cook Swift.exe");
 const electronRaw = path.join(outDir, "electron.exe");
 if (!fs.existsSync(electronMarker) && !fs.existsSync(electronRaw)) {
-  console.log("[1/3] Extracting Electron runtime to win-unpacked...");
+  console.log("[2/4] Extracting Electron runtime to win-unpacked...");
   if (!fs.existsSync(cacheZip)) {
     console.error("Missing cached Electron zip at:", cacheZip);
     process.exit(1);
   }
   execSync(`tar -xf "${cacheZip}" -C "${outDir}"`, { stdio: "inherit" });
 } else {
-  console.log("[1/3] Electron runtime already unpacked in:", outDir);
+  console.log("[2/4] Electron runtime already unpacked in:", outDir);
 }
 
-// 3. Prepare resources/app and brand executable
-console.log("[2/3] Preparing application resources (preload, silent printer, cloud link)...");
+// 4. Prepare resources/app and brand executable with custom icon
+console.log("[3/4] Preparing application resources (preload, silent printer, cloud link, icon)...");
 require("./prepare_unpacked.js");
 
-// 4. Build NSIS Windows Installer
-console.log("[3/3] Compiling Windows NSIS Installer (.exe)...");
+// 5. Build NSIS Windows Installer
+console.log("[4/4] Compiling Windows NSIS Installer (.exe)...");
 execSync("npx electron-builder@25.1.8 --win nsis --prepackaged dist-electron/win-unpacked", {
   cwd: root,
   stdio: "inherit",
