@@ -1,14 +1,16 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut } = require("electron");
 const path = require("path");
+const https = require("https");
 const http = require("http");
-const { fork } = require("child_process");
 const { printThermalSilent } = require("./printer");
 
 let mainWindow = null;
-let serverProcess = null;
-let targetUrl = "http://localhost:3000";
 
-// Ensure single instance of the application
+// Production Cloud URL (Vercel deployment connected to Neon PostgreSQL)
+const CLOUD_URL = process.env.COOK_SWIFT_CLOUD_URL || "https://khangresturant.falconswift.online";
+const LOCAL_DEV_URL = process.env.ELECTRON_START_URL || "http://localhost:3000";
+
+// Ensure single instance of the POS desktop application
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
@@ -23,69 +25,187 @@ app.on("second-instance", () => {
 });
 
 /**
- * Checks if a given HTTP URL is up and responding.
+ * Checks if a remote or local URL is responsive.
  */
-function checkServerReady(url) {
+function checkUrlReady(urlStr, timeoutMs = 4000) {
   return new Promise((resolve) => {
-    const req = http.get(url, (res) => {
-      resolve(res.statusCode >= 200 && res.statusCode < 500);
-    });
-    req.on("error", () => resolve(false));
-    req.setTimeout(1500, () => {
-      req.destroy();
+    try {
+      const parsed = new URL(urlStr);
+      const client = parsed.protocol === "https:" ? https : http;
+      const req = client.get(
+        urlStr,
+        {
+          timeout: timeoutMs,
+          headers: { "User-Agent": "CookSwift-Desktop/0.1.0" },
+        },
+        (res) => {
+          resolve(res.statusCode >= 200 && res.statusCode < 500);
+        }
+      );
+      req.on("error", () => resolve(false));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve(false);
+      });
+    } catch {
       resolve(false);
-    });
-  });
-}
-
-/**
- * Polls until the Next.js server is ready before loading the window.
- */
-async function waitForServer(url, timeoutMs = 45000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const ready = await checkServerReady(url);
-    if (ready) return true;
-    await new Promise((r) => setTimeout(r, 600));
-  }
-  return false;
-}
-
-/**
- * Starts the embedded Next.js standalone server in production mode.
- */
-function startProductionServer(port) {
-  const fs = require("fs");
-  const { spawn } = require("child_process");
-  const appPath = app.getAppPath();
-  let serverScript = path.join(appPath, ".next", "standalone", "server.js");
-  if (!fs.existsSync(serverScript) && process.resourcesPath) {
-    const altPath = path.join(process.resourcesPath, "app", ".next", "standalone", "server.js");
-    if (fs.existsSync(altPath)) {
-      serverScript = altPath;
     }
-  }
-
-  const env = {
-    ...process.env,
-    PORT: String(port),
-    HOSTNAME: "127.0.0.1",
-    NODE_ENV: "production",
-    ELECTRON_RUN_AS_NODE: "1",
-    NEXT_PUBLIC_USE_LOCAL_SQLITE: "false",
-    NEXT_PUBLIC_USE_MOCK: "false",
-  };
-
-  serverProcess = spawn(process.execPath, [serverScript], {
-    env,
-    cwd: path.dirname(serverScript),
-    windowsHide: true,
-    stdio: "ignore",
   });
+}
 
-  serverProcess.on("error", (err) => {
-    console.error("[Electron Server] Failed to spawn server:", err);
-  });
+/**
+ * Generates the offline connection retry page HTML.
+ */
+function getOfflineHtml(targetUrl) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Khan G Restaurant - Connecting...</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 520px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      font-weight: 600;
+      font-size: 13px;
+      border-radius: 9999px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: #ffffff;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .url-chip {
+      background: #0f172a;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #38bdf8;
+      display: block;
+      margin: 10px 0 20px;
+      word-break: break-all;
+      border: 1px solid #1e293b;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 4px solid #334155;
+      border-top-color: #f59e0b;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 24px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+    }
+    .btn-primary {
+      background: #f59e0b;
+      color: #0f172a;
+    }
+    .btn-primary:hover {
+      background: #d97706;
+    }
+    .btn-secondary {
+      background: #334155;
+      color: #e2e8f0;
+    }
+    .btn-secondary:hover {
+      background: #475569;
+    }
+    .timer {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <div class="badge">Cook Swift POS Desktop</div>
+    <h1>Connecting to Cloud Server</h1>
+    <p>Connecting to Khan G Restaurant system (Vercel &amp; Neon DB)...</p>
+    <div class="url-chip">${targetUrl}</div>
+    <div class="btn-group">
+      <button class="btn-primary" onclick="retryNow()">Retry Now</button>
+      <button class="btn-secondary" onclick="tryLocal()">Connect Local (Port 3000)</button>
+    </div>
+    <div class="timer" id="timer">Auto-retrying in <span id="countdown">4</span>s...</div>
+  </div>
+
+  <script>
+    let seconds = 4;
+    const target = ${JSON.stringify(targetUrl)};
+    const cdEl = document.getElementById("countdown");
+
+    function retryNow() {
+      window.location.href = target;
+    }
+
+    function tryLocal() {
+      window.location.href = "http://localhost:3000";
+    }
+
+    const interval = setInterval(() => {
+      seconds--;
+      if (cdEl) cdEl.innerText = seconds;
+      if (seconds <= 0) {
+        clearInterval(interval);
+        window.location.href = target;
+      }
+    }, 1000);
+  </script>
+</body>
+</html>`;
 }
 
 function createMainWindow() {
@@ -95,7 +215,7 @@ function createMainWindow() {
     height: 768,
     minWidth: 1024,
     minHeight: 650,
-    title: "Cook Swift",
+    title: "Cook Swift - Khan G Restaurant",
     icon: iconPath,
     autoHideMenuBar: true,
     show: false,
@@ -119,10 +239,54 @@ function createMainWindow() {
 
   // Handle external links safely
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      require("electron").shell.openExternal(url);
+    if (
+      url.startsWith("http://") ||
+      url.startsWith("https://")
+    ) {
+      if (!url.includes("khangresturant.falconswift.online") && !url.includes("localhost")) {
+        require("electron").shell.openExternal(url);
+        return { action: "deny" };
+      }
     }
-    return { action: "deny" };
+    return { action: "allow" };
+  });
+
+  // Handle load failure gracefully by showing offline retry screen
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    // Ignore canceled navigation aborts
+    if (errorCode === -3) return;
+    console.warn(`[Electron] Page failed to load (${errorCode}): ${errorDescription} on ${validatedURL}`);
+    const offlineDataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(
+      getOfflineHtml(CLOUD_URL)
+    )}`;
+    mainWindow?.loadURL(offlineDataUrl);
+  });
+}
+
+// ── POS Desktop Keyboard Shortcuts ──────────────────────────────────────────
+function registerShortcuts() {
+  // F5 or Ctrl+R for reloading the POS
+  globalShortcut.register("F5", () => {
+    if (mainWindow && mainWindow.isFocused()) {
+      mainWindow.webContents.reload();
+    }
+  });
+  globalShortcut.register("CommandOrControl+R", () => {
+    if (mainWindow && mainWindow.isFocused()) {
+      mainWindow.webContents.reload();
+    }
+  });
+  // F11 for Fullscreen toggle
+  globalShortcut.register("F11", () => {
+    if (mainWindow && mainWindow.isFocused()) {
+      mainWindow.setFullScreen(!mainWindow.isFullScreen());
+    }
+  });
+  // Ctrl+Shift+I for DevTools (debugging)
+  globalShortcut.register("CommandOrControl+Shift+I", () => {
+    if (mainWindow && mainWindow.isFocused()) {
+      mainWindow.webContents.toggleDevTools();
+    }
   });
 }
 
@@ -157,64 +321,55 @@ ipcMain.handle("get-system-info", async () => {
     platform: process.platform,
     isDesktop: true,
     isPackaged: app.isPackaged,
+    cloudUrl: CLOUD_URL,
   };
 });
 
 // ── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  createMainWindow();
+  registerShortcuts();
+
   const isDev = !app.isPackaged && process.env.NODE_ENV !== "production";
 
+  let finalUrl = CLOUD_URL;
+
   if (isDev) {
-    // Development mode: Connect to running Next.js dev server
-    targetUrl = process.env.ELECTRON_START_URL || "http://localhost:3000";
-    console.log(`[Electron] Development mode: Connecting to ${targetUrl}...`);
-  } else {
-    // Production mode: Start embedded server
-    const port = 38450;
-    targetUrl = `http://127.0.0.1:${port}`;
-    console.log(`[Electron] Production mode: Booting embedded server on ${targetUrl}...`);
-    startProductionServer(port);
-  }
-
-  createMainWindow();
-
-  let isReady = await waitForServer(targetUrl, 25000);
-  if (!isReady) {
-    // If embedded standalone port didn't answer in time, check if local dev server on 3000 is running
-    const devReady = await checkServerReady("http://localhost:3000");
+    // In local dev, check if localhost:3000 is running
+    const devReady = await checkUrlReady(LOCAL_DEV_URL, 1500);
     if (devReady) {
-      targetUrl = "http://localhost:3000";
-      isReady = true;
+      finalUrl = LOCAL_DEV_URL;
+      console.log(`[Electron Dev] Connected to local server: ${finalUrl}`);
+    } else {
+      console.log(`[Electron Dev] Local server not active; linking to live Vercel cloud: ${finalUrl}`);
+    }
+  } else {
+    // In production desktop app: Check if live Vercel cloud is reachable
+    console.log(`[Electron Prod] Connecting to Khan G Restaurant Cloud (Vercel & Neon DB): ${finalUrl}...`);
+    const isCloudReady = await checkUrlReady(CLOUD_URL, 5000);
+    if (!isCloudReady) {
+      console.warn(`[Electron Prod] Cloud server not reachable, checking localhost fallback...`);
+      const isLocalReady = await checkUrlReady("http://localhost:3000", 1500);
+      if (isLocalReady) {
+        finalUrl = "http://localhost:3000";
+      } else {
+        // Load offline auto-reconnecting screen
+        finalUrl = `data:text/html;charset=utf-8,${encodeURIComponent(getOfflineHtml(CLOUD_URL))}`;
+      }
     }
   }
 
-  if (isReady && mainWindow) {
-    mainWindow.loadURL(targetUrl);
-  } else if (mainWindow) {
-    dialog.showErrorBox(
-      "Server Connection Failed",
-      `The desktop application could not connect to the local server at ${targetUrl}. Please ensure the server is running and restart the application.`
-    );
+  if (mainWindow) {
+    mainWindow.loadURL(finalUrl);
   }
 });
 
-function cleanupProcess() {
-  if (serverProcess) {
-    try {
-      serverProcess.kill();
-    } catch {
-      // Ignore
-    }
-    serverProcess = null;
-  }
-}
-
-app.on("before-quit", cleanupProcess);
-app.on("will-quit", cleanupProcess);
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+});
 
 app.on("window-all-closed", () => {
-  cleanupProcess();
   if (process.platform !== "darwin") {
     app.quit();
   }

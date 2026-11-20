@@ -22,18 +22,32 @@ if (fs.existsSync(marker) || fs.existsSync(fallback)) {
 }
 
 const zipName = `electron-v${ver}-win32-x64.zip`;
-const cacheZip = path.join(
-  process.env.LOCALAPPDATA || "",
-  "electron",
-  "Cache",
-  zipName
-);
 const localZip = path.join(root, `.cache-${zipName}`);
-const zipPath = fs.existsSync(cacheZip)
-  ? cacheZip
-  : fs.existsSync(localZip)
-    ? localZip
-    : null;
+let zipPath = fs.existsSync(localZip) ? localZip : null;
+
+if (!zipPath && process.env.LOCALAPPDATA) {
+  const cacheBase = path.join(process.env.LOCALAPPDATA, "electron", "Cache");
+  if (fs.existsSync(cacheBase)) {
+    // Check direct file or search subdirectories recursively
+    const direct = path.join(cacheBase, zipName);
+    if (fs.existsSync(direct)) {
+      zipPath = direct;
+    } else {
+      try {
+        const subdirs = fs.readdirSync(cacheBase);
+        for (const sub of subdirs) {
+          const candidate = path.join(cacheBase, sub, zipName);
+          if (fs.existsSync(candidate)) {
+            zipPath = candidate;
+            break;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
 
 if (!zipPath) {
   console.error(

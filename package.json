@@ -9,7 +9,8 @@
     "dev": "next dev --hostname 0.0.0.0 --experimental-https",
     "electron:dev": "concurrently \"next dev -p 3000\" \"wait-on -t 60000 http://localhost:3000 && electron .\"",
     "electron:start": "electron .",
-    "electron:build": "next build --webpack && node scripts/prepare_standalone.js && npx electron-builder@25.1.8 --win --dir && node scripts/patch-electron-runtime.js && npx electron-builder@25.1.8 --win nsis --prepackaged dist-electron/win-unpacked",
+    "electron:build": "node scripts/build_electron.js",
+    "electron:build-standalone": "next build --webpack && node scripts/prepare_standalone.js && npx electron-builder@25.1.8 --win --dir && node scripts/patch-electron-runtime.js && npx electron-builder@25.1.8 --win nsis --prepackaged dist-electron/win-unpacked",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
@@ -63,8 +64,8 @@
     "@types/three": "^0.185.1",
     "concurrently": "^10.0.7",
     "drizzle-kit": "^0.31.10",
-    "electron": "^32.2.8",
-    "electron-builder": "^25.1.8",
+    "electron": "32.2.8",
+    "electron-builder": "25.1.8",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
@@ -74,6 +75,7 @@
   "build": {
     "appId": "com.cookswift.pos",
     "productName": "Cook Swift",
+    "electronVersion": "32.2.8",
     "npmRebuild": false,
     "nodeGypRebuild": false,
     "asar": false,
@@ -81,8 +83,6 @@
       "output": "dist-electron"
     },
     "files": [
-      ".next/standalone/**/*",
-      ".next/static/**/*",
       "public/**/*",
       "electron/**/*"
     ],
