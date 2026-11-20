@@ -159,7 +159,7 @@ export default function RestaurantPOSPage() {
   const supabase = createClient();
   const searchParams = useSearchParams();
   const reservationDeepLinkRef = useRef(false);
-  const resumeDeepLinkRef = useRef(false);
+  const resumeDeepLinkRef = useRef<string | null>(null);
   const [resumeInvoiceId, setResumeInvoiceId] = useState<string | null>(null);
 
   const [mounted, setMounted] = useState(false);
@@ -579,7 +579,7 @@ export default function RestaurantPOSPage() {
         quantity: c.quantity,
         unit_price: c.price,
         subtotal: c.price * c.quantity,
-        packing_name: c.sizeLabel || null,
+        packing_name: c.dealMeta || c.sizeLabel || null,
         menu_size_id: c.menuSizeId || null,
         products: { name: baseName, purchase_price_single: c.purchasePrice },
       };
@@ -808,7 +808,17 @@ export default function RestaurantPOSPage() {
       dealNames: Record<string, string> = dealTitleById
     ): CartItem[] =>
       (invoiceItems || []).map((it: any, index: number) => {
-        const baseName = it.products?.name || "Unknown Item";
+        const prodMatch = it.product_id ? products.find((p) => p.id === it.product_id) : undefined;
+        const baseName =
+          (it.products?.name && it.products.name !== "Item"
+            ? it.products.name
+            : prodMatch?.name) ||
+          it.products?.name ||
+          "Unknown Item";
+        const purchasePrice = Number(
+          it.products?.purchase_price_single ?? prodMatch?.purchase_price_single ?? 0
+        );
+        const notDiscounted = Boolean(prodMatch?.not_discounted);
         const dealMeta =
           typeof it.packing_name === "string" && it.packing_name.includes("DEAL_ID:")
             ? it.packing_name
@@ -826,13 +836,14 @@ export default function RestaurantPOSPage() {
             productId: it.product_id,
             name: `🎯 ${labels.title}`,
             price: Number(it.unit_price),
-            purchasePrice: Number(it.products?.purchase_price_single || 0),
+            purchasePrice,
             quantity: Number(it.quantity),
             remarks: includes || "",
             sizeLabel: undefined,
             menuSizeId: it.menu_size_id || undefined,
             isDeal: true,
             dealMeta,
+            notDiscounted,
           };
         }
         const displayName = it.packing_name
@@ -843,16 +854,17 @@ export default function RestaurantPOSPage() {
           productId: it.product_id,
           name: displayName,
           price: Number(it.unit_price),
-          purchasePrice: Number(it.products?.purchase_price_single || 0),
+          purchasePrice,
           quantity: Number(it.quantity),
           remarks: "",
           sizeLabel: it.packing_name || undefined,
           menuSizeId: it.menu_size_id || undefined,
           isDeal: false,
           dealMeta: undefined,
+          notDiscounted,
         };
       }),
-    [dealTitleById]
+    [dealTitleById, products]
   );
 
   const cartDiffersFromBaseline = (live: CartItem[], baseline: CartItem[]) => {
@@ -1280,11 +1292,24 @@ export default function RestaurantPOSPage() {
         return;
       }
 
+      let invoiceItems = inv.invoice_items;
+      if (!invoiceItems || !Array.isArray(invoiceItems) || invoiceItems.length === 0) {
+        const { data: directItems } = await supabase
+          .from("invoice_items")
+          .select(
+            "id, product_id, quantity, unit_price, packing_name, custom_name, menu_size_id, products ( name, purchase_price_single )"
+          )
+          .eq("invoice_id", invoiceId);
+        if (directItems && directItems.length > 0) {
+          invoiceItems = directItems;
+        }
+      }
+
       const service = (inv.service_type || "takeaway") as "dining" | "takeaway" | "delivery";
       setPosMode(service);
       setResumeInvoiceId(invoiceId);
 
-      const loadedCart = mapInvoiceItemsToCart(inv.invoice_items);
+      const loadedCart = mapInvoiceItemsToCart(invoiceItems);
       const baseline = JSON.parse(JSON.stringify(loadedCart)) as CartItem[];
 
       if (service === "dining") {
@@ -1318,8 +1343,8 @@ export default function RestaurantPOSPage() {
 
       toast.success(
         language === "en"
-          ? "Bill loaded - change cart like a new order, then Send KOT to save edit + version."
-          : "بل لوڈ - کارٹ بدلیں، پھر Send KOT (ورژن + pending)۔"
+          ? "Bill loaded for editing - adjust items/quantities, then Save Bill or Send KOT."
+          : "بل ایڈٹ کے لیے لوڈ ہو گیا - آئٹمز تبدیل کر کے Save Bill یا Send KOT دبائیں۔"
       );
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -1327,11 +1352,55 @@ export default function RestaurantPOSPage() {
     }
   };
 
+  const handleDirectSaveBillEdit = async () => {
+    if (!resumeInvoiceId || !shopId) return;
+    setIsSubmittingKOT(true);
+    try {
+      const syncMeta = await syncDraftInvoiceFromCart(resumeInvoiceId);
+      toast.success(
+        syncMeta.versionSaved
+          ? language === "en"
+            ? `Bill updated · revision v${syncMeta.revisionCount ?? 1} saved.`
+            : `بل اپڈیٹ ہو گیا · ورژن v${syncMeta.revisionCount ?? 1} محفوظ۔`
+          : language === "en"
+            ? "Bill updated successfully."
+            : "بل کامیابی سے اپڈیٹ ہو گیا۔"
+      );
+      const snap = await fetchInvoiceCartSnapshot(resumeInvoiceId);
+      if (snap?.items?.length) {
+        const freshCart = mapInvoiceItemsToCart(snap.items);
+        setCart(freshCart);
+        setDbItems(JSON.parse(JSON.stringify(freshCart)));
+      }
+      setCartEpoch((n) => n + 1);
+      void loadRecentOrders();
+    } catch (err: any) {
+      toast.error("Failed to save bill edit: " + (err.message || String(err)));
+    } finally {
+      setIsSubmittingKOT(false);
+    }
+  };
+
+  const handleCancelBillEdit = () => {
+    setResumeInvoiceId(null);
+    setCart([]);
+    setDbItems([]);
+    setSelectedTable(null);
+    setTakeawayInvoiceId(null);
+    setCurrentOrderStatus(null);
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerAddress("");
+    setOrderNumber(null);
+    toast.info(language === "en" ? "Bill edit cancelled." : "بل ایڈٹ منسوخ کر دیا گیا۔");
+  };
+
   useEffect(() => {
     if (!shopId || loading) return;
     const invId = searchParams.get("resumeInvoice");
-    if (!invId || resumeDeepLinkRef.current) return;
-    resumeDeepLinkRef.current = true;
+    if (!invId) return;
+    if (resumeDeepLinkRef.current === invId) return;
+    resumeDeepLinkRef.current = invId;
     void loadInvoiceIntoPosForEdit(invId);
   }, [shopId, loading, tables, searchParams]);
 
@@ -2152,6 +2221,7 @@ export default function RestaurantPOSPage() {
 
   const handleSettled = async () => {
     toast.success("Payment received & order settled!");
+    setResumeInvoiceId(null);
     setCart([]);
     setDbItems([]);
     setSelectedTable(null);
@@ -2160,6 +2230,7 @@ export default function RestaurantPOSPage() {
     setCustomerName("");
     setCustomerPhone("");
     setCustomerAddress("");
+    setOrderNumber(null);
     await loadData();
   };
 
@@ -2750,6 +2821,22 @@ export default function RestaurantPOSPage() {
                                     : "آئٹم یا KOT"}
                                 </div>
                               )}
+                              {!isPaid && ord.id && (
+                                <button
+                                  type="button"
+                                  onClick={() => void loadInvoiceIntoPosForEdit(ord.id)}
+                                  className="mt-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer transition flex items-center gap-1"
+                                >
+                                  <Edit size={10} />
+                                  {resumeInvoiceId === ord.id
+                                    ? language === "en"
+                                      ? "Editing Now"
+                                      : "ایڈٹ جاری"
+                                    : language === "en"
+                                      ? "Edit Bill"
+                                      : "بل ایڈٹ"}
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -2980,12 +3067,27 @@ export default function RestaurantPOSPage() {
                     · {onBillItemCount} {language === "en" ? "sent to kitchen" : "کچن"}
                   </div>
                 </div>
-                <Link
-                  href="/dashboard/restaurant/active-bills"
-                  className="shrink-0 font-bold text-blue-700 hover:text-blue-900 whitespace-nowrap"
-                >
-                  {language === "en" ? "View bill" : "دیکھیں"}
-                </Link>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {resumeInvoiceId !== activeOrderInvoiceId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeOrderInvoiceId) {
+                          void loadInvoiceIntoPosForEdit(activeOrderInvoiceId);
+                        }
+                      }}
+                      className="shrink-0 font-bold text-amber-700 hover:text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[10px] cursor-pointer"
+                    >
+                      {language === "en" ? "Edit bill" : "بل ایڈٹ"}
+                    </button>
+                  )}
+                  <Link
+                    href="/dashboard/restaurant/active-bills"
+                    className="shrink-0 font-bold text-blue-700 hover:text-blue-900 whitespace-nowrap text-[10px]"
+                  >
+                    {language === "en" ? "View bill" : "دیکھیں"}
+                  </Link>
+                </div>
               </div>
             )}
             <div className="flex items-center justify-between gap-2 text-[11px] pt-0.5">
@@ -3092,6 +3194,41 @@ export default function RestaurantPOSPage() {
             key={`restaurant-cart-${cartEpoch}`}
             className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1.5 py-1 space-y-1 bg-white"
           >
+            {resumeInvoiceId && (
+              <div className="mb-2 p-2 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-between gap-2 shadow-xs shrink-0">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-amber-950">
+                    <Edit size={13} className="text-amber-700 shrink-0" />
+                    <span className="truncate">
+                      {language === "en" ? "Editing Bill" : "ایڈٹ بل"} #{orderNumber || resumeInvoiceId.slice(0, 8).toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-amber-800 mt-0.5 truncate">
+                    {language === "en" ? "Change dishes & save or send KOT" : "تبدیلی کریں اور محفوظ یا KOT کریں"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleDirectSaveBillEdit}
+                    disabled={isSubmittingKOT}
+                    className="h-7 px-2.5 text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-none cursor-pointer"
+                  >
+                    {isSubmittingKOT ? <Loader2 className="animate-spin h-3 w-3" /> : (language === "en" ? "Save Bill" : "محفوظ")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelBillEdit}
+                    className="h-7 px-2 text-[11px] font-semibold bg-white border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 cursor-pointer"
+                  >
+                    {language === "en" ? "Cancel" : "منسوخ"}
+                  </Button>
+                </div>
+              </div>
+            )}
             {cart.length === 0 && (
               <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/80 px-3 py-6 text-center">
                 <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-500">

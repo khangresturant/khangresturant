@@ -242,6 +242,129 @@ export async function POST(request: NextRequest) {
       const query = `SELECT * FROM ${fullTable} ${whereClause} ${orderClause} ${limitClause} ${offsetClause};`;
       const rows = await sql.query(query, params);
 
+      // Hydrate relationships for restaurant and invoicing workflows
+      if (rows.length > 0) {
+        if (table === "invoices") {
+          const invIds = rows.map((r: any) => r.id).filter(Boolean);
+          if (invIds.length > 0) {
+            try {
+              const itemsRes = await sql.query(
+                `SELECT ii.*, 
+                        json_build_object('name', COALESCE(p.name, 'Item'), 'purchase_price_single', COALESCE(p.purchase_price_single, 0)) AS products
+                 FROM "public"."invoice_items" ii
+                 LEFT JOIN "public"."products" p ON p.id = ii.product_id
+                 WHERE ii.invoice_id = ANY($1)
+                 ORDER BY ii.id ASC`,
+                [invIds]
+              );
+              const itemsByInv = new Map<string, any[]>();
+              for (const item of itemsRes) {
+                const list = itemsByInv.get(item.invoice_id) || [];
+                list.push(item);
+                itemsByInv.set(item.invoice_id, list);
+              }
+              for (const r of rows) {
+                r.invoice_items = itemsByInv.get(r.id) || [];
+              }
+            } catch (err) {
+              console.warn("[neon-query] hydrate invoice_items error:", err);
+            }
+
+            const partyIds = rows.map((r: any) => r.party_id).filter(Boolean);
+            if (partyIds.length > 0) {
+              try {
+                const partiesRes = await sql.query(
+                  `SELECT id, name, phone FROM "public"."parties" WHERE id = ANY($1)`,
+                  [partyIds]
+                );
+                const partyMap = new Map(partiesRes.map((p: any) => [p.id, p]));
+                for (const r of rows) {
+                  r.parties = r.party_id && partyMap.has(r.party_id) ? partyMap.get(r.party_id) : null;
+                }
+              } catch (err) {
+                console.warn("[neon-query] hydrate parties error:", err);
+              }
+            }
+
+            const tableIds = rows.map((r: any) => r.table_id).filter(Boolean);
+            if (tableIds.length > 0) {
+              try {
+                const tablesRes = await sql.query(
+                  `SELECT id, name FROM "public"."restaurant_tables" WHERE id = ANY($1)`,
+                  [tableIds]
+                );
+                const tableMap = new Map(tablesRes.map((t: any) => [t.id, t]));
+                for (const r of rows) {
+                  r.restaurant_tables = r.table_id && tableMap.has(r.table_id) ? tableMap.get(r.table_id) : null;
+                }
+              } catch (err) {
+                console.warn("[neon-query] hydrate restaurant_tables error:", err);
+              }
+            }
+          }
+        } else if (table === "invoice_items") {
+          const prodIds = rows.map((r: any) => r.product_id).filter(Boolean);
+          if (prodIds.length > 0) {
+            try {
+              const prodsRes = await sql.query(
+                `SELECT id, name, purchase_price_single, not_discounted FROM "public"."products" WHERE id = ANY($1)`,
+                [prodIds]
+              );
+              const prodMap = new Map(prodsRes.map((p: any) => [p.id, p]));
+              for (const r of rows) {
+                if (r.product_id && prodMap.has(r.product_id)) {
+                  r.products = prodMap.get(r.product_id);
+                }
+              }
+            } catch (err) {
+              console.warn("[neon-query] hydrate products on invoice_items error:", err);
+            }
+          }
+        } else if (table === "kitchen_orders") {
+          const koIds = rows.map((r: any) => r.id).filter(Boolean);
+          if (koIds.length > 0) {
+            try {
+              const itemsRes = await sql.query(
+                `SELECT koi.*, 
+                        json_build_object('name', COALESCE(p.name, 'Item')) AS products
+                 FROM "public"."kitchen_order_items" koi
+                 LEFT JOIN "public"."products" p ON p.id = koi.product_id
+                 WHERE koi.kitchen_order_id = ANY($1)
+                 ORDER BY koi.created_at ASC`,
+                [koIds]
+              );
+              const itemsByKo = new Map<string, any[]>();
+              for (const item of itemsRes) {
+                const list = itemsByKo.get(item.kitchen_order_id) || [];
+                list.push(item);
+                itemsByKo.set(item.kitchen_order_id, list);
+              }
+              for (const r of rows) {
+                r.kitchen_order_items = itemsByKo.get(r.id) || [];
+              }
+            } catch (err) {
+              console.warn("[neon-query] hydrate kitchen_order_items error:", err);
+            }
+
+            const tableIds = rows.map((r: any) => r.table_id).filter(Boolean);
+            if (tableIds.length > 0) {
+              try {
+                const tablesRes = await sql.query(
+                  `SELECT id, name FROM "public"."restaurant_tables" WHERE id = ANY($1)`,
+                  [tableIds]
+                );
+                const tableMap = new Map(tablesRes.map((t: any) => [t.id, t]));
+                for (const r of rows) {
+                  r.restaurant_tables = r.table_id && tableMap.has(r.table_id) ? tableMap.get(r.table_id) : null;
+                }
+              } catch (err) {
+                console.warn("[neon-query] hydrate tables on kitchen_orders error:", err);
+              }
+            }
+          }
+        }
+      }
+
       if (body.single) {
         return NextResponse.json({
           data: rows[0] || null,
