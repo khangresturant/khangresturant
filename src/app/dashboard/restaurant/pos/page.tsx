@@ -8,7 +8,7 @@ import {
   Search, ShoppingCart, UserPlus, Trash2, Plus, Minus, 
   Check, X, Printer, Loader2, DollarSign, ArrowRight, ArrowLeft,
   Store, Utensils, Coffee, Users, Layers, MessageSquare, ChefHat, Menu,
-  ClipboardList, Receipt, Bell, Tag, RefreshCw
+  ClipboardList, Receipt, Bell, Tag, RefreshCw, Edit
 } from "lucide-react";
 import { RestaurantDealsTab } from "@/components/restaurant/RestaurantDealsTab";
 import { DealConfigureModal } from "@/components/restaurant/DealConfigureModal";
@@ -3200,7 +3200,7 @@ export default function RestaurantPOSPage() {
                   <div className="flex items-center gap-1.5 text-xs font-black text-amber-950">
                     <Edit size={13} className="text-amber-700 shrink-0" />
                     <span className="truncate">
-                      {language === "en" ? "Editing Bill" : "ایڈٹ بل"} #{orderNumber || resumeInvoiceId.slice(0, 8).toUpperCase()}
+                      {language === "en" ? "Editing Bill" : "ایڈٹ بل"} #{orderNumber || String(resumeInvoiceId || "").slice(0, 8).toUpperCase()}
                     </span>
                   </div>
                   <p className="text-[10px] text-amber-800 mt-0.5 truncate">
