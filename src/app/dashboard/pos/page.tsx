@@ -3557,7 +3557,7 @@ function POSPageContent() {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
-      doc.text("Powered by The Accounts POS", 15, 285);
+      doc.text("Powered by Falcon Shift", 15, 285);
       
       doc.save(`estimate_${Date.now()}.pdf`);
       toast.success("Quotation PDF generated and downloaded! 📄");
@@ -3790,7 +3790,7 @@ function POSPageContent() {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
-      doc.text("Thank you for shopping with us! Online verification & cloud powered by The Accounts (theaccounts.cloud)", 15, 285);
+      doc.text("Thank you for shopping with us! Online verification & cloud powered by Falcon Shift", 15, 285);
 
       const blob = doc.output("blob");
       const filename = `${lastInvoice.id}_${Date.now()}.pdf`;

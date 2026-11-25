@@ -32,6 +32,14 @@ if (fs.existsSync(srcPublic)) {
   fs.cpSync(srcPublic, destPublic, { recursive: true });
 }
 
+// 2b. Copy pdf-to-printer (needed by electron/printer.js PDF thermal print path)
+const srcPdfToPrinter = path.join(root, "node_modules", "pdf-to-printer");
+const destPdfToPrinter = path.join(appDir, "node_modules", "pdf-to-printer");
+if (fs.existsSync(srcPdfToPrinter)) {
+  fs.mkdirSync(path.dirname(destPdfToPrinter), { recursive: true });
+  fs.cpSync(srcPdfToPrinter, destPdfToPrinter, { recursive: true });
+}
+
 // 3. Write minimal runtime package.json in resources/app
 const runtimePkg = {
   name: "the-accounts",

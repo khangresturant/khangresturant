@@ -65,12 +65,57 @@ async function defaultWindowsPrinter(): Promise<string | null> {
   }
 }
 
-async function htmlToPdf(htmlPath: string, pdfPath: string): Promise<void> {
+function parseThermalPaperWidthMm(html: string): number {
+  const meta =
+    html.match(/name=["']x-thermal-width-mm["']\s+content=["'](\d+)["']/i) ||
+    html.match(/content=["'](\d+)["']\s+name=["']x-thermal-width-mm["']/i);
+  if (meta) {
+    const n = Number(meta[1]);
+    if (n === 80) return 78;
+    if (n >= 50 && n <= 90) return n;
+  }
+  if (/size:\s*58mm/i.test(html)) return 58;
+  return 78;
+}
+
+const THERMAL_ROLL_MAX_HEIGHT_MM = 297;
+
+function clampThermalRollHeightMm(heightMm: number, paperWidthMm: number): number {
+  const minPortraitMm = paperWidthMm + 20;
+  return Math.min(
+    Math.max(Math.ceil(heightMm), minPortraitMm),
+    THERMAL_ROLL_MAX_HEIGHT_MM
+  );
+}
+
+function estimateSlipHeightMm(html: string): number {
+  const blocks = (html.match(/<\/div>|<\/tr>|<br\s*\/?>|\n/gi) || []).length;
+  return Math.min(Math.max(blocks * 4.2 + 30, 40), THERMAL_ROLL_MAX_HEIGHT_MM);
+}
+
+function injectThermalPageSize(html: string, paperWidthMm: number, heightMm: number): string {
+  const safeH = clampThermalRollHeightMm(heightMm, paperWidthMm);
+  const style = `<style id="cookswift-thermal-page">@page{size:${paperWidthMm}mm ${safeH}mm portrait!important;margin:0!important;}html,body{width:${paperWidthMm}mm!important;max-width:${paperWidthMm}mm!important;margin:0 auto!important;}</style>`;
+  if (html.includes("</head>")) {
+    return html.replace("</head>", `${style}</head>`);
+  }
+  return style + html;
+}
+
+async function htmlToPdf(
+  htmlPath: string,
+  pdfPath: string,
+  paperWidthMm: number,
+  heightMm: number
+): Promise<void> {
   const browser = edgeExecutable();
   if (!browser) {
     throw new Error("Microsoft Edge / Chrome not found for PDF rendering.");
   }
   const fileUrl = "file:///" + htmlPath.replace(/\\/g, "/");
+  const winW =
+    paperWidthMm <= 58 ? 220 : Math.max(220, Math.round((paperWidthMm / 25.4) * 96));
+  const winH = Math.min(Math.max(Math.round(heightMm * 3.78), 400), 1600);
   await execFileAsync(
     browser,
     [
@@ -78,6 +123,8 @@ async function htmlToPdf(htmlPath: string, pdfPath: string): Promise<void> {
       "--disable-gpu",
       "--no-first-run",
       "--no-pdf-header-footer",
+      `--window-size=${winW},${winH}`,
+      "--force-device-scale-factor=1",
       `--print-to-pdf=${pdfPath}`,
       fileUrl,
     ],
@@ -90,7 +137,13 @@ async function printPdfSilent(pdfPath: string, printerName: string): Promise<voi
     const mod = await import("pdf-to-printer");
     const printFn = mod.print || mod.default?.print;
     if (typeof printFn === "function") {
-      await printFn(pdfPath, { printer: printerName, silent: true });
+      await printFn(pdfPath, {
+        printer: printerName,
+        silent: true,
+        orientation: "portrait",
+        scale: "noscale",
+        monochrome: true,
+      });
       return;
     }
   } catch {
@@ -169,8 +222,18 @@ export async function POST(req: NextRequest) {
   const pdfPath = path.join(tmpDir, `receipt-${stamp}.pdf`);
 
   try {
-    await fsPromises.writeFile(htmlPath, html, "utf8");
-    await htmlToPdf(htmlPath, pdfPath);
+    const paperWidthMm = parseThermalPaperWidthMm(html);
+    const isRoll =
+      /x-thermal-format["']\s+content=["']roll/i.test(html) ||
+      paperWidthMm <= 90;
+    const heightMm = isRoll
+      ? clampThermalRollHeightMm(estimateSlipHeightMm(html), paperWidthMm)
+      : THERMAL_ROLL_MAX_HEIGHT_MM;
+    const htmlForPdf = isRoll
+      ? injectThermalPageSize(html, paperWidthMm, heightMm)
+      : html;
+    await fsPromises.writeFile(htmlPath, htmlForPdf, "utf8");
+    await htmlToPdf(htmlPath, pdfPath, paperWidthMm, heightMm);
     await printPdfSilent(pdfPath, printerName);
     return NextResponse.json({ ok: true, printer: printerName });
   } catch (err) {

@@ -24,6 +24,12 @@ import {
   type SidebarThemeId,
 } from "@/lib/dashboard/sidebar-themes";
 import { getDefaultSidebarThemeId, isFlame9Brand } from "@/lib/deployment/flame9-brand";
+import { isLocalSqliteEnabled } from "@/lib/config";
+
+function prefersLocalSidebarSync(): boolean {
+  if (typeof window !== "undefined" && window.electronAPI?.isDesktop) return true;
+  return isFlame9Brand() || isLocalSqliteEnabled();
+}
 
 export type SidebarThemeSyncStatus = "idle" | "loading" | "synced" | "local_only" | "error";
 
@@ -102,28 +108,31 @@ export function SidebarThemeProvider({ children }: { children: React.ReactNode }
     async function hydrateFromCloud() {
       setSyncStatus("loading");
       try {
-        const cloudTheme = await fetchSidebarThemePreference(activeUserId);
+        const localFirst = prefersLocalSidebarSync();
+        const storedTheme = await fetchSidebarThemePreference(activeUserId);
 
         if (cancelled) return;
 
-        if (cloudTheme) {
-          setThemeId(cloudTheme);
-          latestThemeRef.current = cloudTheme;
-          writeLocalSidebarTheme(cloudTheme);
-          setSyncStatus("synced");
+        if (storedTheme) {
+          setThemeId(storedTheme);
+          latestThemeRef.current = storedTheme;
+          writeLocalSidebarTheme(storedTheme);
+          setSyncStatus(localFirst ? "local_only" : "synced");
           return;
         }
 
         const localTheme = readLocalSidebarTheme();
+        const themeToPersist = localTheme || DEFAULT_SIDEBAR_THEME_ID;
         if (localTheme) {
-          const saved = await saveSidebarThemePreference(activeUserId, localTheme);
-          setSyncStatus(saved ? "synced" : "local_only");
-        } else {
-          const saved = await saveSidebarThemePreference(activeUserId, DEFAULT_SIDEBAR_THEME_ID);
-          setSyncStatus(saved ? "synced" : "local_only");
+          setThemeId(localTheme);
+          latestThemeRef.current = localTheme;
         }
+        await saveSidebarThemePreference(activeUserId, themeToPersist);
+        if (!cancelled) setSyncStatus(localFirst ? "local_only" : "synced");
       } catch {
-        if (!cancelled) setSyncStatus("error");
+        if (!cancelled) {
+          setSyncStatus(prefersLocalSidebarSync() ? "local_only" : "error");
+        }
       }
     }
 
@@ -148,7 +157,9 @@ export function SidebarThemeProvider({ children }: { children: React.ReactNode }
       saveTimerRef.current = setTimeout(async () => {
         const themeToSave = latestThemeRef.current;
         const ok = await saveSidebarThemePreference(userId, themeToSave);
-        setSyncStatus(ok ? "synced" : "error");
+        setSyncStatus(
+          prefersLocalSidebarSync() ? "local_only" : ok ? "synced" : "local_only"
+        );
       }, 400);
     },
     [userId]

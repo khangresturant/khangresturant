@@ -2,6 +2,7 @@ import {
   DEFAULT_RECEIPT_SETTINGS,
   type ReceiptSettings,
 } from "@/components/ReceiptTemplate";
+import { normalizeReceiptTemplateId } from "@/lib/receipt-template-default";
 
 /** Normalize print_settings row → ReceiptSettings (logo, margins, template, etc.). */
 export function mergePrintSettingsFromRow(
@@ -20,5 +21,6 @@ export function mergePrintSettingsFromRow(
     fontSize:
       Number(printRow.receipt_font_size) || DEFAULT_RECEIPT_SETTINGS.fontSize,
     ...stored,
+    templateId: normalizeReceiptTemplateId(stored.templateId),
   };
 }

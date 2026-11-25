@@ -726,7 +726,7 @@ export default function EMISchedulesPage() {
             
             <div style="text-align: center; color: #94a3b8; font-size: 7.5px; margin-top: 20px; font-style: italic;">
               <p style="margin: 0;">Thank you for your business!</p>
-              <p style="margin: 2px 0 0 0;">Powered by The Accounts</p>
+              <p style="margin: 2px 0 0 0;">Powered by Falcon Shift</p>
             </div>
           </div>
           
@@ -928,7 +928,7 @@ export default function EMISchedulesPage() {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(6.5);
       doc.setTextColor(148, 163, 184); // Slate 400
-      const footerText = "Thank you for your business! Powered by The Accounts";
+      const footerText = "Thank you for your business! Powered by Falcon Shift";
       const footerWidth = doc.getTextWidth(footerText);
       doc.text(footerText, (80 - footerWidth) / 2, headerY);
 
@@ -2253,7 +2253,7 @@ export default function EMISchedulesPage() {
                   {/* Thank you footer */}
                   <div className="text-center text-[8px] text-slate-400 pt-3">
                     <p>Thank you for your business!</p>
-                    <p className="text-[7px]">Powered by The Accounts</p>
+                    <p className="text-[7px]">Powered by Falcon Shift</p>
                   </div>
                 </div>
               </div>

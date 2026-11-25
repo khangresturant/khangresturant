@@ -29,7 +29,11 @@ import {
   KITCHEN_POLL_INTERVAL_MS,
   shouldPollKitchenLive,
 } from "@/lib/restaurant-kitchen";
-import { printRestaurantPaidReceipt } from "@/lib/restaurant-receipt-print";
+import {
+  mapDbInvoiceItemsToReceiptLines,
+  printRestaurantGuestBill,
+  printRestaurantKOTDispatch,
+} from "@/lib/restaurant-receipt-print";
 import {
   computeKitchenDispatchDelta,
   loadRestaurantBillEditPrefs,
@@ -53,12 +57,6 @@ import {
   staffPhone,
   type RestaurantPaymentMode,
 } from "@/lib/restaurant-riders";
-import {
-  mapDbInvoiceItemsToReceiptLines,
-  printRestaurantGuestBill,
-  printRestaurantKOTDispatch,
-  printRestaurantRevisedGuestBill,
-} from "@/lib/restaurant-receipt-print";
 import { RestaurantBillEditHistoryModal } from "@/components/restaurant/RestaurantBillEditHistoryModal";
 
 type InvoiceItem = {
@@ -521,7 +519,7 @@ export default function ActiveBillsPage() {
             (prod?.products as { category_id?: string } | null)?.category_id ?? null,
         };
       });
-      printRestaurantKOTDispatch(
+      await printRestaurantKOTDispatch(
         {
           orderNumber: selectedBill.order_number,
           tableName: selectedBill.tableName || null,
@@ -660,7 +658,8 @@ export default function ActiveBillsPage() {
             products: i.products,
           }))
         );
-        printRestaurantRevisedGuestBill(
+        const subtotal = lines.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+        await printRestaurantGuestBill(
           {
             invoiceId,
             orderNumber: selectedBill.order_number,
@@ -668,7 +667,7 @@ export default function ActiveBillsPage() {
             serviceType: selectedBill.service_type,
             ...billGuestDetails(selectedBill),
             items: lines,
-            subtotal: newSubtotal,
+            subtotal: newSubtotal || subtotal,
             discount: selectedBill.discount || 0,
             taxRate: selectedBill.tax_rate || 0,
             taxAmount: newTaxAmount,
@@ -676,12 +675,7 @@ export default function ActiveBillsPage() {
             settings: receiptSettings,
             shopDetails: shopDetailsForPrint(),
             companyRow: companyDetails,
-            revisionNumber: updatedHistory.length,
-            previousTotal: Number(selectedBill.total_amount),
-            editedAt: historyEntry.edited_at,
-            editedBy: historyEntry.edited_by,
-            changes: historyEntry.changes,
-            showChangeDetails: billEditPrefs.showChangeDetailsOnReceipt,
+            createdAt: selectedBill.created_at,
           },
           {
             onError: (msg) => toast.error(msg),
@@ -726,7 +720,7 @@ export default function ActiveBillsPage() {
           product_id: d.product_id,
           category_id: productCategoryById.get(d.product_id) ?? null,
         }));
-        printRestaurantKOTDispatch(
+        await printRestaurantKOTDispatch(
           {
             orderNumber: selectedBill.order_number,
             tableName: selectedBill.tableName || null,
@@ -769,13 +763,13 @@ export default function ActiveBillsPage() {
     setHistoryOpen(true);
   };
 
-  const handleReprintRevisedBill = () => {
+  const handleReprintRevisedBill = async () => {
     if (!selectedBill) return;
-    const history = parseRestaurantEditHistory(selectedBill.edit_history);
-    const latest = history[0];
     const lines = mapDbInvoiceItemsToReceiptLines(selectedBill.invoice_items || []);
     const subtotal = lines.reduce((s, i) => s + i.unit_price * i.quantity, 0);
-    printRestaurantRevisedGuestBill(
+    const discount = Number(selectedBill.discount) || 0;
+    const taxAmount = Number(selectedBill.tax_amount) || 0;
+    await printRestaurantGuestBill(
       {
         invoiceId: selectedBill.id,
         orderNumber: selectedBill.order_number,
@@ -784,10 +778,10 @@ export default function ActiveBillsPage() {
         ...billGuestDetails(selectedBill),
         items: lines,
         subtotal,
-        discount: selectedBill.discount || 0,
-        taxRate: selectedBill.tax_rate || 0,
-        taxAmount: selectedBill.tax_amount || 0,
-        netTotal: selectedBill.total_amount,
+        discount,
+        taxRate: Number(selectedBill.tax_rate) || 0,
+        taxAmount,
+        netTotal: Number(selectedBill.total_amount) || Math.max(0, subtotal + taxAmount - discount),
         settings: receiptSettings,
         shopDetails: {
           name: companyDetails?.name || shopName || "Restaurant",
@@ -796,12 +790,6 @@ export default function ActiveBillsPage() {
           email: companyDetails?.email || shopEmail,
         },
         companyRow: companyDetails,
-        revisionNumber: Math.max(1, history.length),
-        previousTotal: latest ? latest.total_amount : selectedBill.total_amount,
-        editedAt: latest?.edited_at,
-        editedBy: latest?.edited_by,
-        changes: latest?.changes,
-        showChangeDetails: billEditPrefs.showChangeDetailsOnReceipt,
         createdAt: selectedBill.created_at,
       },
       { onError: (msg) => toast.error(msg) }
@@ -843,7 +831,6 @@ export default function ActiveBillsPage() {
     setIsSubmittingCheckout(true);
     try {
       const activeInvoiceId = selectedBill.id;
-      const paidAmt = paymentMode === "credit" ? receivedAmount : netTotal;
 
       await settleRestaurantOrder(supabase, {
         shopId,
@@ -872,7 +859,7 @@ export default function ActiveBillsPage() {
       toast.success("Bill checked out - printing thermal receipt…");
       setIsCheckoutOpen(false);
 
-      printRestaurantPaidReceipt(
+      await printRestaurantGuestBill(
         {
           invoiceId: activeInvoiceId,
           orderNumber: null,
@@ -889,7 +876,6 @@ export default function ActiveBillsPage() {
             customers.find((c) => c.id === selectedCustomerId)?.phone ||
             selectedBill.parties?.phone ||
             null,
-          paymentMode,
           items: selectedBill.invoice_items.map((item) => ({
             name: item.products?.name || "Item",
             quantity: item.quantity,
@@ -900,8 +886,6 @@ export default function ActiveBillsPage() {
           taxRate: taxRateVal,
           taxAmount,
           netTotal,
-          paidAmount: paidAmt,
-          remainingDue,
           settings: receiptSettings,
           shopDetails: {
             name: companyDetails?.name || shopName || "Restaurant",
@@ -986,7 +970,7 @@ export default function ActiveBillsPage() {
     const taxAmt = billObj.tax_amount || (sub * (billObj.tax_rate || 0)) / 100;
     const net = billObj.total_amount;
 
-    printRestaurantGuestBill(
+    await printRestaurantGuestBill(
       {
         invoiceId: billObj.id,
         orderNumber: billObj.order_number,

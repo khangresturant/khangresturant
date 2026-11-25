@@ -9,13 +9,9 @@ export type KitchenTicketLine = {
   remarks?: string | null;
 };
 
-/** Local/mock Supabase has no realtime - poll KDS/KOT screens. */
+/** Neon bridge / local Supabase has no realtime - poll KDS/KOT/POS screens live. */
 export function shouldPollKitchenLive(): boolean {
-  return (
-    isFlame9Brand() ||
-    isLocalSqliteEnabled() ||
-    process.env.NEXT_PUBLIC_USE_MOCK === "true"
-  );
+  return true;
 }
 
 export const KITCHEN_POLL_INTERVAL_MS = 4000;

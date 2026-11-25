@@ -265,13 +265,13 @@ export default function KitchenDisplayPage() {
     })();
   }, [shopId, supabase]);
 
-  const reprintKot = (t: KdsTicket) => {
+  const reprintKot = async (t: KdsTicket) => {
     const lineMeta = t.items.map((i) => ({
       name: i.product_name,
       quantity: i.quantity,
       remarks: i.remarks,
     }));
-    printRestaurantKOTDispatch(
+    await printRestaurantKOTDispatch(
       {
         orderNumber: t.order_number,
         tableName: t.table_name,

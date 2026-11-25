@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useSyncEngine } from "@/hooks/useSyncEngine";
 import { DeadLetterDrawer } from "./DeadLetterDrawer";
+import { isPermanentRestaurantLicense } from "@/lib/deployment/flame9-brand";
 
 // ─── Small count badge ────────────────────────────────────────────────────────
 function Badge({ count, variant = "white" }: { count: number; variant?: "white" | "red" }) {
@@ -20,6 +21,9 @@ function Badge({ count, variant = "white" }: { count: number; variant?: "white" 
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export function OfflineStatusBar() {
+  if (isPermanentRestaurantLicense()) return null;
+  if (typeof window !== "undefined" && window.electronAPI?.isDesktop) return null;
+
   const {
     isOnline, pendingCount, deadCount,
     isFlushing, lastSyncAt,

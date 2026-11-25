@@ -290,7 +290,7 @@ export default function PublicReceiptPage() {
       // Footer
       doc.setFontSize(8);
       doc.setTextColor(148, 163, 184);
-      doc.text("Thank you for your business! | Powered by The Accounts ERP", 105, 285, {
+      doc.text("Thank you for your business! | Powered by Falcon Shift", 105, 285, {
         align: "center",
       });
 

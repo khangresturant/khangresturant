@@ -130,7 +130,7 @@ export default function PublicShopsDirectoryPage() {
           </h2>
           
           <p className="text-sm text-slate-600 max-w-2xl mx-auto font-medium">
-            Order directly from authorized pharmacies, retail outlets, clothing boutiques, electronics centers, and supermarkets powered by The Accounts ERP.
+            Order directly from authorized pharmacies, retail outlets, clothing boutiques, electronics centers, and supermarkets powered by Falcon Shift.
           </p>
 
           {/* Search & Filter Bar */}

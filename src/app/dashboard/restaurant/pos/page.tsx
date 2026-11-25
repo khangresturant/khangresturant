@@ -37,6 +37,10 @@ import {
 } from "@/lib/restaurant-receipt-print";
 import { printReceiptDirect } from "@/lib/thermalPrinter";
 import {
+  KITCHEN_POLL_INTERVAL_MS,
+  shouldPollKitchenLive,
+} from "@/lib/restaurant-kitchen";
+import {
   type RestaurantOrderStatus,
   RESTAURANT_ORDER_STATUS_LABELS,
   canPrintGuestBill,
@@ -1177,9 +1181,35 @@ export default function RestaurantPOSPage() {
     return () => clearInterval(timer);
   }, [activeOrderInvoiceId, shopId, isSubmittingKOT, cart, dbItems]);
 
+  useEffect(() => {
+    if (!activeOrderInvoiceId || !shouldPollKitchenLive()) return;
+    const pullStatus = async () => {
+      const { data } = await supabase
+        .from("invoices")
+        .select("restaurant_order_status, order_number")
+        .eq("id", activeOrderInvoiceId)
+        .maybeSingle();
+      if (data?.restaurant_order_status) {
+        setCurrentOrderStatus(
+          normalizeOrderStatus(data.restaurant_order_status) || "pending"
+        );
+      }
+      if (data?.order_number) setOrderNumber(data.order_number);
+    };
+    void pullStatus();
+    const pollId = setInterval(() => void pullStatus(), KITCHEN_POLL_INTERVAL_MS);
+    return () => clearInterval(pollId);
+  }, [activeOrderInvoiceId, supabase]);
+
   // Load Active Table Order when table is selected
   const handleSelectTable = async (table: RestTable) => {
     setSelectedTable(table);
+    if (table.status === "available" && !table.active_invoice_id) {
+      setResumeInvoiceId(null);
+      setTakeawayInvoiceId(null);
+      setOrderNumber(null);
+      setCurrentOrderStatus(null);
+    }
     setCart([]);
     setDbItems([]);
     setShowMobileCart(false);
@@ -1627,9 +1657,28 @@ export default function RestaurantPOSPage() {
 
     setIsSubmittingKOT(true);
     try {
+      let kotPrintOrderNumber: string | null = orderNumber;
       let activeInvoiceId =
         resumeInvoiceId ??
         (posMode === "dining" ? selectedTable?.active_invoice_id || null : takeawayInvoiceId);
+
+      if (activeInvoiceId) {
+        const { data: openInv } = await supabase
+          .from("invoices")
+          .select("status")
+          .eq("id", activeInvoiceId)
+          .maybeSingle();
+        if (!openInv || openInv.status !== "draft") {
+          activeInvoiceId = null;
+          setResumeInvoiceId(null);
+          setTakeawayInvoiceId(null);
+          if (posMode === "dining" && selectedTable?.active_invoice_id) {
+            setSelectedTable((t) =>
+              t ? { ...t, active_invoice_id: null } : t
+            );
+          }
+        }
+      }
 
       // 1. Compute incremental KOT items
       const kotItems = cart.map((item) => {
@@ -1727,6 +1776,7 @@ export default function RestaurantPOSPage() {
 
         if (invErr) throw invErr;
         activeInvoiceId = newInv.id;
+        kotPrintOrderNumber = dailyNum;
         setOrderNumber(dailyNum);
 
         if (posMode === "dining" && selectedTable) {
@@ -1771,37 +1821,65 @@ export default function RestaurantPOSPage() {
         syncMeta = await syncDraftInvoiceFromCart(activeInvoiceId);
       }
 
-      // 6. Print KOT Slip
+      if (!kotPrintOrderNumber && activeInvoiceId) {
+        const { data: ordRow } = await supabase
+          .from("invoices")
+          .select("order_number")
+          .eq("id", activeInvoiceId)
+          .maybeSingle();
+        kotPrintOrderNumber = ordRow?.order_number ?? null;
+        if (kotPrintOrderNumber) setOrderNumber(kotPrintOrderNumber);
+      }
+
+      // 6. Print KOT Slip (cap wait so POS never hangs if spooler stalls)
       if (printKitchenReceipt) {
-        printRestaurantKOTDispatch(
-          {
-            orderNumber: orderNumber || undefined,
-            tableName: selectedTable?.name || null,
-            serviceType: posMode,
-            ...posGuestDetails(),
-            items: kotItems.map((it: any) => ({
-              name: it.name,
-              quantity: it.quantity,
-              sizeLabel: it.sizeLabel,
-              remarks: it.remarks,
-            })),
-            settings: receiptSettings,
-            shopDetails: companyRowToShopDetails(companyDetails, shopName),
-            companyRow: companyDetails,
-          },
-          {
-            productIdToCategoryId: productCategoryById,
-            lineMeta: kotItems,
-          },
-          {
-            onError: (msg) =>
-              toast.error(
-                language === "en"
-                  ? msg
-                  : `${msg} - Windows میں تھرمل پرنٹر ڈیفالٹ بنائیں`
-              ),
-          }
-        );
+        const printErr =
+          language === "en"
+            ? "Kitchen print failed or timed out — check printer name in Settings."
+            : "کچن پرنٹ نہیں ہوا یا ٹائم آؤٹ — سیٹنگز میں پرنٹر چیک کریں۔";
+        try {
+          await Promise.race([
+            printRestaurantKOTDispatch(
+              {
+                orderNumber: kotPrintOrderNumber || undefined,
+                tableName: selectedTable?.name || null,
+                serviceType: posMode,
+                ...posGuestDetails(),
+                items: kotItems.map((it: any) => ({
+                  name: it.name,
+                  quantity: it.quantity,
+                  sizeLabel: it.sizeLabel,
+                  remarks: it.remarks,
+                })),
+                settings: receiptSettings,
+                shopDetails: companyRowToShopDetails(companyDetails, shopName),
+                companyRow: companyDetails,
+              },
+              {
+                productIdToCategoryId: productCategoryById,
+                lineMeta: kotItems,
+              },
+              {
+                onError: (msg) =>
+                  toast.error(
+                    language === "en"
+                      ? msg
+                      : `${msg} - Windows میں تھرمل پرنٹر ڈیفالٹ بنائیں`
+                  ),
+              }
+            ),
+            new Promise<void>((_, reject) => {
+              setTimeout(
+                () => reject(new Error(printErr)),
+                120_000
+              );
+            }),
+          ]);
+        } catch (printEx: unknown) {
+          const msg =
+            printEx instanceof Error ? printEx.message : printErr;
+          toast.error(msg);
+        }
       }
 
       if (activeInvoiceId) {
@@ -2029,13 +2107,20 @@ export default function RestaurantPOSPage() {
       await markBillPrinted(supabase, activeInvoiceId);
       setCurrentOrderStatus("bill_printed");
 
+      const { data: invHead } = await supabase
+        .from("invoices")
+        .select("order_number")
+        .eq("id", activeInvoiceId)
+        .maybeSingle();
+      const slipOrderNumber = invHead?.order_number ?? orderNumber;
+
       const items = await resolveActiveBillLines(activeInvoiceId);
       const subtotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
 
-      printRestaurantGuestBill(
+      await printRestaurantGuestBill(
         {
           invoiceId: activeInvoiceId,
-          orderNumber: orderNumber,
+          orderNumber: slipOrderNumber,
           tableName:
             selectedTable?.name ||
             (posMode === "dining" ? "Dine-In" : posMode === "delivery" ? "Delivery" : "Takeaway"),
@@ -2221,16 +2306,17 @@ export default function RestaurantPOSPage() {
 
   const handleSettled = async () => {
     toast.success("Payment received & order settled!");
-    setResumeInvoiceId(null);
     setCart([]);
     setDbItems([]);
     setSelectedTable(null);
     setTakeawayInvoiceId(null);
+    setResumeInvoiceId(null);
+    setOrderNumber(null);
     setCurrentOrderStatus(null);
     setCustomerName("");
     setCustomerPhone("");
     setCustomerAddress("");
-    setOrderNumber(null);
+    setCartEpoch((n) => n + 1);
     await loadData();
   };
 
@@ -2289,7 +2375,11 @@ export default function RestaurantPOSPage() {
         .order("created_at", { ascending: false })
         .limit(30);
 
-      if (!error && data) {
+      if (error) {
+        toast.error(error.message || "Could not load order history.");
+        return;
+      }
+      if (data) {
         const liveInvoiceId =
           activeOrderInvoiceId ??
           (posMode === "dining" ? selectedTable?.active_invoice_id ?? null : takeawayInvoiceId);
@@ -2312,10 +2402,16 @@ export default function RestaurantPOSPage() {
               displayTotal = netTotal;
             }
 
-            let cost = Number(ord.cost_amount);
+            const storedCost = Number(ord.cost_amount);
+            const hasStoredCost =
+              ord.cost_amount != null &&
+              ord.cost_amount !== "" &&
+              Number.isFinite(storedCost) &&
+              storedCost > 0;
+            let cost = hasStoredCost ? storedCost : Number.NaN;
             let profit = Number(ord.profit_amount);
             const shouldEstimateCost =
-              isLive || ord.status === "draft" && (!Number.isFinite(cost) || cost <= 0);
+              isLive || (ord.status === "draft" && !hasStoredCost);
 
             if (shouldEstimateCost) {
               if (isLive && billingCart.length > 0) {
@@ -2343,9 +2439,10 @@ export default function RestaurantPOSPage() {
               ...ord,
               total_amount: displayTotal,
               invoice_items: items,
-              cost_amount: cost,
-              profit_amount: profit,
+              cost_amount: Number.isFinite(cost) ? cost : null,
+              profit_amount: Number.isFinite(profit) ? profit : null,
               _liveDraft: isLive && billingCart.length > 0,
+              _costEstimated: shouldEstimateCost && Number.isFinite(cost),
             };
           })
         );
@@ -2759,10 +2856,19 @@ export default function RestaurantPOSPage() {
                           })
                           .join(", ");
                         const isPaid = ord.status === "paid" || ord.restaurant_order_status === "settled";
+                        const statusKey = (ord.restaurant_order_status ||
+                          (isPaid ? "settled" : "pending")) as RestaurantOrderStatus;
+                        const statusLabel =
+                          RESTAURANT_ORDER_STATUS_LABELS[statusKey]?.[language === "en" ? "en" : "ur"] ||
+                          statusKey;
                         const costAmt = Number(ord.cost_amount);
                         const profitAmt = Number(ord.profit_amount);
-                        const hasCost =
-                          ord.cost_amount != null && ord.cost_amount !== "" && Number.isFinite(costAmt);
+                        const hasCost = Number.isFinite(costAmt);
+                        const when = ord.created_at ? new Date(ord.created_at) : null;
+                        const timeLabel =
+                          when && !Number.isNaN(when.getTime())
+                            ? when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : "—";
 
                         return (
                           <div
@@ -2779,7 +2885,7 @@ export default function RestaurantPOSPage() {
                                     ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                                     : "bg-amber-50 text-amber-800 border border-amber-200"
                                 }`}>
-                                  {ord.restaurant_order_status || ord.status}
+                                  {statusLabel}
                                 </div>
                                 {ord._liveDraft && (
                                   <div className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
@@ -2794,7 +2900,7 @@ export default function RestaurantPOSPage() {
                                 {itemsSummary || "No items"}
                               </p>
                               <div className="text-[9px] text-slate-400">
-                                {new Date(ord.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {ord.parties?.name || ord.customer_name || "Walk-in"}
+                                {timeLabel} · {ord.parties?.name || ord.customer_name || "Walk-in"}
                               </div>
                             </div>
 
@@ -2802,43 +2908,50 @@ export default function RestaurantPOSPage() {
                               <div className="font-black text-slate-900 text-xs font-mono">
                                 Rs {Number(ord.total_amount || 0).toLocaleString()}
                               </div>
-                              {hasCost || (ord._liveDraft && Number.isFinite(costAmt)) ? (
-                                <div className="text-[9px] font-mono text-slate-600">
-                                  {language === "en" ? "COGS (est.)" : "لاگت"} Rs {costAmt.toFixed(0)}
+                              {hasCost ? (
+                                <div className="text-[9px] font-mono text-slate-600 text-right">
+                                  {ord._costEstimated
+                                    ? language === "en"
+                                      ? "COGS (est.)"
+                                      : "لاگت (تخمینہ)"
+                                    : language === "en"
+                                      ? "COGS"
+                                      : "لاگت"}{" "}
+                                  Rs {costAmt.toFixed(0)}
                                   {" · "}
-                                  <div className="text-emerald-700">
+                                  <span className="text-emerald-700">
                                     {language === "en" ? "Profit" : "منافع"} Rs{" "}
                                     {(Number.isFinite(profitAmt)
                                       ? profitAmt
                                       : Number(ord.total_amount || 0) - costAmt
                                     ).toFixed(0)}
+                                  </span>
+                                </div>
+                                ) : (
+                                  <div className="text-[9px] text-slate-400">
+                                    {language === "en"
+                                      ? "COGS - add items or send KOT"
+                                      : "آئٹم یا KOT"}
                                   </div>
-                                </div>
-                              ) : (
-                                <div className="text-[9px] text-slate-400">
-                                  {language === "en"
-                                    ? "COGS - add items or send KOT"
-                                    : "آئٹم یا KOT"}
-                                </div>
-                              )}
-                              {!isPaid && ord.id && (
-                                <button
-                                  type="button"
-                                  onClick={() => void loadInvoiceIntoPosForEdit(ord.id)}
-                                  className="mt-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer transition flex items-center gap-1"
-                                >
-                                  <Edit size={10} />
-                                  {resumeInvoiceId === ord.id
-                                    ? language === "en"
-                                      ? "Editing Now"
-                                      : "ایڈٹ جاری"
-                                    : language === "en"
-                                      ? "Edit Bill"
-                                      : "بل ایڈٹ"}
-                                </button>
-                              )}
+                                )}
+                                {!isPaid && ord.id && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void loadInvoiceIntoPosForEdit(ord.id)}
+                                    className="mt-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer transition flex items-center gap-1"
+                                  >
+                                    <Edit size={10} />
+                                    {resumeInvoiceId === ord.id
+                                      ? language === "en"
+                                        ? "Editing Now"
+                                        : "ایڈٹ جاری"
+                                      : language === "en"
+                                        ? "Edit Bill"
+                                        : "بل ایڈٹ"}
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
                         );
                       })}
                     </div>

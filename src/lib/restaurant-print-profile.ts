@@ -180,6 +180,46 @@ function copiesForJob(
 }
 
 /** Printers + copy counts for a slip type (skips 0 copies and blank names). */
+/** Roti/simple KOT → one chosen printer + copies (does not print on both by default). */
+export function resolveSimpleKotPrintDispatch(
+  settings: Partial<ReceiptSettings> | undefined,
+  companyRow?: Record<string, unknown> | null
+): RestaurantPrintDispatch | null {
+  const slots = resolveRestaurantPrinterSlots(settings, companyRow);
+  const slotIndex =
+    settings?.restaurantSimpleKotPrinterSlot === 1 ? 1 : 0;
+  const slot = slots[slotIndex];
+  const name = slot?.name?.trim();
+  if (!name) return null;
+
+  const dedicated = clampCopyCount(settings?.restaurantSimpleKotCopies);
+  const copies =
+    dedicated > 0 ? dedicated : clampCopyCount(slot.kotCopies);
+  if (copies <= 0) return null;
+
+  return { printerName: name, copies };
+}
+
+/** Kathi / second simple KOT lane — separate slip + printer slot from roti. */
+export function resolveSecondarySimpleKotPrintDispatch(
+  settings: Partial<ReceiptSettings> | undefined,
+  companyRow?: Record<string, unknown> | null
+): RestaurantPrintDispatch | null {
+  const slots = resolveRestaurantPrinterSlots(settings, companyRow);
+  const slotIndex =
+    settings?.restaurantSecondarySimpleKotPrinterSlot === 1 ? 1 : 0;
+  const slot = slots[slotIndex];
+  const name = slot?.name?.trim();
+  if (!name) return null;
+
+  const dedicated = clampCopyCount(settings?.restaurantSecondarySimpleKotCopies);
+  const copies =
+    dedicated > 0 ? dedicated : clampCopyCount(slot.kotCopies);
+  if (copies <= 0) return null;
+
+  return { printerName: name, copies };
+}
+
 export function resolveRestaurantPrintDispatches(
   job: RestaurantPrintJobType,
   settings: Partial<ReceiptSettings> | undefined,
@@ -194,6 +234,45 @@ export function resolveRestaurantPrintDispatches(
     out.push({ printerName: name, copies });
   }
   return out;
+}
+
+/** Company Details `pn` / kitchen printer — POS `resolve_company_printer_only`. */
+export function resolveCompanyPrinterOnly(
+  settings: Partial<ReceiptSettings> | undefined,
+  companyRow?: Record<string, unknown> | null
+): string {
+  return pickStr(
+    settings?.kitchenPrinterName,
+    companyRow?.kitchen_printer_name,
+    companyRow?.printer_name,
+    companyRow?.pn
+  );
+}
+
+/**
+ * Printer routing like POSRESTURANT `fast_food_order_view`:
+ * KOT → company/kitchen printer; payment/guest → customer printer or Windows default (blank name).
+ */
+export function resolvePosRestaurantPrintDispatches(
+  job: RestaurantPrintJobType,
+  settings: Partial<ReceiptSettings> | undefined,
+  companyRow?: Record<string, unknown> | null
+): RestaurantPrintDispatch[] {
+  const fromSlots = resolveRestaurantPrintDispatches(job, settings, companyRow);
+  if (fromSlots.length > 0) return fromSlots;
+
+  if (job === "kot") {
+    const kitchen = resolveCompanyPrinterOnly(settings, companyRow);
+    if (kitchen) return [{ printerName: kitchen, copies: 1 }];
+    return [{ printerName: "", copies: 1 }];
+  }
+
+  const customer = pickStr(
+    settings?.customerPrinterName,
+    companyRow?.customer_printer_name
+  );
+  if (customer) return [{ printerName: customer, copies: 1 }];
+  return [{ printerName: "", copies: 1 }];
 }
 
 /** Receipt header block - always from company_details (not shop display name alone). */

@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus_Jakarta_Sans } from "next/font/google";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { SidebarFooter } from "@/components/dashboard/sidebar/SidebarFooter";
 import { SidebarNav } from "@/components/dashboard/sidebar/SidebarNav";
 
-const sidebarFont = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+const sidebarFont = {
   variable: "--font-sidebar-modern",
-});
+  className: "font-sans",
+};
 
 const DEFAULT_WIDTH = 260;
 const MIN_WIDTH = 190;

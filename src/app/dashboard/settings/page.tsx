@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Settings, Store, Printer, User, Shield, 
@@ -15,13 +15,20 @@ import { Button } from "@/components/ui/button";
 import { logAudit } from "@/utils/audit";
 import { Input } from "@/components/ui/input";
 import { 
-  ReceiptTemplate, 
+  ReceiptTemplate,
   ReceiptSettings, 
   DEFAULT_RECEIPT_SETTINGS, 
-  SAMPLE_PREVIEW_INVOICE, 
+  SAMPLE_PREVIEW_INVOICE,
   RECEIPT_TEMPLATES 
 } from "@/components/ReceiptTemplate";
 import { printReceiptDirect } from "@/lib/thermalPrinter";
+import { buildDesignerReceiptDocument } from "@/lib/designer-receipt-document";
+import { buildRestaurantBillPreviewHtml } from "@/lib/restaurant-receipt-print";
+import {
+  applyReceiptDesignerTemplateSelection,
+  isReceiptDesignerDefaultSelected,
+  normalizeReceiptTemplateId,
+} from "@/lib/receipt-template-default";
 import {
   defaultRestaurantPrinterSlotsFromCompany,
   resolveRestaurantPrinterSlots,
@@ -29,6 +36,8 @@ import {
 } from "@/lib/restaurant-print-profile";
 import { SidebarThemeSettingsPanel } from "@/components/dashboard/SidebarThemeSettingsPanel";
 import { POPULAR_TIMEZONES, getCurrentTimezonePreview } from "@/lib/timezone";
+import { fetchWindowsPrinterNames } from "@/lib/windows-printers";
+import { isLocalSqliteEnabled } from "@/lib/config";
 
 export default function SettingsPage() {
   const { shopId, userId, userName, shopName, userRole, refreshShopData } = useShop();
@@ -105,12 +114,14 @@ export default function SettingsPage() {
   ];
 
   useEffect(() => {
-    if (shopId) {
-      fetchSettings();
-      if (typeof window !== "undefined") {
-        const savedKeys = localStorage.getItem(`user_gemini_api_keys_${shopId}`);
-        if (savedKeys) setGeminiKeys(savedKeys);
-      }
+    if (!shopId) {
+      setLoading(false);
+      return;
+    }
+    fetchSettings();
+    if (typeof window !== "undefined") {
+      const savedKeys = localStorage.getItem(`user_gemini_api_keys_${shopId}`);
+      if (savedKeys) setGeminiKeys(savedKeys);
     }
   }, [shopId]);
 
@@ -224,6 +235,7 @@ export default function SettingsPage() {
               );
         setReceiptSettings({
           ...mergedReceipt,
+          templateId: normalizeReceiptTemplateId(mergedReceipt.templateId),
           restaurantPrinterSlots: resolveRestaurantPrinterSlots(
             { ...mergedReceipt, restaurantPrinterSlots: slots },
             company as Record<string, unknown> | undefined
@@ -275,8 +287,16 @@ export default function SettingsPage() {
         setFbrSalesTaxRateVal(18);
         setShowFbrQrCodeVal(true);
       }
-    } catch (err: any) {
-      toast.error("Failed to load settings: " + err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn("[settings] fetchSettings:", msg);
+      const onDesktop =
+        typeof window !== "undefined" && window.electronAPI?.isDesktop;
+      if (onDesktop || isLocalSqliteEnabled()) {
+        toast.message("Using saved settings on this computer.");
+      } else {
+        toast.error("Failed to load settings: " + msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -328,28 +348,20 @@ export default function SettingsPage() {
     }
   };
 
-  const refreshWindowsPrinters = async () => {
+  const refreshWindowsPrinters = useCallback(async () => {
     setLoadingPrinters(true);
     try {
-      const res = await fetch("/api/restaurant/thermal-print");
-      const data = (await res.json()) as {
-        ok?: boolean;
-        printers?: string[];
-        note?: string;
-        error?: string;
-      };
-      if (data.ok && Array.isArray(data.printers)) {
-        setWindowsPrinters(data.printers);
+      const { printers, defaultPrinter, source } = await fetchWindowsPrinterNames();
+      setWindowsPrinters(printers);
+      if (printers.length) {
         toast.success(
-          data.printers.length
-            ? `${data.printers.length} Windows printer(s) loaded`
-            : "No printers found - check Windows Printers & scanners"
+          `${printers.length} printer(s) loaded${source === "electron" ? " (desktop)" : ""}${
+            defaultPrinter ? ` · default: ${defaultPrinter}` : ""
+          }`
         );
       } else {
         toast.message(
-          data.note ||
-            data.error ||
-            "List printers from the local Windows POS machine (npm run dev on shop PC)."
+          "No printers found — check Windows Settings → Printers & scanners, then click Load printers again."
         );
       }
     } catch (err: unknown) {
@@ -358,7 +370,15 @@ export default function SettingsPage() {
     } finally {
       setLoadingPrinters(false);
     }
-  };
+  }, []);
+
+  const autoLoadedPrintersRef = useRef(false);
+  useEffect(() => {
+    if (loading || industryTypeVal !== "restaurant" || autoLoadedPrintersRef.current) return;
+    if (typeof window === "undefined" || !window.electronAPI?.isDesktop) return;
+    autoLoadedPrintersRef.current = true;
+    void refreshWindowsPrinters();
+  }, [loading, industryTypeVal, refreshWindowsPrinters]);
 
   const handleSaveShopDetails = async () => {
     setIsSubmitting(true);
@@ -646,17 +666,37 @@ export default function SettingsPage() {
     }
   };
 
-  // Trigger direct thermal print for the preview sample
+  const defaultSlipPreview = isReceiptDesignerDefaultSelected(receiptSettings.templateId);
+  const defaultSlipHtml = useMemo(
+    () =>
+      defaultSlipPreview
+        ? buildRestaurantBillPreviewHtml(receiptSettings, {
+            name: shopDetails.name,
+            phone: shopDetails.phone,
+            address: shopDetails.address,
+          })
+        : "",
+    [defaultSlipPreview, receiptSettings, shopDetails.name, shopDetails.phone, shopDetails.address]
+  );
+
   const handlePrintSample = () => {
-    const printContent = document.getElementById("receipt-preview-container")?.innerHTML;
+    const printContent = defaultSlipPreview
+      ? defaultSlipHtml
+      : buildDesignerReceiptDocument(
+          document.getElementById("receipt-preview-container")?.innerHTML || "",
+          receiptSettings,
+          "Sample Receipt"
+        );
     if (!printContent) return;
 
     printReceiptDirect({
       receiptHtml: printContent,
       settings: receiptSettings,
+      targetPrinterName:
+        receiptSettings.customerPrinterName?.trim() || undefined,
       title: "Sample Receipt Print - The Accounts",
       onSuccess: () => {
-        toast.success("Printing sample receipt on default printer...");
+        toast.success("Printing the same receipt shown in the designer...");
       },
       onError: (err) => {
         toast.error("Printing failed: " + ((err as any)?.message || "Check printer connection"));
@@ -852,6 +892,17 @@ export default function SettingsPage() {
                         {loadingPrinters ? "…" : "Load printers"}
                       </button>
                     </div>
+                    {windowsPrinters.length > 0 ? (
+                      <p className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
+                        {windowsPrinters.length} printer(s) ready — pick names in
+                        the list below.
+                      </p>
+                    ) : (
+                      <p className="text-[10px] font-semibold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
+                        Click <strong>Load printers</strong> (desktop) to fill
+                        Windows printer names.
+                      </p>
+                    )}
                     <datalist id="windows-printer-list">
                       {windowsPrinters.map((p) => (
                         <option key={p} value={p} />
@@ -985,6 +1036,60 @@ export default function SettingsPage() {
                         placeholder="Slip heading e.g. ROTI / NAN"
                         className="h-9 rounded-lg font-bold text-sm"
                       />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-orange-900 uppercase mb-1">
+                            Roti slip printer
+                          </label>
+                          <select
+                            value={
+                              receiptSettings.restaurantSimpleKotPrinterSlot ===
+                              1
+                                ? "1"
+                                : "0"
+                            }
+                            onChange={(e) =>
+                              setReceiptSettings((prev) => ({
+                                ...prev,
+                                restaurantSimpleKotPrinterSlot: Number(
+                                  e.target.value
+                                ) as 0 | 1,
+                              }))
+                            }
+                            className="h-9 w-full rounded-lg border border-orange-200 bg-white px-2 text-sm font-semibold"
+                          >
+                            <option value="0">Printer 1</option>
+                            <option value="1">Printer 2</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-orange-900 uppercase mb-1">
+                            Roti slip copies
+                          </label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={99}
+                            value={receiptSettings.restaurantSimpleKotCopies ?? 0}
+                            onChange={(e) =>
+                              setReceiptSettings((prev) => ({
+                                ...prev,
+                                restaurantSimpleKotCopies: Math.max(
+                                  0,
+                                  Math.min(
+                                    99,
+                                    Math.floor(Number(e.target.value) || 0)
+                                  )
+                                ),
+                              }))
+                            }
+                            className="h-9 rounded-lg font-mono text-sm"
+                          />
+                          <p className="text-[9px] text-orange-800/80 mt-0.5">
+                            0 = use that printer&apos;s KOT copies above
+                          </p>
+                        </div>
+                      </div>
                       <label className="flex items-center gap-2 text-[11px] font-semibold text-orange-950 cursor-pointer">
                         <input
                           type="checkbox"
@@ -1039,6 +1144,135 @@ export default function SettingsPage() {
                             );
                           })
                         )}
+                      </div>
+                    </div>
+                    <div className="bg-white/95 border border-amber-300 rounded-xl p-3 space-y-2.5">
+                      <div>
+                        <h5 className="text-xs font-black text-amber-950 uppercase">
+                          Separate simple KOT (Kathi / rolls)
+                        </h5>
+                        <p className="text-[10px] text-amber-900/85 mt-0.5 leading-relaxed">
+                          Kathi اور اسی طرح کی اشیاء الگ کچن ٹکٹ پر — روتی والے slip کے ساتھ mix نہیں ہوں گی۔
+                        </p>
+                      </div>
+                      <Input
+                        value={
+                          receiptSettings.restaurantSecondarySimpleKotTitle || "KATHI"
+                        }
+                        onChange={(e) =>
+                          setReceiptSettings((prev) => ({
+                            ...prev,
+                            restaurantSecondarySimpleKotTitle: e.target.value,
+                          }))
+                        }
+                        placeholder="Slip heading e.g. KATHI"
+                        className="h-9 rounded-lg font-bold text-sm"
+                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                            Kathi slip printer
+                          </label>
+                          <select
+                            value={
+                              receiptSettings.restaurantSecondarySimpleKotPrinterSlot ===
+                              1
+                                ? "1"
+                                : "0"
+                            }
+                            onChange={(e) =>
+                              setReceiptSettings((prev) => ({
+                                ...prev,
+                                restaurantSecondarySimpleKotPrinterSlot: Number(
+                                  e.target.value
+                                ) as 0 | 1,
+                              }))
+                            }
+                            className="h-9 w-full rounded-lg border border-amber-200 bg-white px-2 text-sm font-semibold"
+                          >
+                            <option value="0">Printer 1</option>
+                            <option value="1">Printer 2</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">
+                            Kathi slip copies
+                          </label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={99}
+                            value={
+                              receiptSettings.restaurantSecondarySimpleKotCopies ?? 0
+                            }
+                            onChange={(e) =>
+                              setReceiptSettings((prev) => ({
+                                ...prev,
+                                restaurantSecondarySimpleKotCopies: Math.max(
+                                  0,
+                                  Math.min(
+                                    99,
+                                    Math.floor(Number(e.target.value) || 0)
+                                  )
+                                ),
+                              }))
+                            }
+                            className="h-9 rounded-lg font-mono text-sm"
+                          />
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-[11px] font-semibold text-amber-950 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={
+                            receiptSettings.restaurantSecondarySimpleKotMatchNames !==
+                            false
+                          }
+                          onChange={(e) =>
+                            setReceiptSettings((prev) => ({
+                              ...prev,
+                              restaurantSecondarySimpleKotMatchNames: e.target.checked,
+                            }))
+                          }
+                          className="rounded border-amber-400"
+                        />
+                        Also match product names containing &quot;kathi&quot;
+                      </label>
+                      <div className="max-h-40 overflow-y-auto rounded-lg border border-amber-200 divide-y">
+                        {menuCategories.map((cat) => {
+                          const selected = (
+                            receiptSettings.restaurantSecondarySimpleKotCategoryIds ||
+                            []
+                          ).includes(cat.id);
+                          return (
+                            <label
+                              key={`kathi-${cat.id}`}
+                              className="flex items-center gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-amber-50"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => {
+                                  setReceiptSettings((prev) => {
+                                    const cur = [
+                                      ...(prev.restaurantSecondarySimpleKotCategoryIds ||
+                                        []),
+                                    ];
+                                    const next = selected
+                                      ? cur.filter((id) => id !== cat.id)
+                                      : [...cur, cat.id];
+                                    return {
+                                      ...prev,
+                                      restaurantSecondarySimpleKotCategoryIds: next,
+                                    };
+                                  });
+                                }}
+                                className="rounded border-amber-400"
+                              />
+                              <span className="font-semibold text-slate-800">{cat.name}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -1747,16 +1981,23 @@ export default function SettingsPage() {
               {/* Card 1: 15 Receipt Layout Templates Grid */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                 <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 pb-2 border-b border-slate-100">
-                  <Layout className="text-blue-500" size={16} /> Choose Receipt Template Presets (15 Layouts)
+                  <Layout className="text-blue-500" size={16} /> Choose Receipt Template Presets
                 </h3>
                 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[360px] overflow-y-auto pr-1.5 custom-scrollbar">
                   {RECEIPT_TEMPLATES.map((tmpl) => {
-                    const isSelected = receiptSettings.templateId === tmpl.id;
+                    const isSelected =
+                      tmpl.id === "restaurant-default"
+                        ? isReceiptDesignerDefaultSelected(receiptSettings.templateId)
+                        : receiptSettings.templateId === tmpl.id;
                     return (
                       <button
                         key={tmpl.id}
-                        onClick={() => setReceiptSettings(prev => ({ ...prev, templateId: tmpl.id }))}
+                        onClick={() =>
+                          setReceiptSettings((prev) =>
+                            applyReceiptDesignerTemplateSelection(prev, tmpl.id)
+                          )
+                        }
                         className={`text-left p-3 rounded-2xl border transition-all relative flex flex-col justify-between h-[100px] hover:shadow-sm ${
                           isSelected 
                             ? "bg-blue-50/50 border-blue-500 ring-2 ring-blue-500/10 shadow-sm" 
@@ -1797,7 +2038,7 @@ export default function SettingsPage() {
                       onChange={(e) => setReceiptSettings(prev => ({ ...prev, pageSize: e.target.value as any }))}
                       className="w-full bg-white border border-slate-200 h-10 rounded-xl px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     >
-                      <option value="MM80">80mm Thermal (Standard Retail)</option>
+                      <option value="MM80">80mm roll — 78mm print width (standard)</option>
                       <option value="MM58">58mm Thermal (Mobile / Small POS)</option>
                       <option value="A4">A4 Invoicing Sheet (A4 size)</option>
                       <option value="A5">A5 Medium Sheet (A5 size)</option>
@@ -2097,203 +2338,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Card 4: Visibility & Show/Hide switches */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 pb-2 border-b border-slate-100">
-                  <Eye className="text-blue-500" size={16} /> Visibility & Column Selectors
-                </h3>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  {/* Shop Info details */}
-                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.showPhone}
-                      onChange={(e) => setReceiptSettings(prev => ({ ...prev, showPhone: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="text-xs font-bold text-slate-700">Show Phone</div>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.showAddress}
-                      onChange={(e) => setReceiptSettings(prev => ({ ...prev, showAddress: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="text-xs font-bold text-slate-700">Show Address</div>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.showEmail}
-                      onChange={(e) => setReceiptSettings(prev => ({ ...prev, showEmail: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="text-xs font-bold text-slate-700">Show Email</div>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.showWebsite}
-                      onChange={(e) => setReceiptSettings(prev => ({ ...prev, showWebsite: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="text-xs font-bold text-slate-700">Show Website</div>
-                  </label>
-
-                  {/* Logo Options */}
-                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.showLogo}
-                      onChange={(e) => setReceiptSettings(prev => ({ ...prev, showLogo: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="text-xs font-bold text-slate-700">Show Logo Image</div>
-                  </label>
-
-                  {/* Invoice / Meta info */}
-                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.showCustomerInfo}
-                      onChange={(e) => setReceiptSettings(prev => ({ ...prev, showCustomerInfo: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="text-xs font-bold text-slate-700">Customer Details</div>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.showPaymentMode}
-                      onChange={(e) => setReceiptSettings(prev => ({ ...prev, showPaymentMode: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="text-xs font-bold text-slate-700">Payment Methods</div>
-                  </label>
-
-                  {/* Items columns */}
-                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.showItemCode}
-                      onChange={(e) => setReceiptSettings(prev => ({ ...prev, showItemCode: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="text-xs font-bold text-slate-700">Product Codes</div>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100/70 p-2 rounded-xl border border-slate-150 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.showDiscount}
-                      onChange={(e) => setReceiptSettings(prev => ({ ...prev, showDiscount: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                    />
-                    <div className="text-xs font-bold text-slate-700">Tax & Discounts</div>
-                  </label>
-
-                  {/* Medical Store / Pharmacy Dedicated Toggles */}
-                  {(industryTypeVal === "pharmacy" || industryTypeVal === "medical" || industryTypeVal === "health") && (
-                    <>
-                      <label className="flex items-center gap-2 cursor-pointer bg-emerald-50/60 hover:bg-emerald-100/60 p-2 rounded-xl border border-emerald-200 select-none">
-                        <input 
-                          type="checkbox"
-                          checked={receiptSettings.showBatchNumber !== false}
-                          onChange={(e) => setReceiptSettings(prev => ({ ...prev, showBatchNumber: e.target.checked }))}
-                          className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
-                        />
-                        <div className="text-xs font-bold text-emerald-950">Show Batch No</div>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer bg-emerald-50/60 hover:bg-emerald-100/60 p-2 rounded-xl border border-emerald-200 select-none">
-                        <input 
-                          type="checkbox"
-                          checked={receiptSettings.showExpiryDate !== false}
-                          onChange={(e) => setReceiptSettings(prev => ({ ...prev, showExpiryDate: e.target.checked }))}
-                          className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
-                        />
-                        <div className="text-xs font-bold text-emerald-950">Show Expiry Date</div>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer bg-amber-50/60 hover:bg-amber-100/60 p-2 rounded-xl border border-amber-200 select-none">
-                        <input 
-                          type="checkbox"
-                          checked={!!receiptSettings.showShelfLocation}
-                          onChange={(e) => setReceiptSettings(prev => ({ ...prev, showShelfLocation: e.target.checked }))}
-                          className="w-4 h-4 text-amber-600 rounded cursor-pointer"
-                        />
-                        <div className="text-xs font-bold text-amber-950">Show Shelf / Rack</div>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer bg-red-50/60 hover:bg-red-100/60 p-2 rounded-xl border border-red-200 select-none">
-                        <input 
-                          type="checkbox"
-                          checked={receiptSettings.mandatoryControlledDrugForm !== false}
-                          onChange={(e) => setReceiptSettings(prev => ({ ...prev, mandatoryControlledDrugForm: e.target.checked }))}
-                          className="w-4 h-4 text-red-600 rounded cursor-pointer"
-                        />
-                        <div className="text-xs font-bold text-red-950">Controlled Drug Rx Form (Schedule G)</div>
-                      </label>
-                    </>
-                  )}
-
-                  <label className="flex items-center gap-2 cursor-pointer bg-emerald-50 hover:bg-emerald-100/70 p-2 rounded-xl border border-emerald-300 select-none">
-                    <input 
-                      type="checkbox"
-                      checked={receiptSettings.enableFBR || false}
-                      onChange={(e) => {
-                        setReceiptSettings(prev => ({ ...prev, enableFBR: e.target.checked }));
-                        setEnableFbrVal(e.target.checked);
-                      }}
-                      className="w-4 h-4 text-emerald-600 rounded cursor-pointer accent-emerald-600"
-                    />
-                    <div className="text-xs font-bold text-emerald-950">🇵🇰 FBR Tax Badge &amp; QR</div>
-                  </label>
-                </div>
-
-                {receiptSettings.showLogo && (
-                  <div className="pt-2.5 animate-in fade-in duration-200 space-y-2">
-                    <label className="block text-xs font-semibold text-slate-500 uppercase">Upload Shop Logo</label>
-                    <div className="flex flex-col sm:flex-row gap-3 items-center bg-slate-50 border border-dashed border-slate-200 p-3 rounded-2xl">
-                      {receiptSettings.logoUrl ? (
-                        <div className="relative w-16 h-16 bg-white border border-slate-200 p-1 rounded-xl overflow-hidden shrink-0 flex items-center justify-center group">
-                          <img src={receiptSettings.logoUrl} alt="Store Logo Thumbnail" className="w-full h-full object-contain" />
-                          <button
-                            type="button"
-                            onClick={() => setReceiptSettings(prev => ({ ...prev, logoUrl: "" }))}
-                            className="absolute inset-0 bg-red-600/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold text-[10px] rounded-lg"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="w-16 h-16 bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
-                          <Store size={22} />
-                        </div>
-                      )}
-                      <div className="flex-1 space-y-1 w-full">
-                        <label className="block bg-white hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors border border-slate-200 px-4 py-2 text-center rounded-xl cursor-pointer text-xs font-bold text-slate-700 transition-all select-none">
-                          Choose Image File
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleLogoUpload}
-                            className="hidden"
-                          />
-                        </label>
-                        <p className="text-[9px] text-slate-400 leading-normal text-center sm:text-left">Supports PNG, JPG, JPEG. Max size 1.5MB.</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* Save Button for Receipt Customizer */}
               <Button 
                 onClick={handleSaveReceiptSettings} 
@@ -2324,19 +2368,28 @@ export default function SettingsPage() {
 
               {/* Scrollable Receipt Preview wrapper */}
               <div className="bg-slate-200/50 border border-slate-200 p-4 rounded-3xl shadow-inner max-h-[640px] overflow-y-auto flex items-start justify-center custom-scrollbar">
-                <div id="receipt-preview-container" className="bg-white shadow-xl rounded-md transition-all duration-300">
-                  <ReceiptTemplate 
-                    settings={receiptSettings} 
-                    invoice={SAMPLE_PREVIEW_INVOICE} 
-                    shopDetails={{
-                      name: shopDetails.name,
-                      phone: shopDetails.phone,
-                      address: shopDetails.address,
-                      email: shopDetails.email,
-                      website: shopDetails.website
-                    }} 
+                {defaultSlipPreview ? (
+                  <iframe
+                    title="Default receipt preview"
+                    srcDoc={defaultSlipHtml}
+                    className="bg-white shadow-xl border-0"
+                    style={{ width: "80mm", minHeight: "520px", height: "600px" }}
                   />
-                </div>
+                ) : (
+                  <div id="receipt-preview-container" className="bg-white shadow-xl" style={{ width: receiptSettings.pageSize === "MM58" ? "58mm" : receiptSettings.pageSize === "A5" ? "148mm" : receiptSettings.pageSize === "A4" ? "210mm" : "80mm", boxSizing: "border-box" }}>
+                    <ReceiptTemplate
+                      settings={receiptSettings}
+                      invoice={SAMPLE_PREVIEW_INVOICE}
+                      shopDetails={{
+                        name: shopDetails.name,
+                        phone: shopDetails.phone,
+                        address: shopDetails.address,
+                        email: shopDetails.email,
+                        website: shopDetails.website
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Direct Silent Thermal Printing Guide Card */}

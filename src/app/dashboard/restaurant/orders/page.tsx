@@ -36,8 +36,6 @@ import {
 import {
   mapDbInvoiceItemsToReceiptLines,
   printRestaurantGuestBill,
-  printRestaurantRevisedGuestBill,
-  printRestaurantPaidReceipt,
   printRestaurantKOTDispatch,
 } from "@/lib/restaurant-receipt-print";
 import { loadLatestKOTForInvoice, loadKitchenTicketForPrint } from "@/lib/restaurant-kitchen";
@@ -537,7 +535,7 @@ export default function RestaurantOrdersPage() {
       toast.error(isEn ? "Could not load KOT." : "KOT لوڈ نہیں ہوا۔");
       return;
     }
-    printRestaurantKOTDispatch(
+    await printRestaurantKOTDispatch(
       {
         orderNumber: payload.orderNumber,
         tableName: payload.tableName,
@@ -561,27 +559,25 @@ export default function RestaurantOrdersPage() {
     );
   };
 
-  const handleReprintPaidReceipt = (order: OrderRow) => {
+  const handleReprintPaidReceipt = async (order: OrderRow) => {
     const lines = mapDbInvoiceItemsToReceiptLines(order.invoice_items);
     const subtotal = lines.reduce((s, i) => s + i.unit_price * i.quantity, 0);
-    const paidAmount = Number(order.paid_amount ?? order.total_amount);
-    const remainingDue = Math.max(0, Number(order.total_amount) - paidAmount);
-    printRestaurantPaidReceipt(
+    const discount = Number(order.discount) || 0;
+    const taxAmount = Number(order.tax_amount) || 0;
+    const netTotal = Number(order.total_amount) || Math.max(0, subtotal + taxAmount - discount);
+    await printRestaurantGuestBill(
       {
         invoiceId: order.id,
         orderNumber: order.order_number,
         tableName: order.tableName || null,
         serviceType: order.service_type,
         ...orderGuestDetails(order),
-        paymentMode: order.payment_mode || "cash",
         items: lines,
         subtotal,
-        discount: order.discount || 0,
-        taxRate: order.tax_rate || 0,
-        taxAmount: order.tax_amount || 0,
-        netTotal: order.total_amount,
-        paidAmount,
-        remainingDue,
+        discount,
+        taxRate: Number(order.tax_rate) || 0,
+        taxAmount,
+        netTotal,
         settings: receiptSettings,
         shopDetails: shopDetailsForPrint(),
         companyRow: companyDetails,
@@ -591,12 +587,10 @@ export default function RestaurantOrdersPage() {
     );
   };
 
-  const handleReprintRevised = (order: OrderRow) => {
-    const history = parseRestaurantEditHistory(order.edit_history);
-    const latest = history[0];
+  const handleReprintRevised = async (order: OrderRow) => {
     const lines = mapDbInvoiceItemsToReceiptLines(order.invoice_items);
     const subtotal = lines.reduce((s, i) => s + i.unit_price * i.quantity, 0);
-    printRestaurantRevisedGuestBill(
+    await printRestaurantGuestBill(
       {
         invoiceId: order.id,
         orderNumber: order.order_number,
@@ -605,18 +599,13 @@ export default function RestaurantOrdersPage() {
         ...orderGuestDetails(order),
         items: lines,
         subtotal,
-        discount: order.discount || 0,
-        taxRate: order.tax_rate || 0,
-        taxAmount: order.tax_amount || 0,
-        netTotal: order.total_amount,
+        discount: Number(order.discount) || 0,
+        taxRate: Number(order.tax_rate) || 0,
+        taxAmount: Number(order.tax_amount) || 0,
+        netTotal: Number(order.total_amount) || Math.max(0, subtotal + (Number(order.tax_amount) || 0) - (Number(order.discount) || 0)),
         settings: receiptSettings,
         shopDetails: shopDetailsForPrint(),
         companyRow: companyDetails,
-        revisionNumber: Math.max(1, history.length),
-        previousTotal: latest?.total_amount ?? order.total_amount,
-        editedAt: latest?.edited_at,
-        editedBy: latest?.edited_by,
-        changes: latest?.changes,
         createdAt: order.created_at,
       },
       {
@@ -653,7 +642,7 @@ export default function RestaurantOrdersPage() {
       const taxAmount = Number(order.tax_amount) || 0;
       const netTotal = Math.max(0, subtotal + taxAmount - discount);
 
-      printRestaurantGuestBill(
+      await printRestaurantGuestBill(
         {
           invoiceId: order.id,
           orderNumber: order.order_number,
@@ -1039,6 +1028,8 @@ export default function RestaurantOrdersPage() {
             ? {
                 total_amount: historyOrder.total_amount,
                 discount: historyOrder.discount,
+                tax_amount: historyOrder.tax_amount,
+                paid_amount: historyOrder.paid_amount,
               }
             : null
         }

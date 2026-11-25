@@ -84,6 +84,12 @@ function BillItemsTable({
   );
 }
 
+function formatHistoryWhen(value?: string | null): string {
+  if (!value) return "";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString();
+}
+
 function BillTotalsFooter({
   totals,
   isEn,
@@ -227,9 +233,9 @@ export function RestaurantBillEditHistoryModal({
                           }`}
                         >
                           {isEn ? `Version v${vNum}` : `ورژن v${vNum}`}
-                          <div className="opacity-80 font-normal ml-1">
-                            {new Date(hist.edited_at).toLocaleDateString()}
-                          </div>
+                          <span className="block opacity-80 font-normal">
+                            {formatHistoryWhen(hist.edited_at).split(",")[0]}
+                          </span>
                         </button>
                       );
                     })}
@@ -237,7 +243,7 @@ export function RestaurantBillEditHistoryModal({
 
                   {selected && (
                     <div className="text-[10px] text-slate-500 font-medium">
-                      {new Date(selected.edited_at).toLocaleString()}
+                      {formatHistoryWhen(selected.edited_at)}
                       {selected.edited_by ? ` · ${selected.edited_by}` : ""}
                     </div>
                   )}
@@ -291,7 +297,7 @@ export function RestaurantBillEditHistoryModal({
                         ({isEn ? "before this edit" : "اس edit سے پہلے"})
                       </div>
                       <div className="normal-case font-medium">
-                        {new Date(hist.edited_at).toLocaleString()}
+                        {formatHistoryWhen(hist.edited_at)}
                         {hist.edited_by ? ` · ${hist.edited_by}` : ""}
                       </div>
                     </div>

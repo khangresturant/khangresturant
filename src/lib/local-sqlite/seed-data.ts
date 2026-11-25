@@ -46,6 +46,7 @@ export function getFlame9SeedData(tableName: string): unknown[] {
           name: FLAME9_LOCAL_LOGINS.admin.name,
           email: FLAME9_LOCAL_LOGINS.admin.email,
           role: "superadmin",
+          ui_preferences: {},
           permissions: {
             panels: {
               dashboard: true,
@@ -79,6 +80,7 @@ export function getFlame9SeedData(tableName: string): unknown[] {
           name: FLAME9_LOCAL_LOGINS.staff.name,
           email: FLAME9_LOCAL_LOGINS.staff.email,
           role: "staff",
+          ui_preferences: {},
           permissions: {
             panels: {
               dashboard: true,

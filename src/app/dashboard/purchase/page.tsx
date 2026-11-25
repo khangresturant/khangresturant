@@ -1600,7 +1600,7 @@ export default function PurchasePage() {
       const bal = Number(po.total_amount)-Number(po.paid_amount);
       if (bal > 0) { doc.setTextColor(220,38,38); doc.text(`Outstanding: Rs ${bal.toLocaleString()}`, 130, finalY+12); }
       doc.setFont("helvetica","italic"); doc.setFontSize(7.5); doc.setTextColor(148,163,184);
-      doc.text("Powered by The Accounts POS", 15, 285);
+      doc.text("Powered by Falcon Shift", 15, 285);
       doc.save(`purchase_${po.id.slice(0,8)}.pdf`);
       toast.success("PDF downloaded!");
     } catch (err: any) { toast.error("PDF failed: " + err.message); }

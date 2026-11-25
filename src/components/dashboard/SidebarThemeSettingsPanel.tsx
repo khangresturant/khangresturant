@@ -84,7 +84,7 @@ export function SidebarThemeSettingsPanel() {
                 syncStatus === "synced"
                   ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
                   : syncStatus === "error"
-                    ? "text-amber-700 bg-amber-50 border border-amber-200"
+                    ? "text-slate-600 bg-slate-100 border border-slate-200"
                     : syncStatus === "loading"
                       ? "text-blue-700 bg-blue-50 border border-blue-200"
                       : "text-slate-600 bg-slate-100 border border-slate-200"

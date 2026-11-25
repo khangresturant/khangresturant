@@ -820,7 +820,7 @@ export default function SalesHistoryPage() {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
-      doc.text("Powered by The Accounts POS", 15, 285);
+      doc.text("Powered by Falcon Shift", 15, 285);
 
       doc.save(`sales_report_${activeSubTab}_${new Date().toISOString().slice(0,10)}.pdf`);
       toast.success("Sales report PDF downloaded successfully! 📄");

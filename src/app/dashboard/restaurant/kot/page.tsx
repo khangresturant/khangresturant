@@ -187,7 +187,7 @@ export default function KitchenOrdersPage() {
       toast.error("Could not load KOT for print.");
       return;
     }
-    printRestaurantKOTDispatch(
+    await printRestaurantKOTDispatch(
       {
         orderNumber: payload.orderNumber,
         tableName: payload.tableName,

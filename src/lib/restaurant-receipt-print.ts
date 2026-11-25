@@ -1,14 +1,45 @@
 import { DEFAULT_RECEIPT_SETTINGS, type ReceiptSettings } from "@/components/ReceiptTemplate";
 import { printThermalReceipt } from "@/lib/thermalPrinter";
 import {
+  resolvePosRestaurantPrintDispatches,
   resolvePrinterNameForRole,
-  resolveRestaurantPrintDispatches,
+  resolveSecondarySimpleKotPrintDispatch,
+  resolveSimpleKotPrintDispatch,
+  type RestaurantPrintDispatch,
   type RestaurantPrintJobType,
   type RestaurantPrintRole,
 } from "@/lib/restaurant-print-profile";
 import {
+  RECEIPT_INFO_FONT_PX,
+  RECEIPT_ITEMS_TABLE_CELL_PX,
+  RECEIPT_ITEMS_TABLE_HEADER_PX,
+  RECEIPT_KITCHEN_INFO_FONT_PX,
+  RECEIPT_KITCHEN_TITLE_PX,
+  RECEIPT_TOTAL_AMOUNT_FONT_PX,
+  RECEIPT_TOTAL_LINE_BASE_PX,
+} from "@/lib/posrestaurant-receipt-template";
+import {
+  buildKitchenReceiptHtmlDocument,
+  buildKitchenSectionReceiptHtmlDocument,
+  buildPaymentReceiptHtmlDocument,
+  companyFooterNote,
+  getReceiptOrderNumber,
+  type FastFoodKitchenLine,
+  type FastFoodPaymentLine,
+  type RestaurantSlipDocumentStyle,
+} from "@/lib/fast-food-order-view-receipts";
+import { mergeRestaurantReceiptPrintSettings } from "@/lib/receipt-template-default";
+import {
+  resolveRestaurantReceiptDocumentStyle,
+  restaurantSlipHeadMetaTags,
+} from "@/lib/restaurant-receipt-styling";
+import { mergeSizeIntoKitchenDisplayName } from "@/lib/restaurant-kot-display";
+import { receiptSizeColumnValue } from "@/lib/restaurant-receipt-size";
+import {
   isSimpleKotCategoryConfigured,
+  secondaryKotSlipTitle,
   simpleKotSlipTitle,
+  consolidateKotLines,
   splitKotLinesForPrint,
   type KotLineWithMeta,
 } from "@/lib/restaurant-kot-split";
@@ -18,6 +49,11 @@ import {
   type RestaurantBillChangeLine,
 } from "@/lib/restaurant-bill-edit";
 import { restaurantReceiptItemLabels } from "@/lib/restaurant-deal-slots";
+import {
+  buildDesignerReceiptDocument,
+  renderDesignerReceiptMarkup,
+} from "@/lib/designer-receipt-document";
+import { usesRestaurantDefaultPrintLayout } from "@/lib/receipt-template-default";
 
 export type RestaurantReceiptLine = {
   name: string;
@@ -65,6 +101,51 @@ export type RestaurantPaidReceiptInput = RestaurantGuestDetails & {
   createdAt?: string;
 };
 
+function designerSlipHtml(
+  input: RestaurantGuestBillInput | RestaurantPaidReceiptInput,
+  title: string,
+  extra?: { paymentMode?: string; received?: number; remaining?: number }
+): string | null {
+  const settings = mergeRestaurantReceiptPrintSettings({
+    ...DEFAULT_RECEIPT_SETTINGS,
+    ...input.settings,
+  });
+  if (usesRestaurantDefaultPrintLayout(settings.templateId)) {
+    return null;
+  }
+  const markup = renderDesignerReceiptMarkup({
+    settings,
+    invoice: {
+      id: input.invoiceId,
+      order_number: input.orderNumber,
+      created_at: input.createdAt || new Date().toISOString(),
+      customer_name: input.customerName,
+      customer_phone: input.customerPhone,
+      payment_mode: extra?.paymentMode || "",
+      received_amount: extra?.received ?? 0,
+      tax_amount: input.taxAmount,
+      discount: input.discount,
+      total_amount: input.netTotal,
+      remaining_due: extra?.remaining ?? 0,
+      items: input.items.map((item) => ({
+        name: item.detail?.trim() ? `${item.name} · ${item.detail.trim()}` : item.name,
+        quantity: item.quantity,
+        price: item.unit_price,
+        subtotal: item.unit_price * item.quantity,
+      })),
+    },
+    shopDetails: {
+      name: input.shopDetails.name,
+      phone: input.shopDetails.phone || undefined,
+      address: input.shopDetails.address || undefined,
+      email: input.shopDetails.email || undefined,
+      website: input.shopDetails.website || undefined,
+    },
+  });
+  if (!markup) return null;
+  return buildDesignerReceiptDocument(markup, settings, title);
+}
+
 function esc(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -73,22 +154,138 @@ function esc(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function printRestaurantThermalSlip(
+/** Receipt Designer selection → KOT / guest / payment slip CSS + 80mm meta. */
+function buildRestaurantSlipDocumentStyle(
+  settings: Partial<ReceiptSettings>
+): RestaurantSlipDocumentStyle {
+  const merged = mergeRestaurantReceiptPrintSettings(settings);
+  const resolved = resolveRestaurantReceiptDocumentStyle(merged);
+  return {
+    css: resolved.css,
+    headMeta: restaurantSlipHeadMetaTags(merged),
+  };
+}
+
+/** Same HTML the guest bill and payment receipt send to the printer. */
+export function buildRestaurantBillPreviewHtml(
+  settings: Partial<ReceiptSettings>,
+  shop?: { name?: string; phone?: string | null; address?: string | null }
+): string {
+  const merged = mergeRestaurantReceiptPrintSettings({
+    ...DEFAULT_RECEIPT_SETTINGS,
+    ...settings,
+  });
+  const items = [
+    { name: "Chicken Karahi", quantity: 1, unit_price: 1200 },
+    { name: "Naan", quantity: 4, unit_price: 40 },
+    { name: "Cold Drink", quantity: 2, unit_price: 80 },
+  ];
+  const subtotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+  const discount = merged.showDiscount === false ? 0 : 50;
+  const taxAmount = merged.showTax === false ? 0 : 45.5;
+  const netTotal = subtotal - discount + taxAmount;
+  return buildPaymentReceiptHtmlDocument(
+    {
+      orderNumber: "1042",
+      createdAt: new Date(),
+      serviceType: "dine_in",
+      tableName: "T-4",
+      waiterName: "Ali",
+      customerName: "Walk-in Customer",
+      customerPhone: "0300-1234567",
+      orderStatus: "BILL",
+      companyName: shop?.name || "Cook Swift",
+      companyPhone: shop?.phone || undefined,
+      companyAddress: shop?.address || undefined,
+      items: items.map((i) => ({
+        name: i.name,
+        size: "",
+        quantity: i.quantity,
+        lineTotal: i.unit_price * i.quantity,
+      })),
+      subtotal,
+      discount,
+      taxAmount,
+      deliveryFee: 0,
+      additionalCharges: 0,
+      netTotal,
+      footerNote: merged.footerText,
+      thankYouMessage: merged.thankYouMessage,
+      showShopPhone: merged.showPhone !== false,
+      showShopAddress: merged.showAddress !== false,
+      showCustomerInfo: merged.showCustomerInfo !== false,
+      showDiscount: merged.showDiscount !== false,
+      showTax: merged.showTax !== false,
+      showPaymentMode: merged.showPaymentMode !== false,
+      paymentModeLabel: merged.showPaymentMode === false ? undefined : "Cash",
+    },
+    {
+      css: resolveRestaurantReceiptDocumentStyle(merged).css,
+      headMeta: restaurantSlipHeadMetaTags(merged),
+    }
+  );
+}
+
+function kotReprintBannerHtml(input: RestaurantKOTInput): string {
+  if (!input.isReprint) return "";
+  return `<div style="text-align:center;font-weight:bold;font-size:10px;margin:0 0 4px 0;border:1px solid #000;padding:2px;">REPRINT · KOT${input.kotTicketId ? ` #${input.kotTicketId.slice(0, 6).toUpperCase()}` : ""}</div>`;
+}
+
+/** POSRESTURANT kitchen KOT: Arial 320px layout via `buildPosRestaurantThermalPrintHtml`. */
+function thermalSettingsForKitchenSlip(
+  settings: Partial<ReceiptSettings>
+): Partial<ReceiptSettings> {
+  return {
+    ...settings,
+    pageSize: settings.pageSize === "MM58" ? "MM58" : "MM80",
+    fontFamily: "sans-serif",
+    fontSize: RECEIPT_ITEMS_TABLE_CELL_PX,
+    billingLanguage: "en",
+    customUrduNote: "",
+    showHeaderTagline: false,
+    marginLeft: 0,
+    marginRight: 0,
+    marginTop: 0,
+    marginBottom: 0,
+  };
+}
+
+function thermalSettingsForPaymentSlip(
+  settings: Partial<ReceiptSettings>
+): Partial<ReceiptSettings> {
+  return {
+    ...settings,
+    pageSize: settings.pageSize === "MM58" ? "MM58" : "MM80",
+    billingLanguage: settings.billingLanguage || "en",
+    showLogo: settings.showLogo === true,
+  };
+}
+
+async function printRestaurantThermalSlip(
   inner: string,
   settings: Partial<ReceiptSettings>,
   title: string,
   job: RestaurantPrintJobType,
   companyRow?: Record<string, unknown> | null,
-  callbacks?: { onError?: (message: string) => void }
-): void {
-  const merged = { ...DEFAULT_RECEIPT_SETTINGS, ...settings };
-  let dispatches = resolveRestaurantPrintDispatches(job, merged, companyRow);
+  callbacks?: { onError?: (message: string) => void },
+  customDispatches?: RestaurantPrintDispatch[]
+): Promise<void> {
+  let merged = { ...DEFAULT_RECEIPT_SETTINGS, ...settings };
+  const posSlipKind = job === "kot" ? "kitchen" : "payment";
+  if (job === "kot") {
+    merged = { ...merged, ...thermalSettingsForKitchenSlip(merged) };
+  } else {
+    merged = { ...merged, ...thermalSettingsForPaymentSlip(merged) };
+  }
+  let dispatches =
+    customDispatches ??
+    resolvePosRestaurantPrintDispatches(job, merged, companyRow);
 
   if (dispatches.length === 0) {
     const legacyRole: RestaurantPrintRole =
       job === "kot" ? "kitchen" : "customer";
     const fallback = resolvePrinterNameForRole(legacyRole, merged, companyRow);
-    if (fallback) dispatches = [{ printerName: fallback, copies: 1 }];
+    dispatches = [{ printerName: fallback || "", copies: 1 }];
   }
 
   const failHint =
@@ -98,27 +295,45 @@ function printRestaurantThermalSlip(
         ? "Payment receipt print failed - check printer settings."
         : "Guest bill print failed - check printer settings.";
 
-  void (async () => {
-    if (dispatches.length === 0) {
-      callbacks?.onError?.(failHint);
-      return;
+  if (dispatches.length === 0) {
+    callbacks?.onError?.(failHint);
+    return;
+  }
+  for (const { printerName, copies } of dispatches) {
+    try {
+      console.info(
+        `[RestaurantPrint] ${title} → "${printerName || "default"}" ×${copies}`
+      );
+      await printThermalReceipt({
+        receiptHtml: inner,
+        settings: merged,
+        title,
+        targetPrinterName: printerName,
+        copies,
+        layout: "posrestaurant",
+        posSlipKind,
+      });
+      console.info(`[RestaurantPrint] done: ${title}`);
+    } catch (err) {
+      const base = err instanceof Error ? err.message : failHint;
+      const hint = `${base} (Printer: ${printerName}, copies: ${copies})`;
+      console.error(`[RestaurantPrint] failed: ${hint}`);
+      callbacks?.onError?.(hint);
     }
-    for (const { printerName, copies } of dispatches) {
-      try {
-        await printThermalReceipt({
-          receiptHtml: inner,
-          settings: merged,
-          title,
-          targetPrinterName: printerName,
-          copies,
-        });
-      } catch (err) {
-        const base = err instanceof Error ? err.message : failHint;
-        const hint = `${base} (Printer: ${printerName}, copies: ${copies})`;
-        callbacks?.onError?.(hint);
-      }
-    }
-  })();
+  }
+}
+
+/** How many distinct KOT slips this order line split produces (1–3). */
+export function kotSlipJobsForSplit(split: {
+  main: unknown[];
+  simple: unknown[];
+  secondary: unknown[];
+}): number {
+  let n = 0;
+  if (split.simple.length > 0) n += 1;
+  if (split.secondary.length > 0) n += 1;
+  if (split.main.length > 0) n += 1;
+  return n;
 }
 
 export function restaurantBillLabel(orderNumber: string | null | undefined, invoiceId: string): string {
@@ -127,11 +342,115 @@ export function restaurantBillLabel(orderNumber: string | null | undefined, invo
   return `#${invoiceId.slice(0, 8).toUpperCase()}`;
 }
 
+function mapKotLines(lines: RestaurantKOTLine[]): FastFoodKitchenLine[] {
+  return lines.map((it) => {
+    const name = mergeSizeIntoKitchenDisplayName(it.name, it.sizeLabel);
+    const sizeLabel = receiptSizeColumnValue(name, it.sizeLabel) || null;
+    return {
+      name,
+      quantity: it.quantity,
+      sizeLabel,
+      description: it.description,
+      remarks: it.remarks,
+    };
+  });
+}
+
+function toFastFoodPaymentLines(items: RestaurantReceiptLine[]): FastFoodPaymentLine[] {
+  return items.map((item) => {
+    const { name, size } = paymentLineParts(item);
+    return {
+      name,
+      size,
+      quantity: item.quantity,
+      lineTotal: item.unit_price * item.quantity,
+    };
+  });
+}
+
+function paymentReceiptPayload(
+  input: RestaurantGuestBillInput | RestaurantPaidReceiptInput,
+  opts: {
+    orderStatus: string;
+    paymentModeLabel?: string;
+    headerBannerHtml?: string;
+    afterTotalsHtml?: string;
+  },
+  items: RestaurantReceiptLine[]
+) {
+  const merged = mergeRestaurantReceiptPrintSettings({
+    ...DEFAULT_RECEIPT_SETTINGS,
+    ...input.settings,
+  });
+  const footerNote = companyFooterNote(
+    pickFooterNote(input.shopDetails.website, input.companyRow, merged)
+  );
+  return {
+    orderNumber: input.orderNumber,
+    createdAt: input.createdAt || new Date(),
+    serviceType: input.serviceType,
+    tableName: input.tableName,
+    waiterName: input.waiterName,
+    customerName: input.customerName,
+    customerPhone: input.customerPhone,
+    customerAddress: input.customerAddress,
+    deliveryBoyPhone: input.riderPhone,
+    orderStatus: opts.orderStatus,
+    companyName: input.shopDetails.name,
+    companyPhone: input.shopDetails.phone || undefined,
+    companyAddress: input.shopDetails.address || undefined,
+    logoUrl: merged.showLogo && merged.logoUrl ? merged.logoUrl : null,
+    items: toFastFoodPaymentLines(items),
+    subtotal: input.subtotal,
+    discount: input.discount,
+    taxAmount: input.taxAmount,
+    deliveryFee: input.deliveryFee ?? 0,
+    additionalCharges: input.additionalCharges ?? 0,
+    netTotal: input.netTotal,
+    footerNote,
+    thankYouMessage: merged.thankYouMessage,
+    showShopPhone: merged.showPhone !== false,
+    showShopAddress: merged.showAddress !== false,
+    showCustomerInfo: merged.showCustomerInfo !== false,
+    showDiscount: merged.showDiscount !== false,
+    showTax: merged.showTax !== false,
+    showPaymentMode: merged.showPaymentMode !== false,
+    paymentModeLabel: opts.paymentModeLabel,
+    headerBannerHtml: opts.headerBannerHtml,
+    afterTotalsHtml: opts.afterTotalsHtml,
+  };
+}
+
+function pickFooterNote(
+  website?: string | null,
+  companyRow?: Record<string, unknown> | null,
+  merged?: Partial<ReceiptSettings>
+): string | null {
+  const fromCompany = typeof companyRow?.website === "string" ? companyRow.website : "";
+  const note =
+    [website, fromCompany, merged?.customUrduNote, merged?.footerText].find(
+      (v) => typeof v === "string" && v.trim()
+    ) || "";
+  return companyFooterNote(note || null);
+}
+
+function posRestaurantOrderTypeLabel(serviceType?: string | null): string {
+  const s = String(serviceType || "").toLowerCase().replace(/-/g, "_");
+  if (s === "dining" || s === "dine_in") return "Dine In";
+  if (s === "delivery") return "Delivery";
+  return "Take Away";
+}
+
+function posRestaurantHr(): string {
+  return `<hr style="border:none;border-top:1px solid #000;margin:6px 0;">`;
+}
+
 export type RestaurantKOTLine = {
   name: string;
   quantity: number;
   sizeLabel?: string | null;
   remarks?: string | null;
+  description?: string | null;
 };
 
 export type RestaurantGuestBillInput = RestaurantGuestDetails & {
@@ -211,14 +530,14 @@ function itemAmountRows(items: RestaurantReceiptLine[]): string {
   return items
     .map(
       (item, idx) => `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px;font-size:11px;line-height:1.35;margin:3px 0;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px;font-size:${THERMAL_ITEM_PX}px;line-height:1.4;margin:4px 0;font-weight:600;">
       <div style="flex:1;word-break:break-word;">${idx + 1}. ${esc(item.name)}${
         item.detail
-          ? `<div style="font-size:9px;font-weight:normal;color:#333;margin-top:2px;padding-left:6px;">↳ ${esc(item.detail)}</div>`
+          ? `<div style="font-size:${THERMAL_ITEM_DETAIL_PX}px;font-weight:600;color:#000;margin-top:2px;padding-left:6px;">↳ ${esc(item.detail)}</div>`
           : ""
       }</div>
-      <div style="width:22px;text-align:center;flex-shrink:0;">${item.quantity}</div>
-      <div style="width:58px;text-align:right;flex-shrink:0;font-weight:bold;">${Math.round(
+      <div style="width:26px;text-align:center;flex-shrink:0;font-size:${THERMAL_QTY_PX}px;font-weight:800;">${item.quantity}</div>
+      <div style="width:62px;text-align:right;flex-shrink:0;font-weight:800;font-size:${THERMAL_ITEM_PX}px;">${Math.round(
         item.unit_price * item.quantity
       ).toLocaleString()}</div>
     </div>`
@@ -236,6 +555,14 @@ function serviceTypeLabel(serviceType?: string | null, tableName?: string | null
   return tableName || serviceType || "Restaurant";
 }
 
+/** Font sizes from POSRESTURANT `fast_food_display.py`. */
+const THERMAL_META_PX = RECEIPT_INFO_FONT_PX;
+const THERMAL_ITEM_PX = RECEIPT_ITEMS_TABLE_CELL_PX;
+const THERMAL_ITEM_DETAIL_PX = RECEIPT_INFO_FONT_PX;
+const THERMAL_QTY_PX = RECEIPT_ITEMS_TABLE_CELL_PX;
+const THERMAL_HEAD_PX = RECEIPT_KITCHEN_TITLE_PX;
+const THERMAL_TABLE_HEAD_PX = RECEIPT_ITEMS_TABLE_HEADER_PX;
+
 function metaRow(label: string, value: string, strong = false): string {
   return `<div style="display:flex;justify-content:space-between;gap:6px;align-items:flex-start;">
     <div>${esc(label)}</div>${
@@ -246,7 +573,185 @@ function metaRow(label: string, value: string, strong = false): string {
   </div>`;
 }
 
-/** POSRESTURANT-style guest / delivery / waiter block for KOT + customer slips. */
+/** Kitchen `.info` from `build_kitchen_receipt_html`. */
+function posRestaurantKitchenMetaBlock(
+  input: RestaurantGuestDetails & {
+    orderNumber?: string | null;
+    when?: string;
+    serviceType?: string | null;
+    tableName?: string | null;
+  }
+): string {
+  const isDelivery = String(input.serviceType || "").toLowerCase() === "delivery";
+  const orderNo = getReceiptOrderNumber(input.orderNumber);
+  const created = input.when || new Date().toLocaleString();
+  const table = (input.tableName || "N/A").trim() || "N/A";
+  const taker = (input.waiterName || "N/A").trim() || "N/A";
+  const customer = (input.customerName || "Walk-in Customer").trim();
+  const otype = posRestaurantOrderTypeLabel(input.serviceType);
+  const addr = (input.customerAddress || "").trim();
+  const addrBlock =
+    addr && addr !== "N/A"
+      ? `<p style="margin:0;padding:0;line-height:1.2;"><strong>Address:</strong> ${esc(addr)}</p>`
+      : "";
+  const deliveryBlock = isDelivery
+    ? `<p style="margin:0;padding:0;line-height:1.2;"><strong>Delivery:</strong> ${esc(taker)} | <strong>Phone:</strong> ${esc(input.riderPhone?.trim() || "N/A")}</p>`
+    : "";
+
+  return `<div class="info" style="padding:0 4px 6px 4px;font-size:${RECEIPT_KITCHEN_INFO_FONT_PX}px;">
+    <p><strong>Order #:</strong> ${esc(orderNo)}</p>
+    <p><strong>Date &amp; Time:</strong> ${esc(created)}</p>
+    <p><strong>Type:</strong> ${esc(otype)}</p>
+    <p><strong>Table:</strong> ${esc(table)} | <strong>Order taker:</strong> ${esc(taker)}</p>
+    ${deliveryBlock}
+    <p><strong>Customer:</strong> ${esc(customer)}</p>
+    ${addrBlock}
+  </div>`;
+}
+
+/** Payment `.info` from `generate_payment_receipt_content`. */
+function posRestaurantMetaBlock(
+  input: RestaurantGuestDetails & {
+    orderNumber?: string | null;
+    when?: string;
+    serviceType?: string | null;
+    tableName?: string | null;
+    orderStatus?: string | null;
+  }
+): string {
+  const isDelivery = String(input.serviceType || "").toLowerCase() === "delivery";
+  const orderNo = getReceiptOrderNumber(input.orderNumber);
+  const created = input.when || new Date().toLocaleString();
+  const table = (input.tableName || "N/A").trim() || "N/A";
+  const taker = (input.waiterName || "N/A").trim() || "N/A";
+  const customer = (input.customerName || "Walk-in Customer").trim();
+  const phone = (input.customerPhone || "N/A").trim() || "N/A";
+  const address = (input.customerAddress || "N/A").trim() || "N/A";
+  const otype = posRestaurantOrderTypeLabel(input.serviceType);
+  const status = (input.orderStatus || "OPEN").toString().toUpperCase();
+
+  const deliveryRow = isDelivery
+    ? `<p style="margin:0;padding:0;">Delivery boy: ${esc(taker)} | Phone: ${esc(input.riderPhone?.trim() || "N/A")}</p>`
+    : "";
+
+  return `<div class="info" style="margin:0;padding:0;">
+    <p style="margin:0;padding:0;display:flex;justify-content:space-between;">
+      <span>Order #: ${esc(orderNo)}</span>
+      <span>&nbsp;&nbsp;&nbsp;Date: ${esc(created)}</span>
+    </p>
+    <p style="margin:0;padding:0;">Table: ${esc(table)} | Order taker: ${esc(taker)}</p>
+    ${deliveryRow}
+    <p style="margin:0;padding:0;">Customer: ${esc(customer)}</p>
+    <p style="margin:0;padding:0;">Address: ${esc(address)}</p>
+    <p style="margin:0;padding:0;">Phone no: ${esc(phone)}</p>
+    <p style="margin:0;padding:0;display:flex;justify-content:space-between;">
+      <span>Status: ${esc(status)}</span>
+      <span>&nbsp;&nbsp;Type: ${esc(otype)}</span>
+    </p>
+  </div>`;
+}
+
+function posRestaurantKitchenItemRows(lines: RestaurantKOTLine[]): string {
+  return lines
+    .map((it) => {
+      const sizePart = it.sizeLabel?.trim()
+        ? `Size: ${esc(it.sizeLabel.trim())} | `
+        : "";
+      const note =
+        it.remarks?.trim() && !String(it.remarks).includes("DEAL_ID:")
+          ? `<div style="font-size:8px;font-style:italic;color:#333;margin-top:2px;line-height:1.25;">Note: ${esc(it.remarks.trim())}</div>`
+          : "";
+      const desc =
+        it.description?.trim()
+          ? `<div style="font-size:8px;color:#444;margin-top:2px;line-height:1.25;">${esc(it.description.trim())}</div>`
+          : "";
+      return `
+      <tr>
+        <td colspan="3" style="text-align:left;padding:5px 6px;vertical-align:top;border-bottom:1px solid #ccc;">
+          <div style="font-weight:bold;font-size:10px;">${esc(it.name)}</div>
+          ${desc}
+          <div style="font-size:9px;margin-top:2px;">${sizePart}Qty: ${it.quantity}</div>
+          ${note}
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function paymentLineParts(item: RestaurantReceiptLine): {
+  name: string;
+  size: string;
+} {
+  const dot = item.name.match(/^(.+?) · (.+)$/);
+  let name = item.name;
+  let size = "";
+  if (dot) {
+    name = dot[1]!.trim();
+    size = dot[2]!.trim();
+  } else if (item.detail?.trim() && item.detail.length <= 24) {
+    size = item.detail.trim();
+  } else {
+    size = "Std";
+  }
+  size = receiptSizeColumnValue(name, size);
+  return { name, size };
+}
+
+function posRestaurantPaymentItemsTable(items: RestaurantReceiptLine[]): string {
+  const rows = items
+    .map((item) => {
+      const { name, size } = paymentLineParts(item);
+      const lineTotal = item.unit_price * item.quantity;
+      return `
+      <tr>
+        <td class="product">${esc(name)}</td>
+        <td class="size">${esc(size)}</td>
+        <td class="qty">${item.quantity}</td>
+        <td class="price">${lineTotal.toFixed(2)}</td>
+      </tr>`;
+    })
+    .join("");
+
+  return `
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th class="product">Item Description</th>
+          <th class="size">Size</th>
+          <th class="qty">Qty</th>
+          <th class="price">Price</th>
+        </tr>
+      </thead>
+      <tbody>${rows || `<tr><td colspan="4" style="text-align:center;font-style:italic;">No items</td></tr>`}</tbody>
+    </table>`;
+}
+
+function posRestaurantTotalsBlock(input: {
+  subtotal: number;
+  discount: number;
+  taxAmount: number;
+  deliveryFee?: number;
+  additionalCharges?: number;
+  netTotal: number;
+}): string {
+  const sub = Number(input.subtotal) || 0;
+  const disc = Number(input.discount) || 0;
+  const tax = Number(input.taxAmount) || 0;
+  const del = Number(input.deliveryFee) || 0;
+  const addl = Number(input.additionalCharges) || 0;
+  const total = Number(input.netTotal) || 0;
+  return `
+    <div class="totals">
+      <p class="subtotal-line"><span><strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Sub Total:&nbsp;&nbsp; ${sub.toFixed(2)}</strong></span></p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Discount:&nbsp;&nbsp; ${disc.toFixed(2)}</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Total Tax:&nbsp;&nbsp; ${tax.toFixed(2)}</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Delivery Fee:&nbsp;&nbsp; ${del.toFixed(2)}</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Additional Charges:&nbsp;&nbsp; ${addl.toFixed(2)}</p>
+      <p class="total-amount-line"><span style="font-size:${RECEIPT_TOTAL_AMOUNT_FONT_PX}px;"><strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Total:&nbsp;&nbsp; ${total.toFixed(2)}</strong></span></p>
+    </div>`;
+}
+
+/** Legacy flex layout — prefer posRestaurantMetaBlock for new slips. */
 function guestDetailsBlock(
   input: RestaurantGuestDetails & {
     billLabel?: string;
@@ -254,8 +759,10 @@ function guestDetailsBlock(
     serviceType?: string | null;
     tableName?: string | null;
     forKitchen?: boolean;
+    fontSizePx?: number;
   }
 ): string {
+  const metaPx = input.fontSizePx ?? THERMAL_META_PX;
   const isDelivery = String(input.serviceType || "").toLowerCase() === "delivery";
   const typeLabel = serviceTypeLabel(input.serviceType, input.tableName);
   const rows: string[] = [];
@@ -291,10 +798,10 @@ function guestDetailsBlock(
 
   const notes = input.specialInstructions?.trim();
   const notesHtml = notes
-    ? `<div style="font-size:10px;border:1px dashed #000;padding:4px;margin:6px 0;"><strong>Notes:</strong> ${esc(notes)}</div>`
+    ? `<div style="font-size:${Math.max(10, metaPx - 1)}px;border:1px solid #000;padding:4px;margin:6px 0;"><strong>Notes:</strong> ${esc(notes)}</div>`
     : "";
 
-  return `<div style="font-size:10px;line-height:1.45;margin-bottom:6px;">${rows.join("")}</div>${notesHtml}`;
+  return `<div style="font-size:${metaPx}px;line-height:1.45;margin-bottom:6px;font-weight:600;">${rows.join("")}</div>${notesHtml}`;
 }
 
 function extraChargeRows(input: RestaurantGuestDetails): string {
@@ -315,15 +822,21 @@ function extraChargeRows(input: RestaurantGuestDetails): string {
 function shopHeaderBlock(
   shop: RestaurantPaidReceiptInput["shopDetails"],
   settings: Partial<ReceiptSettings>,
-  opts?: { showLogo?: boolean }
+  opts?: { showLogo?: boolean; posStyle?: boolean }
 ): string {
   const merged = { ...DEFAULT_RECEIPT_SETTINGS, ...settings };
-  const useLogo = opts?.showLogo !== false && merged.showLogo && merged.logoUrl;
-  const logoBlock = useLogo
-    ? `<div style="text-align:center;margin-bottom:5px;">
-        <img src="${esc(merged.logoUrl)}" alt="" style="max-width:140px;max-height:64px;object-fit:contain;display:inline-block;" />
-      </div>`
-    : "";
+  const logoBlock = "";
+
+  if (opts?.posStyle) {
+    return `
+    <div class="header">
+      ${logoBlock}
+      ${shop.name ? `<p style="font-size:12px;font-weight:bold;"><strong>${esc(shop.name)}</strong></p>` : ""}
+      ${shop.phone && merged.showPhone !== false ? `<p><strong>Phone: ${esc(shop.phone)}</strong></p>` : ""}
+      ${shop.address && merged.showAddress !== false ? `<p style="text-align:left;">${esc(shop.address)}</p>` : ""}
+      <hr>
+    </div>`;
+  }
 
   const contact: string[] = [];
   if (merged.showAddress !== false && shop.address) {
@@ -353,69 +866,103 @@ function shopHeaderBlock(
     </div>`;
 }
 
-function thermalFooterBlock(settings: Partial<ReceiptSettings>): string {
+function thermalFooterBlock(settings: Partial<ReceiptSettings>, posStyle = false): string {
   const merged = { ...DEFAULT_RECEIPT_SETTINGS, ...settings };
   const lines: string[] = [];
   if (merged.customUrduNote?.trim()) {
-    lines.push(`<div style="font-size:9px;margin-top:2px;">${esc(merged.customUrduNote.trim())}</div>`);
+    lines.push(
+      posStyle
+        ? `<p class="receipt-footer-note">${esc(merged.customUrduNote.trim())}</p>`
+        : `<div style="font-size:9px;margin-top:2px;">${esc(merged.customUrduNote.trim())}</div>`
+    );
   }
   const thank = merged.thankYouMessage || merged.footerText;
   if (thank?.trim()) {
-    lines.push(`<div style="font-size:10px;margin-top:4px;font-weight:600;">${esc(thank.trim())}</div>`);
+    lines.push(
+      posStyle
+        ? `<p>${esc(thank.trim())}</p>`
+        : `<div style="font-size:10px;margin-top:4px;font-weight:600;">${esc(thank.trim())}</div>`
+    );
   }
   if (lines.length === 0) return "";
+  if (posStyle) {
+    return `<hr><div class="footer">${lines.join("")}</div>`;
+  }
   return `<div style="text-align:center;margin-top:10px;border-top:1px dashed #000;padding-top:6px;">${lines.join("")}</div>`;
 }
 
-/** Minimal roti / nan style ticket — item + qty only. */
-export function printRestaurantSimpleKOTSlip(
+async function printRestaurantSectionKOTSlip(
   input: RestaurantKOTInput,
+  slipLabel: string,
+  dispatch: RestaurantPrintDispatch | null,
+  missingPrinterMessage: string,
   callbacks?: { onError?: (message: string) => void }
-): void {
+): Promise<void> {
   const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
   const billLabel = input.orderNumber?.trim()
     ? restaurantBillLabel(input.orderNumber, "KOT")
     : "NEW";
-  const title = simpleKotSlipTitle(settings);
 
-  const rows = input.items
-    .map(
-      (it) => `
-      <tr>
-        <td style="padding:3px 0;font-weight:bold;font-size:13px;border-bottom:1px dotted #000;">${esc(it.name)}</td>
-        <td style="padding:3px 0;text-align:right;font-weight:900;font-size:16px;border-bottom:1px dotted #000;width:40px;">${it.quantity}</td>
-      </tr>`
-    )
-    .join("");
+  const slipStyle = buildRestaurantSlipDocumentStyle(settings);
+  const inner = buildKitchenSectionReceiptHtmlDocument(
+    {
+      orderNumber: input.orderNumber,
+      createdAt: new Date(),
+      serviceType: input.serviceType,
+      tableName: input.tableName,
+      waiterName: input.waiterName,
+      customerName: input.customerName,
+      customerPhone: input.customerPhone,
+      customerAddress: input.customerAddress,
+      deliveryBoyPhone: input.riderPhone,
+      specialInstructions: input.specialInstructions,
+      items: mapKotLines(consolidateKotLines(input.items)),
+    },
+    { sectionTitle: slipLabel, reprintBanner: kotReprintBannerHtml(input) },
+    slipStyle
+  );
 
-  const meta = [
-    input.tableName?.trim()
-      ? `<div style="font-size:11px;font-weight:bold;">Table: ${esc(input.tableName.trim())}</div>`
-      : "",
-    `<div style="font-size:10px;">Bill ${esc(billLabel)} · ${new Date().toLocaleString()}</div>`,
-    input.waiterName?.trim()
-      ? `<div style="font-size:9px;">Waiter: ${esc(input.waiterName.trim())}</div>`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("");
+  if (!dispatch) {
+    callbacks?.onError?.(missingPrinterMessage);
+    return;
+  }
 
-  const inner = `
-    <div style="text-align:center;font-weight:900;font-size:15px;border:2px solid #000;padding:6px 4px;margin-bottom:8px;">
-      ${esc(title)}
-    </div>
-  <div style="margin-bottom:8px;">${meta}</div>
-    <table style="width:100%;border-collapse:collapse;">
-      <tbody>${rows || `<tr><td style="font-size:10px;">No items</td></tr>`}</tbody>
-    </table>
-  `;
-
-  printRestaurantThermalSlip(
+  await printRestaurantThermalSlip(
     inner,
     settings,
-    `${title} ${billLabel}`,
+    `${slipLabel} ${billLabel}`,
     "kot",
     input.companyRow,
+    callbacks,
+    [dispatch]
+  );
+}
+
+/** Minimal roti / nan style ticket — item + qty only. */
+export async function printRestaurantSimpleKOTSlip(
+  input: RestaurantKOTInput,
+  callbacks?: { onError?: (message: string) => void }
+): Promise<void> {
+  const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
+  await printRestaurantSectionKOTSlip(
+    input,
+    simpleKotSlipTitle(settings),
+    resolveSimpleKotPrintDispatch(settings, input.companyRow),
+    "Roti KOT: pick Printer 1 or 2 and set KOT copies in Business Settings.",
+    callbacks
+  );
+}
+
+export async function printRestaurantSecondaryKOTSlip(
+  input: RestaurantKOTInput,
+  callbacks?: { onError?: (message: string) => void }
+): Promise<void> {
+  const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
+  await printRestaurantSectionKOTSlip(
+    input,
+    secondaryKotSlipTitle(settings),
+    resolveSecondarySimpleKotPrintDispatch(settings, input.companyRow),
+    "Kathi KOT: pick Printer 1 or 2 and set KOT copies in Business Settings.",
     callbacks
   );
 }
@@ -427,14 +974,14 @@ export type RestaurantKOTDispatchOptions = {
 };
 
 /** Main kitchen KOT + optional simple category KOT (e.g. roti) on Send KOT. */
-export function printRestaurantKOTDispatch(
+export async function printRestaurantKOTDispatch(
   input: RestaurantKOTInput,
   options?: RestaurantKOTDispatchOptions,
   callbacks?: { onError?: (message: string) => void }
-): void {
+): Promise<void> {
   const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
   if (!isSimpleKotCategoryConfigured(settings)) {
-    printRestaurantKOTSlip(input, callbacks);
+    await printRestaurantKOTSlip(input, callbacks);
     return;
   }
 
@@ -444,13 +991,34 @@ export function printRestaurantKOTDispatch(
       ? options.lineMeta
       : input.items.map((it) => ({ ...it }));
 
-  const { main, simple } = splitKotLinesForPrint(meta, settings, productMap);
+  const split = splitKotLinesForPrint(meta, settings, productMap);
+  const { main, simple, secondary } = split;
+  const slipCount = kotSlipJobsForSplit(split);
+
+  if (slipCount === 0 && input.items.length > 0) {
+    await printRestaurantKOTSlip(input, callbacks);
+    return;
+  }
+
+  const orderRef = input.orderNumber?.trim() || "NEW";
 
   if (simple.length > 0) {
-    printRestaurantSimpleKOTSlip({ ...input, items: simple }, callbacks);
+    console.info(`[RestaurantPrint] KOT dispatch ${orderRef}: roti slip`);
+    await printRestaurantSimpleKOTSlip(
+      { ...input, items: consolidateKotLines(simple) },
+      callbacks
+    );
+  }
+  if (secondary.length > 0) {
+    console.info(`[RestaurantPrint] KOT dispatch ${orderRef}: kathi slip`);
+    await printRestaurantSecondaryKOTSlip(
+      { ...input, items: consolidateKotLines(secondary) },
+      callbacks
+    );
   }
 
   if (main.length > 0) {
+    console.info(`[RestaurantPrint] KOT dispatch ${orderRef}: main kitchen slip`);
     const next: RestaurantKOTInput = { ...input, items: main };
     const amend = input.billAmendment;
     if (amend?.prepareNow?.length) {
@@ -472,17 +1040,15 @@ export function printRestaurantKOTDispatch(
       );
       next.billAmendment = { ...amend, prepareNow: prepMain.length ? prepMain : undefined };
     }
-    printRestaurantKOTSlip(next, callbacks);
-  } else if (simple.length === 0) {
-    printRestaurantKOTSlip(input, callbacks);
+    await printRestaurantKOTSlip(next, callbacks);
   }
 }
 
 /** Kitchen Order Ticket - matches POSRESTURANT KOT fields (table, waiter, sizes, notes). */
-export function printRestaurantKOTSlip(
+export async function printRestaurantKOTSlip(
   input: RestaurantKOTInput,
   callbacks?: { onError?: (message: string) => void }
-): void {
+): Promise<void> {
   const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
   const billLabel = input.orderNumber?.trim() ? restaurantBillLabel(input.orderNumber, "KOT") : "NEW";
   const when = new Date().toLocaleString();
@@ -490,43 +1056,9 @@ export function printRestaurantKOTSlip(
   const amend = input.billAmendment;
   const prepareLines = amend?.prepareNow?.length ? amend.prepareNow : input.items;
   const isAmendment = !!amend?.changes?.length;
-  const kotTitle = isAmendment
-    ? "KOT AMENDMENT (PREPARE)"
-    : "KITCHEN ORDER TICKET (KOT)";
+  const kotTitle = isAmendment ? "KOT AMENDMENT (PREPARE)" : "KITCHEN ORDER";
 
-  const rows = prepareLines
-    .map((it) => {
-      const size = it.sizeLabel?.trim();
-      const title = size ? `${it.name} · ${size}` : it.name;
-      const note =
-        it.remarks?.trim() &&
-        !String(it.remarks).includes("DEAL_ID:")
-          ? it.remarks
-          : null;
-      return `
-      <tr>
-        <td style="padding:4px 0;vertical-align:top;border-bottom:1px dotted #ccc;">
-          <div style="font-weight:bold;font-size:12px;">${esc(title)}</div>
-          ${
-            note
-              ? `<div style="font-size:10px;font-style:italic;margin-top:2px;">Includes: ${esc(note)}</div>`
-              : ""
-          }
-        </td>
-        <td style="padding:4px 0;text-align:right;font-weight:bold;font-size:13px;border-bottom:1px dotted #ccc;">${it.quantity}</td>
-      </tr>`;
-    })
-    .join("");
-
-  const guestBlock = guestDetailsBlock({
-    ...input,
-    billLabel,
-    when,
-    forKitchen: true,
-  });
-  const reprintBanner = input.isReprint
-    ? `<div style="text-align:center;font-weight:bold;font-size:10px;margin:4px 0;border:1px solid #000;padding:2px;">REPRINT · KOT${input.kotTicketId ? ` #${input.kotTicketId.slice(0, 6).toUpperCase()}` : ""}</div>`
-    : "";
+  const reprintBanner = kotReprintBannerHtml(input);
 
   let amendmentBlock = "";
   if (amend && amend.showChangeDetails !== false && amend.changes?.length) {
@@ -556,37 +1088,30 @@ export function printRestaurantKOTSlip(
     </div>`;
   }
 
-  const headerShop = input.shopDetails
-    ? shopHeaderBlock(input.shopDetails, settings, {
-        showLogo: (settings as ReceiptSettings & { restaurantLogoOnKot?: boolean }).restaurantLogoOnKot !== false,
-      })
-    : "";
+  const slipStyle = buildRestaurantSlipDocumentStyle(settings);
+  const inner = buildKitchenReceiptHtmlDocument(
+    {
+      orderNumber: input.orderNumber,
+      createdAt: when,
+      serviceType: input.serviceType,
+      tableName: input.tableName,
+      waiterName: input.waiterName,
+      customerName: input.customerName,
+      customerPhone: input.customerPhone,
+      customerAddress: input.customerAddress,
+      deliveryBoyPhone: input.riderPhone,
+      specialInstructions: input.specialInstructions,
+      items: mapKotLines(prepareLines),
+    },
+    {
+      title: kotTitle,
+      reprintBanner,
+      amendmentHtml: amendmentBlock,
+    },
+    slipStyle
+  );
 
-  const inner = `
-    ${headerShop}
-    <div style="text-align:center;font-weight:bold;font-size:14px;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:6px;">
-      ${kotTitle}
-    </div>
-    ${reprintBanner}
-    ${guestBlock}
-    ${amendmentBlock}
-    <table style="width:100%;border-collapse:collapse;">
-      <thead>
-        <tr>
-          <th style="text-align:left;font-size:10px;border-bottom:1px solid #000;padding-bottom:4px;">${
-            isAmendment ? "Prepare now" : "Item"
-          }</th>
-          <th style="text-align:right;font-size:10px;border-bottom:1px solid #000;padding-bottom:4px;width:32px;">Qty</th>
-        </tr>
-      </thead>
-      <tbody>${rows || `<tr><td colspan="2" style="font-size:10px;">No items</td></tr>`}</tbody>
-    </table>
-    <div style="text-align:center;font-weight:bold;font-size:11px;margin-top:10px;border-top:2px dashed #000;padding-top:6px;">
-      ${isAmendment ? "** AMENDED KOT - CHECK CHANGES **" : "** KOT DISPATCHED **"}
-    </div>
-  `;
-
-  printRestaurantThermalSlip(
+  await printRestaurantThermalSlip(
     inner,
     settings,
     isAmendment ? `KOT AMEND ${billLabel}` : `KOT ${billLabel}`,
@@ -597,56 +1122,25 @@ export function printRestaurantKOTSlip(
 }
 
 /** Unpaid guest bill (before settlement) - thermal table slip. */
-export function printRestaurantGuestBill(
+export async function printRestaurantGuestBill(
   input: RestaurantGuestBillInput,
   callbacks?: { onError?: (message: string) => void }
-): void {
+): Promise<void> {
   const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
   const billLabel = restaurantBillLabel(input.orderNumber, input.invoiceId);
-  const when = input.createdAt ? new Date(input.createdAt) : new Date();
+  const designerHtml = designerSlipHtml(input, `Guest Bill ${billLabel}`);
+  const inner =
+    designerHtml ||
+    buildPaymentReceiptHtmlDocument(
+      paymentReceiptPayload(
+        input,
+        { orderStatus: "BILL" },
+        compactReceiptLinesForGuestBill(input.items)
+      ),
+      buildRestaurantSlipDocumentStyle(settings)
+    );
 
-  const inner = `
-    ${shopHeaderBlock(input.shopDetails, settings)}
-    <div style="text-align:center;font-weight:bold;font-size:12px;border:2px solid #000;padding:5px 4px;margin:6px 0;">
-      GUEST BILL (UNPAID) · مہمان بل
-    </div>
-    ${guestDetailsBlock({
-      ...input,
-      billLabel,
-      when: when.toLocaleString(),
-    })}
-    <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;margin:4px 0;">
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:bold;margin-bottom:2px;">
-        <div style="flex:1;">Item</div>
-        <div style="width:22px;text-align:center;">Qty</div>
-        <div style="width:58px;text-align:right;">Amount</div>
-      </div>
-      ${itemAmountRows(compactReceiptLinesForGuestBill(input.items)) || `<div style="font-size:10px;">No line items</div>`}
-    </div>
-    <div style="font-size:11px;line-height:1.5;margin-top:4px;">
-      <div style="display:flex;justify-content:space-between;"><div>Subtotal</div><div>${Math.round(input.subtotal).toLocaleString()}</div></div>
-      ${extraChargeRows(input)}
-      ${
-        input.discount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><div>Discount</div><div>-${Math.round(input.discount).toLocaleString()}</div></div>`
-          : ""
-      }
-      ${
-        input.taxAmount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><div>Tax (${input.taxRate}%)</div><div>+${Math.round(input.taxAmount).toLocaleString()}</div></div>`
-          : ""
-      }
-      <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;border-top:1px solid #000;margin-top:4px;padding-top:4px;">
-        <div>NET PAYABLE</div><div>Rs ${Math.round(input.netTotal).toLocaleString()}</div>
-      </div>
-    </div>
-    <div style="text-align:center;font-size:9px;margin-top:10px;border-top:1px dashed #000;padding-top:6px;">
-      NOT A TAX INVOICE - PAY AT COUNTER
-    </div>
-    ${thermalFooterBlock(settings)}
-  `;
-
-  printRestaurantThermalSlip(
+  await printRestaurantThermalSlip(
     inner,
     settings,
     `Guest Bill ${billLabel}`,
@@ -666,10 +1160,10 @@ export type RestaurantRevisedGuestBillInput = RestaurantGuestBillInput & {
 };
 
 /** Reprint after bill edit - shows revision #, old vs new total, and item changes. */
-export function printRestaurantRevisedGuestBill(
+export async function printRestaurantRevisedGuestBill(
   input: RestaurantRevisedGuestBillInput,
   callbacks?: { onError?: (message: string) => void }
-): void {
+): Promise<void> {
   const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
   const billLabel = restaurantBillLabel(input.orderNumber, input.invoiceId);
   const when = input.createdAt ? new Date(input.createdAt) : new Date();
@@ -688,58 +1182,31 @@ export function printRestaurantRevisedGuestBill(
     </div>`
       : "";
 
-  const inner = `
-    ${shopHeaderBlock(input.shopDetails, settings)}
-    <div style="text-align:center;font-weight:bold;font-size:12px;border:2px solid #000;padding:5px 4px;margin:6px 0;">
-      REVISED GUEST BILL · نیا بل (v${input.revisionNumber})
+  const headerBannerHtml = `
+    <div style="text-align:center;font-weight:bold;font-size:11px;margin:4px 0;">
+      REVISED GUEST BILL (v${input.revisionNumber})
     </div>
     <div style="font-size:9px;text-align:center;margin-bottom:4px;">
-      Previous total: Rs ${Math.round(input.previousTotal).toLocaleString()} →
-      New: Rs ${Math.round(input.netTotal).toLocaleString()}
+      Previous total: Rs ${input.previousTotal.toFixed(2)} → New: Rs ${input.netTotal.toFixed(2)}
     </div>
     ${
       input.editedAt
         ? `<div style="font-size:8px;text-align:center;margin-bottom:4px;">Edited: ${new Date(input.editedAt).toLocaleString()}${input.editedBy ? ` · ${esc(input.editedBy)}` : ""}</div>`
         : ""
     }
-    ${changeBlock}
-    ${guestDetailsBlock({
-      ...input,
-      billLabel,
-      when: when.toLocaleString(),
-    })}
-    <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;margin:4px 0;">
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:bold;margin-bottom:2px;">
-        <div style="flex:1;">Item (updated)</div>
-        <div style="width:22px;text-align:center;">Qty</div>
-        <div style="width:58px;text-align:right;">Amount</div>
-      </div>
-      ${itemAmountRows(compactReceiptLinesForGuestBill(input.items)) || `<div style="font-size:10px;">No line items</div>`}
-    </div>
-    <div style="font-size:11px;line-height:1.5;margin-top:4px;">
-      <div style="display:flex;justify-content:space-between;"><div>Subtotal</div><div>${Math.round(input.subtotal).toLocaleString()}</div></div>
-      ${extraChargeRows(input)}
-      ${
-        input.discount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><div>Discount</div><div>-${Math.round(input.discount).toLocaleString()}</div></div>`
-          : ""
-      }
-      ${
-        input.taxAmount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><div>Tax (${input.taxRate}%)</div><div>+${Math.round(input.taxAmount).toLocaleString()}</div></div>`
-          : ""
-      }
-      <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;border-top:1px solid #000;margin-top:4px;padding-top:4px;">
-        <div>NET PAYABLE</div><div>Rs ${Math.round(input.netTotal).toLocaleString()}</div>
-      </div>
-    </div>
-    <div style="text-align:center;font-size:9px;margin-top:10px;border-top:1px dashed #000;padding-top:6px;">
-      REVISED SLIP - NOT A TAX INVOICE
-    </div>
-    ${thermalFooterBlock(settings)}
-  `;
+    ${changeBlock}`;
 
-  printRestaurantThermalSlip(
+  const slipStyle = buildRestaurantSlipDocumentStyle(settings);
+  const inner = buildPaymentReceiptHtmlDocument(
+    paymentReceiptPayload(
+      input,
+      { orderStatus: "REVISED", headerBannerHtml },
+      compactReceiptLinesForGuestBill(input.items)
+    ),
+    slipStyle
+  );
+
+  await printRestaurantThermalSlip(
     inner,
     settings,
     `Revised Bill ${billLabel} v${input.revisionNumber}`,
@@ -750,67 +1217,48 @@ export function printRestaurantRevisedGuestBill(
 }
 
 /** Thermal 58/80mm paid sales receipt (after settlement). */
-export function printRestaurantPaidReceipt(
+export async function printRestaurantPaidReceipt(
   input: RestaurantPaidReceiptInput,
   callbacks?: { onError?: (message: string) => void }
-): void {
+): Promise<void> {
   const settings = { ...DEFAULT_RECEIPT_SETTINGS, ...input.settings };
   const billLabel = restaurantBillLabel(input.orderNumber, input.invoiceId);
-  const when = input.createdAt ? new Date(input.createdAt) : new Date();
+  const designerHtml = designerSlipHtml(input, `Paid Receipt ${billLabel}`, {
+    paymentMode: restaurantPaymentLabel(input.paymentMode),
+    received: input.paidAmount,
+    remaining: input.remainingDue,
+  });
   const changeGiven = Math.max(0, Number(input.paidAmount) - Number(input.netTotal));
-
-  const inner = `
-    ${shopHeaderBlock(input.shopDetails, settings)}
-    <div style="text-align:center;font-weight:bold;font-size:12px;border:2px solid #000;padding:5px 4px;margin:6px 0;letter-spacing:0.5px;">
-      PAYMENT RECEIPT · THERMAL BILL
-    </div>
-    ${guestDetailsBlock({
-      ...input,
-      billLabel,
-      when: when.toLocaleString(),
-    })}
-    <div style="font-size:10px;margin-bottom:4px;">${metaRow("Payment", restaurantPaymentLabel(input.paymentMode), true)}</div>
-    <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;margin:4px 0;">
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:bold;margin-bottom:2px;">
-        <div style="flex:1;">Item</div>
-        <div style="width:22px;text-align:center;">Qty</div>
-        <div style="width:58px;text-align:right;">Amount</div>
-      </div>
-      ${itemAmountRows(input.items) || `<div style="font-size:10px;">No line items</div>`}
-    </div>
-    <div style="font-size:11px;line-height:1.5;margin-top:4px;">
-      <div style="display:flex;justify-content:space-between;"><div>Subtotal</div><div>${Math.round(input.subtotal).toLocaleString()}</div></div>
-      ${extraChargeRows(input)}
-      ${
-        input.discount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><div>Discount</div><div>-${Math.round(input.discount).toLocaleString()}</div></div>`
-          : ""
-      }
-      ${
-        input.taxAmount > 0
-          ? `<div style="display:flex;justify-content:space-between;"><div>Tax (${input.taxRate}%)</div><div>+${Math.round(input.taxAmount).toLocaleString()}</div></div>`
-          : ""
-      }
-      <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:13px;border-top:1px solid #000;margin-top:4px;padding-top:4px;">
-        <div>NET PAID</div><div>Rs ${Math.round(input.netTotal).toLocaleString()}</div>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:2px;"><div>Received</div><div>Rs ${Math.round(input.paidAmount).toLocaleString()}</div></div>
+  const tenderHtml = `
+    <div class="totals">
+      <p><strong><span class="total-label">Received:</span><span class="total-value">Rs ${input.paidAmount.toFixed(2)}</span></strong></p>
       ${
         changeGiven > 0 && input.remainingDue <= 0
-          ? `<div style="display:flex;justify-content:space-between;"><div>Change</div><div>Rs ${Math.round(changeGiven).toLocaleString()}</div></div>`
+          ? `<p><span class="total-label">Change:</span><span class="total-value">Rs ${changeGiven.toFixed(2)}</span></p>`
           : ""
       }
       ${
         input.remainingDue > 0
-          ? `<div style="display:flex;justify-content:space-between;font-weight:bold;"><div>Credit Due</div><div>Rs ${Math.round(input.remainingDue).toLocaleString()}</div></div>`
+          ? `<p><strong><span class="total-label">Credit Due:</span><span class="total-value">Rs ${input.remainingDue.toFixed(2)}</span></strong></p>`
           : ""
       }
-    </div>
-    ${thermalFooterBlock(settings)}
-    <div style="text-align:center;font-size:9px;margin-top:4px;">Powered by The Accounts</div>
-  `;
+    </div>`;
+  const inner =
+    designerHtml ||
+    buildPaymentReceiptHtmlDocument(
+      paymentReceiptPayload(
+        input,
+        {
+          orderStatus: "PAID",
+          paymentModeLabel: restaurantPaymentLabel(input.paymentMode),
+          afterTotalsHtml: tenderHtml,
+        },
+        compactReceiptLinesForGuestBill(input.items)
+      ),
+      buildRestaurantSlipDocumentStyle(settings)
+    );
 
-  printRestaurantThermalSlip(
+  await printRestaurantThermalSlip(
     inner,
     settings,
     `Paid Receipt ${billLabel}`,

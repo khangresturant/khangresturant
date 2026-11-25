@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { type ReceiptSettings } from "@/components/ReceiptTemplate";
-import { resolveRestaurantPrinterSlots } from "@/lib/restaurant-print-profile";
+import {
+  resolveRestaurantPrinterSlots,
+  resolveSimpleKotPrintDispatch,
+} from "@/lib/restaurant-print-profile";
 import { isSimpleKotCategoryConfigured, simpleKotSlipTitle } from "@/lib/restaurant-kot-split";
 
 type Props = {
@@ -54,6 +57,20 @@ export function RestaurantPosPrinterStrip({
           {categoryLabels?.length
             ? ` · ${categoryLabels.join(", ")}`
             : null}
+          {(() => {
+            const d = resolveSimpleKotPrintDispatch(
+              receiptSettings,
+              companyRow
+            );
+            if (!d) {
+              return isEn
+                ? " · ⚠ set printer + KOT copies"
+                : " · ⚠ پرنٹر اور copies";
+            }
+            const idx =
+              receiptSettings.restaurantSimpleKotPrinterSlot === 1 ? 2 : 1;
+            return ` → P${idx} "${d.printerName}" ×${d.copies}`;
+          })()}
         </p>
       )}
     </div>

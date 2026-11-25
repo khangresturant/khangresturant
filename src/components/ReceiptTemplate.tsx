@@ -5,7 +5,7 @@ import { formatDateTime } from "@/lib/timezone";
 import { getPublicAppUrl } from "@/lib/app-url";
 
 // Centralized branding constant
-export const SOFTWARE_BRANDING = "The Accounts";
+export const SOFTWARE_BRANDING = "Falcon Shift";
 
 // 1. Define the settings type
 export type ReceiptSettings = {
@@ -71,11 +71,21 @@ export type ReceiptSettings = {
   restaurantSimpleKotTitle?: string;
   /** When categories are set, also route lines whose names look like roti/naan. */
   restaurantSimpleKotMatchNames?: boolean;
+  /** 0 = Printer 1, 1 = Printer 2 for the simple roti/naan slip only. */
+  restaurantSimpleKotPrinterSlot?: 0 | 1;
+  /** Dedicated copy count for simple KOT; 0 = use that printer's KOT copies. */
+  restaurantSimpleKotCopies?: number;
+  /** Category IDs → second separate KOT (e.g. Kathi), never mixed with roti slip. */
+  restaurantSecondarySimpleKotCategoryIds?: string[];
+  restaurantSecondarySimpleKotTitle?: string;
+  restaurantSecondarySimpleKotMatchNames?: boolean;
+  restaurantSecondarySimpleKotPrinterSlot?: 0 | 1;
+  restaurantSecondarySimpleKotCopies?: number;
 };
 
 // Default Settings
 export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
-  templateId: "classic-thermal",
+  templateId: "restaurant-default",
   pageSize: "MM80",
   fontFamily: "monospace",
   fontSize: 11,
@@ -122,10 +132,22 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   restaurantSimpleKotCategoryIds: [],
   restaurantSimpleKotTitle: "ROTI / NAN",
   restaurantSimpleKotMatchNames: true,
+  restaurantSimpleKotPrinterSlot: 0,
+  restaurantSimpleKotCopies: 0,
+  restaurantSecondarySimpleKotCategoryIds: [],
+  restaurantSecondarySimpleKotTitle: "KATHI",
+  restaurantSecondarySimpleKotMatchNames: true,
+  restaurantSecondarySimpleKotPrinterSlot: 0,
+  restaurantSecondarySimpleKotCopies: 0,
 };
 
-// 15 Template Definitions
+// Receipt Designer: one default = current live print layout; others are optional alternatives.
 export const RECEIPT_TEMPLATES = [
+  {
+    id: "restaurant-default",
+    name: "Default (Current Print Layout)",
+    desc: "Exactly what prints now: 80mm high-ink KOT, guest bill, payment & reprint slips.",
+  },
   { id: "classic-thermal", name: "Classic Thermal", desc: "Standard monospace layout with dashed borders" },
   { id: "modern-carbon", name: "Modern Carbon", desc: "Sleek sans-serif, deep solid charcoal line breaks" },
   { id: "boutique-serif", name: "Boutique Serif", desc: "Elegant Playfair serif typography, double border accents" },
@@ -197,7 +219,7 @@ interface ReceiptTemplateProps {
 
 export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTemplateProps) {
   const mergedSettings = { ...DEFAULT_RECEIPT_SETTINGS, ...settings };
-  const {
+  let {
     templateId,
     pageSize,
     fontFamily,
@@ -242,13 +264,9 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
     (invoice?.id ? invoice.id.slice(0, 8).toUpperCase() : "PREVIEW");
 
   // Determine width based on Page Size setting
-  let containerWidth = "w-full max-w-[320px]"; // Default 80mm
-  if (pageSize === "MM58") {
-    containerWidth = "w-full max-w-[240px]"; // 58mm
-  } else if (pageSize === "A4") {
-    containerWidth = "w-full max-w-[800px] p-8";
-  } else if (pageSize === "A5") {
-    containerWidth = "w-full max-w-[560px] p-6";
+  let containerWidth = "w-full max-w-full";
+  if (pageSize === "A4" || pageSize === "A5") {
+    containerWidth = "w-full max-w-full";
   }
 
   // Determine Font Family Class based on template or explicit setting
@@ -360,15 +378,22 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
 
   return (
     <div 
-      className={`mx-auto bg-white text-black select-none ${containerWidth} ${fontStyleClass} thermal-receipt-view transition-all`}
+      className={`mx-auto bg-white text-black ${containerWidth} ${fontStyleClass} thermal-receipt-view`}
       style={{ 
         fontSize: `${templateId === "paper-saver" ? Math.min(fontSize, 9.5) : fontSize}px`, 
         lineHeight: templateId === "paper-saver" ? "1.2" : "1.35",
         color: "#000000",
-        paddingLeft: `${Math.max(2, 10 + leftMm * 3.78)}px`,
-        paddingRight: `${Math.max(2, 10 + rightMm * 3.78)}px`,
-        paddingTop: `${Math.max(2, 10 + topMm * 3.78)}px`,
-        paddingBottom: `${Math.max(2, 10 + bottomMm * 3.78)}px`,
+        width: "100%",
+        maxWidth: "100%",
+        boxSizing: "border-box",
+        overflowWrap: "anywhere",
+        WebkitFontSmoothing: "none",
+        MozOsxFontSmoothing: "grayscale",
+        textRendering: "geometricPrecision",
+        paddingLeft: `${Math.max(0, leftMm)}mm`,
+        paddingRight: `${Math.max(0, rightMm)}mm`,
+        paddingTop: `${Math.max(0, topMm)}mm`,
+        paddingBottom: `${Math.max(0, bottomMm)}mm`,
       }}
     >
       {/* 1. Gradient & Accent Edge Decoration */}
@@ -393,12 +418,11 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
           </div>
         )}
 
-        {/* Logo */}
-        {showLogo && logoUrl && (
-          <div className="flex justify-center mb-1.5">
-            <img src={logoUrl} alt="Store Logo" className="h-9 w-auto object-contain filter grayscale contrast-200" />
+        {showLogo === true && logoUrl.trim() ? (
+          <div className="flex justify-center mb-1">
+            <img src={logoUrl.trim()} alt="" className="receipt-logo h-9 w-auto max-w-full object-contain" />
           </div>
-        )}
+        ) : null}
 
         {/* Shop Name Layouts */}
         {templateId === "bold-stripe" ? (
@@ -538,7 +562,13 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
       {renderDivider()}
 
       {/* 4. Table Layouts based on template settings */}
-      <table className="w-full text-left my-1.5 border-collapse">
+      <table className="w-full text-left my-1.5 border-collapse" style={{ tableLayout: "fixed", width: "100%", maxWidth: "100%" }}>
+        <colgroup>
+          <col style={{ width: "46%" }} />
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "21%" }} />
+          <col style={{ width: "21%" }} />
+        </colgroup>
         <thead>
           {templateId === "bold-stripe" ? (
             <tr className="bg-black text-white text-[8.5px] font-black uppercase">
@@ -847,7 +877,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
                     : getPublicAppUrl()
                 )}`} 
                 alt="Digital Receipt QR" 
-                className="w-full h-full object-contain filter grayscale contrast-200"
+                className="receipt-logo w-full h-full object-contain"
               />
             </div>
             <div className="text-[7px] text-zinc-500 font-mono">Scan on mobile to view & download PDF</div>
@@ -867,7 +897,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
                       : getPublicAppUrl()
                   )}`} 
                   alt="Digital Receipt QR" 
-                  className="w-full h-full object-contain filter grayscale contrast-200"
+                  className="receipt-logo w-full h-full object-contain"
                 />
               </div>
               <div className="text-[7px] font-black text-black">Digital Bill</div>
@@ -883,7 +913,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
                       : getPublicAppUrl()
                   )}`} 
                   alt="Online Web Store QR" 
-                  className="w-full h-full object-contain filter grayscale contrast-200"
+                  className="receipt-logo w-full h-full object-contain"
                 />
               </div>
               <div className="text-[7px] font-black text-black">Online Store</div>
@@ -916,7 +946,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
                   invoice?.fbr_qr_code || `https://gst.fbr.gov.pk/qrcode?invoice=${invoice?.id || 'DEMO'}&posid=${fbrPosId || '100001'}&usin=${fbrPosId || '100001'}-${(invoice?.id || 'PREVIEW').slice(0, 8).toUpperCase()}`
                 )}`} 
                 alt="FBR Tax Asaan QR" 
-                className="w-full h-full object-contain filter grayscale contrast-200"
+                className="receipt-logo w-full h-full object-contain"
               />
             </div>
             <div className="space-y-0.5">
@@ -956,7 +986,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
 
         {/* Brand attribution */}
         <p className="text-[7.5px] font-medium text-zinc-500 pt-1 tracking-tight">
-          Powered by {SOFTWARE_BRANDING} POS
+          Powered by Falcon Shift
         </p>
       </div>
     </div>

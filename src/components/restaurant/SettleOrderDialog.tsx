@@ -16,7 +16,7 @@ import {
   RESTAURANT_PAYMENT_MODES,
   type RestaurantPaymentMode,
 } from "@/lib/restaurant-riders";
-import { printRestaurantPaidReceipt } from "@/lib/restaurant-receipt-print";
+import { printRestaurantGuestBill } from "@/lib/restaurant-receipt-print";
 import { mergeRestaurantPrintProfile } from "@/lib/restaurant-print-profile";
 import { DEFAULT_RECEIPT_SETTINGS, type ReceiptSettings } from "@/components/ReceiptTemplate";
 
@@ -195,7 +195,7 @@ export function SettleOrderDialog({
                 quantity: i.quantity,
                 unit_price: i.unit_price,
               }));
-        printRestaurantPaidReceipt(
+        await printRestaurantGuestBill(
           {
             invoiceId: order.id,
             orderNumber: order.order_number,
@@ -210,15 +210,12 @@ export function SettleOrderDialog({
             specialInstructions: order.special_instructions || null,
             deliveryFee: order.delivery_fee || 0,
             additionalCharges: order.additional_charges || 0,
-            paymentMode,
             items: lines,
             subtotal,
             discount: discountVal,
             taxRate: taxRateVal,
             taxAmount,
             netTotal,
-            paidAmount: paymentMode === "credit" ? receivedAmount : netTotal,
-            remainingDue,
             settings: settings || DEFAULT_RECEIPT_SETTINGS,
             shopDetails: shopDetailsProp || {
               name: shopName || "Restaurant",
@@ -238,8 +235,6 @@ export function SettleOrderDialog({
             },
           }
         );
-        // Let browser open print dialog before closing modal
-        await new Promise((r) => setTimeout(r, 500));
       }
 
       toast.success(
