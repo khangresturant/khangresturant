@@ -34,6 +34,7 @@ import { fetchStations } from "@/lib/restaurant-ops";
 import {
   KITCHEN_POLL_INTERVAL_MS,
   shouldPollKitchenLive,
+  loadKitchenTicketForPrint,
 } from "@/lib/restaurant-kitchen";
 
 type KdsTicket = {
@@ -266,11 +267,21 @@ export default function KitchenDisplayPage() {
   }, [shopId, supabase]);
 
   const reprintKot = async (t: KdsTicket) => {
-    const lineMeta = t.items.map((i) => ({
-      name: i.product_name,
-      quantity: i.quantity,
-      remarks: i.remarks,
-    }));
+    const payload = await loadKitchenTicketForPrint(supabase, t.id);
+    const lineMeta =
+      payload?.items?.length
+        ? payload.items.map((it) => ({ ...it }))
+        : t.items.map((i) => ({
+            name: i.product_name,
+            quantity: i.quantity,
+            remarks: i.remarks,
+          }));
+    const productCategoryById = new Map<string, string>();
+    for (const line of lineMeta) {
+      if (line.product_id && line.category_id) {
+        productCategoryById.set(line.product_id, line.category_id);
+      }
+    }
     await printRestaurantKOTDispatch(
       {
         orderNumber: t.order_number,
@@ -291,7 +302,7 @@ export default function KitchenDisplayPage() {
         isReprint: true,
         kotTicketId: t.id,
       },
-      { lineMeta },
+      { lineMeta, productIdToCategoryId: productCategoryById },
       {
         onError: (msg) => toast.error(msg),
       }

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isLocalSqliteEnabled } from "@/lib/config";
 import { isFlame9Brand } from "@/lib/deployment/flame9-brand";
 import { staffPhone } from "@/lib/restaurant-riders";
+import { fetchInvoiceKitchenKotLines } from "@/lib/restaurant-kot-line-build";
 
 export type KitchenTicketLine = {
   product_id: string;
@@ -119,7 +120,14 @@ export async function loadKitchenTicketForPrint(
   waiterName: string | null;
   riderName: string | null;
   riderPhone: string | null;
-  items: { name: string; quantity: number; remarks?: string | null; sizeLabel?: string | null }[];
+  items: {
+    name: string;
+    quantity: number;
+    remarks?: string | null;
+    sizeLabel?: string | null;
+    product_id?: string;
+    category_id?: string | null;
+  }[];
 } | null> {
   const { data: ko, error } = await supabase
     .from("kitchen_orders")
@@ -191,7 +199,7 @@ export async function loadKitchenTicketForPrint(
         ? "Takeaway"
         : "Counter");
 
-  return {
+  const payload = {
     kotId: ko.id,
     orderNumber: invoice?.order_number || null,
     tableName,
@@ -203,20 +211,47 @@ export async function loadKitchenTicketForPrint(
     waiterName,
     riderName,
     riderPhone,
-    items: (
-      (ko as {
-        kitchen_order_items?: {
-          quantity: number;
-          remarks?: string | null;
-          products?: { name?: string } | null;
-        }[];
-      }).kitchen_order_items || []
-    ).map((item) => ({
-      name: item.products?.name || "Item",
-      quantity: Number(item.quantity) || 0,
-      remarks: item.remarks || null,
-    })),
+    items: [] as {
+      name: string;
+      quantity: number;
+      remarks?: string | null;
+      sizeLabel?: string | null;
+      product_id?: string;
+      category_id?: string | null;
+    }[],
   };
+
+  if (ko.invoice_id) {
+    const fromBill = await fetchInvoiceKitchenKotLines(supabase, ko.invoice_id);
+    if (fromBill.length > 0) {
+      payload.items = fromBill.map(
+        ({ name, quantity, sizeLabel, remarks, product_id, category_id }) => ({
+          name,
+          quantity,
+          sizeLabel,
+          remarks,
+          product_id,
+          category_id,
+        })
+      );
+      return payload;
+    }
+  }
+
+  payload.items = (
+    (ko as {
+      kitchen_order_items?: {
+        quantity: number;
+        remarks?: string | null;
+        products?: { name?: string } | null;
+      }[];
+    }).kitchen_order_items || []
+  ).map((item) => ({
+    name: item.products?.name || "Item",
+    quantity: Number(item.quantity) || 0,
+    remarks: item.remarks || null,
+  }));
+  return payload;
 }
 
 export async function loadLatestKOTForInvoice(

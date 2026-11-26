@@ -534,7 +534,8 @@ export default function SettingsPage() {
       const base64String = reader.result as string;
       setReceiptSettings(prev => ({
         ...prev,
-        logoUrl: base64String
+        logoUrl: base64String,
+        showLogo: true,
       }));
       toast.success("Logo file loaded successfully!");
     };
@@ -674,9 +675,11 @@ export default function SettingsPage() {
             name: shopDetails.name,
             phone: shopDetails.phone,
             address: shopDetails.address,
+            email: shopDetails.email,
+            website: shopDetails.website,
           })
         : "",
-    [defaultSlipPreview, receiptSettings, shopDetails.name, shopDetails.phone, shopDetails.address]
+    [defaultSlipPreview, receiptSettings, shopDetails.name, shopDetails.phone, shopDetails.address, shopDetails.email, shopDetails.website]
   );
 
   const handlePrintSample = () => {
@@ -782,6 +785,61 @@ export default function SettingsPage() {
             transition={{ duration: 0.2 }}
             className="grid grid-cols-1 xl:grid-cols-2 gap-6"
           >
+            <div className="xl:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <h3 className="text-base font-black text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
+                Receipt header
+              </h3>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                These sit at the top of every bill: logo first, then shop name, tagline, phone, address, email, and website. A field is left off the slip when it is empty. The logo prints only after you choose a file.
+              </p>
+              <div className="flex flex-wrap items-center gap-4">
+                {receiptSettings.logoUrl?.trim() ? (
+                  <img src={receiptSettings.logoUrl} alt="Shop logo" className="h-14 w-auto max-w-[140px] object-contain border border-slate-200 rounded-lg bg-white p-1" />
+                ) : (
+                  <div className="h-14 w-24 rounded-lg border border-dashed border-slate-300 text-[10px] text-slate-400 flex items-center justify-center text-center px-2">No logo</div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <label className="cursor-pointer bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-xl">
+                    Choose logo
+                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                  </label>
+                  {receiptSettings.logoUrl?.trim() ? (
+                    <button
+                      type="button"
+                      className="text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 text-slate-600"
+                      onClick={() => setReceiptSettings((prev) => ({ ...prev, logoUrl: "", showLogo: false }))}
+                    >
+                      Remove logo
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Phone <span className="normal-case text-slate-400">optional · under the shop name</span></label>
+                  <Input placeholder="e.g. 042-3512345" value={shopDetails.phone || ""} onChange={(e) => setShopDetails({ ...shopDetails, phone: e.target.value })} className="rounded-xl" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Email <span className="normal-case text-slate-400">optional · under the phone</span></label>
+                  <Input type="email" placeholder="info@myshop.com" value={shopDetails.email || ""} onChange={(e) => setShopDetails({ ...shopDetails, email: e.target.value })} className="rounded-xl" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Address <span className="normal-case text-slate-400">optional · under the phone</span></label>
+                  <Input placeholder="Shop #12, Ground Floor, Plaza Name, City" value={shopDetails.address || ""} onChange={(e) => setShopDetails({ ...shopDetails, address: e.target.value })} className="rounded-xl" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Website <span className="normal-case text-slate-400">optional · under the address</span></label>
+                  <Input placeholder="https://www.myshop.com" value={shopDetails.website || ""} onChange={(e) => setShopDetails({ ...shopDetails, website: e.target.value })} className="rounded-xl" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Tagline <span className="normal-case text-slate-400">optional · under the shop name</span></label>
+                  <Input placeholder="e.g. Fresh food, fast service" value={receiptSettings.headerTagline} onChange={(e) => setReceiptSettings((prev) => ({ ...prev, headerTagline: e.target.value, showHeaderTagline: true }))} className="rounded-xl" />
+                </div>
+              </div>
+              <Button onClick={handleSaveShopDetails} disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-11 rounded-xl">
+                <Save size={16} className="mr-2" /> Save header
+              </Button>
+            </div>
             {/* Card 1: Shop/Company Details */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5">
               <h3 className="text-base font-black text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -1717,48 +1775,7 @@ export default function SettingsPage() {
                     )}
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Phone Number</label>
-                    <Input 
-                      placeholder="e.g. 042-3512345" 
-                      value={shopDetails.phone || ""} 
-                      onChange={(e) => setShopDetails({ ...shopDetails, phone: e.target.value })}
-                      className="rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Email Address</label>
-                    <Input 
-                      type="email"
-                      placeholder="info@myshop.com" 
-                      value={shopDetails.email || ""} 
-                      onChange={(e) => setShopDetails({ ...shopDetails, email: e.target.value })}
-                      className="rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Physical Address (Receipt Footer)</label>
-                  <Input 
-                    placeholder="Shop #12, Ground Floor, Plaza Name, City" 
-                    value={shopDetails.address || ""} 
-                    onChange={(e) => setShopDetails({ ...shopDetails, address: e.target.value })}
-                    className="rounded-xl"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5">Website URL</label>
-                  <Input 
-                    placeholder="https://www.myshop.com" 
-                    value={shopDetails.website || ""} 
-                    onChange={(e) => setShopDetails({ ...shopDetails, website: e.target.value })}
-                    className="rounded-xl"
-                  />
-                </div>                <Button 
+                <Button 
                   onClick={handleSaveShopDetails} 
                   disabled={isSubmitting} 
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-11 rounded-xl shadow-md shadow-blue-200 mt-2"

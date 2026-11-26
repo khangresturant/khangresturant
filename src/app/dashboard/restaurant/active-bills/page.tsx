@@ -36,6 +36,7 @@ import {
 } from "@/lib/restaurant-receipt-print";
 import {
   computeKitchenDispatchDelta,
+  computeKitchenPrepareActualLines,
   loadRestaurantBillEditPrefs,
   mapInvoiceRowsToHistoryItems,
   parseRestaurantEditHistory,
@@ -44,6 +45,11 @@ import {
   type RestaurantBillEditHistoryEntry,
   type RestaurantBillEditPrefs,
 } from "@/lib/restaurant-bill-edit";
+import {
+  invoiceDbItemToKitchenKotLine,
+  invoiceItemsToKitchenKotLines,
+  restaurantBillLineKey,
+} from "@/lib/restaurant-kot-line-build";
 import {
   companyRowToShopDetails,
   mergeRestaurantPrintProfile,
@@ -508,33 +514,22 @@ export default function ActiveBillsPage() {
         const cid = (row.products as { category_id?: string } | null)?.category_id;
         if (row.product_id && cid) productCategoryById.set(row.product_id, cid);
       }
-      const lineMeta = lines.map((l) => {
-        const prod = selectedBill.invoice_items?.find((i) => i.product_id === l.product_id);
-        return {
-          name: prod?.products?.name || "Item",
-          quantity: l.quantity,
-          sizeLabel: prod?.packing_name || null,
-          product_id: l.product_id,
-          category_id:
-            (prod?.products as { category_id?: string } | null)?.category_id ?? null,
-        };
-      });
+      const fullBillKotLines = invoiceItemsToKitchenKotLines(
+        selectedBill.invoice_items || [],
+        { productCategoryById }
+      );
       await printRestaurantKOTDispatch(
         {
           orderNumber: selectedBill.order_number,
           tableName: selectedBill.tableName || null,
           serviceType: selectedBill.service_type,
           ...billGuestDetails(selectedBill),
-          items: lineMeta.map(({ name, quantity, sizeLabel }) => ({
-            name,
-            quantity,
-            sizeLabel,
-          })),
+          items: fullBillKotLines,
           settings: receiptSettings,
           shopDetails: shopDetailsForPrint(),
           companyRow: companyDetails,
         },
-        { productIdToCategoryId: productCategoryById, lineMeta },
+        { productIdToCategoryId: productCategoryById, lineMeta: fullBillKotLines },
         { onError: (msg) => toast.error(msg) }
       );
       toast.success(
@@ -684,6 +679,7 @@ export default function ActiveBillsPage() {
       }
 
       const kitchenDelta = computeKitchenDispatchDelta(previousItems, nextItems);
+      const kitchenPrepareActual = computeKitchenPrepareActualLines(previousItems, nextItems);
       if (
         billEditPrefs.dispatchKitchenTicketOnBillEdit &&
         kitchenDelta.length > 0 &&
@@ -708,18 +704,39 @@ export default function ActiveBillsPage() {
           const cid = (row.products as { category_id?: string } | null)?.category_id;
           if (row.product_id && cid) productCategoryById.set(row.product_id, cid);
         }
-        const prepareNow = kitchenDelta.map((d) => ({
-          name: d.name,
-          quantity: d.quantity,
-          sizeLabel: d.packing_name || null,
-        }));
-        const lineMeta = kitchenDelta.map((d) => ({
-          name: d.name,
-          quantity: d.quantity,
-          sizeLabel: d.packing_name || null,
-          product_id: d.product_id,
-          category_id: productCategoryById.get(d.product_id) ?? null,
-        }));
+        const prepKeys = new Set(
+          kitchenPrepareActual.map((d) =>
+            restaurantBillLineKey({
+              product_id: d.product_id,
+              packing_name: d.packing_name,
+            })
+          )
+        );
+        const kotFromEditRows = editItems
+          .filter((row) =>
+            prepKeys.has(
+              restaurantBillLineKey({
+                product_id: row.product_id,
+                packing_name: row.packing_name,
+              })
+            )
+          )
+          .map((row) =>
+            invoiceDbItemToKitchenKotLine(row, row.quantity, {
+              category_id: productCategoryById.get(row.product_id || "") ?? null,
+            })
+          );
+        const prepareNow = kotFromEditRows.map(
+          ({ name, quantity, sizeLabel, remarks, product_id, category_id }) => ({
+            name,
+            quantity,
+            sizeLabel,
+            remarks,
+            product_id,
+            category_id,
+          })
+        );
+        const lineMeta = prepareNow;
         await printRestaurantKOTDispatch(
           {
             orderNumber: selectedBill.order_number,

@@ -66,8 +66,18 @@ import { dispatchKitchenTicket } from "@/lib/restaurant-kitchen";
 import {
   shouldAutoAppendBillVersion,
   persistRestaurantDraftBillEdit,
+  computeRestaurantBillChanges,
+  computeKitchenDispatchDelta,
+  computeKitchenPrepareActualLines,
+  mapInvoiceRowsToHistoryItems,
+  loadRestaurantBillEditPrefs,
   type RestaurantBillEditPersistLine,
 } from "@/lib/restaurant-bill-edit";
+import {
+  cartItemToKitchenKotLine,
+  restaurantBillLineKey,
+  restaurantCartBillLineKey,
+} from "@/lib/restaurant-kot-line-build";
 import {
   computeCartIngredientCost,
   computeInvoiceIngredientCost,
@@ -578,12 +588,13 @@ export default function RestaurantPOSPage() {
   const cartToEditLines = (items: CartItem[]): RestaurantBillEditPersistLine[] =>
     items.map((c) => {
       const baseName = c.name.includes(" (") ? c.name.split(" (")[0]! : c.name;
+      const packing = c.isDeal ? c.dealMeta || null : c.sizeLabel || null;
       return {
         product_id: c.productId,
         quantity: c.quantity,
         unit_price: c.price,
         subtotal: c.price * c.quantity,
-        packing_name: c.dealMeta || c.sizeLabel || null,
+        packing_name: packing,
         menu_size_id: c.menuSizeId || null,
         products: { name: baseName, purchase_price_single: c.purchasePrice },
       };
@@ -980,8 +991,9 @@ export default function RestaurantPOSPage() {
     return null;
   };
 
-  /** Reload visible cart + baseline (resume bill / table load). */
+  /** Reload kitchen baseline. Never wipe a bill that is open for edit. */
   const refreshCartFromInvoice = async (invoiceId: string) => {
+    if (resumeInvoiceId && resumeInvoiceId === invoiceId) return;
     const snap = await fetchInvoiceCartSnapshot(invoiceId);
     if (snap?.items) {
       applyBaselineFromInvoiceRows(snap.items, snap.meta);
@@ -992,6 +1004,8 @@ export default function RestaurantPOSPage() {
 
   /** After KOT print: clear staging cart; bill stays on table / billing desk. */
   const clearCartAfterKot = async (activeInvoiceId: string, localBaseline?: CartItem[]) => {
+    setResumeInvoiceId(null);
+
     const immediate: CartItem[] =
       localBaseline && localBaseline.length > 0
         ? (JSON.parse(JSON.stringify(localBaseline)) as CartItem[])
@@ -1170,7 +1184,7 @@ export default function RestaurantPOSPage() {
   };
 
   useEffect(() => {
-    if (!activeOrderInvoiceId || !shopId) return;
+    if (!activeOrderInvoiceId || !shopId || resumeInvoiceId) return;
     const invoiceId = activeOrderInvoiceId;
     const timer = setInterval(() => {
       if (isSubmittingKOT) return;
@@ -1179,7 +1193,7 @@ export default function RestaurantPOSPage() {
       void refreshCartFromInvoice(invoiceId);
     }, 10000);
     return () => clearInterval(timer);
-  }, [activeOrderInvoiceId, shopId, isSubmittingKOT, cart, dbItems]);
+  }, [activeOrderInvoiceId, shopId, isSubmittingKOT, cart, dbItems, resumeInvoiceId]);
 
   useEffect(() => {
     if (!activeOrderInvoiceId || !shouldPollKitchenLive()) return;
@@ -1656,6 +1670,7 @@ export default function RestaurantPOSPage() {
     }
 
     setIsSubmittingKOT(true);
+    const wasResumeBillEdit = Boolean(resumeInvoiceId);
     try {
       let kotPrintOrderNumber: string | null = orderNumber;
       let activeInvoiceId =
@@ -1694,30 +1709,21 @@ export default function RestaurantPOSPage() {
             .reduce((sum, d) => sum + d.quantity, 0);
         const diffQty = item.quantity - dbQty;
         if (diffQty > 0) {
-          const labels = restaurantReceiptItemLabels(
-            item.name,
-            item.dealMeta || item.sizeLabel || null,
-            null,
-            dealTitleById
-          );
-          const kitchenNote = item.isDeal
-            ? item.remarks?.trim() || labels.detail || ""
-            : item.remarks;
-          return {
-            product_id: item.productId,
+          return cartItemToKitchenKotLine(item, diffQty, {
+            dealTitleById,
             category_id:
               products.find((p) => p.id === item.productId)?.category_id ?? null,
-            name: item.isDeal ? labels.title : item.name,
-            quantity: diffQty,
-            remarks: kitchenNote,
-            sizeLabel: item.isDeal ? null : item.sizeLabel || null,
-          };
+          });
         }
         return null;
       }).filter(Boolean) as any[];
 
       const cartDirty = cartDiffersFromBaseline(cart, dbItems);
-
+      const billEditPrefs = loadRestaurantBillEditPrefs(shopId);
+      const prevForKot = mapInvoiceRowsToHistoryItems(cartToEditLines(dbItems));
+      const nextForKot = mapInvoiceRowsToHistoryItems(cartToEditLines(billingCart));
+      const kotChanges = computeRestaurantBillChanges(prevForKot, nextForKot);
+      const kitchenDelta = computeKitchenDispatchDelta(prevForKot, nextForKot);
       if (kotItems.length === 0 && !cartDirty) {
         toast.info("No new items or quantities added since last KOT.");
         setIsSubmittingKOT(false);
@@ -1725,22 +1731,6 @@ export default function RestaurantPOSPage() {
       }
 
       const baselineForKot = JSON.parse(JSON.stringify(billingCart)) as CartItem[];
-
-      if (kotItems.length === 0 && cartDirty && activeInvoiceId) {
-        const syncMeta = await syncDraftInvoiceFromCart(activeInvoiceId);
-        await clearCartAfterKot(activeInvoiceId, baselineForKot);
-        toast.success(
-          syncMeta.versionSaved
-            ? language === "en"
-              ? `Bill reprocessed - edit version v${syncMeta.revisionCount ?? 1} saved automatically.`
-              : `بل دوبارہ پروسیس - ورژن v${syncMeta.revisionCount ?? 1} خود محفوظ۔`
-            : language === "en"
-              ? "Cart synced with bill."
-              : "کارٹ بل کے ساتھ اپڈیٹ ہو گیا۔"
-        );
-        setIsSubmittingKOT(false);
-        return;
-      }
 
       // 2. Create Draft Invoice if Dining/Takeaway and not already created
       if (!activeInvoiceId) {
@@ -1796,23 +1786,25 @@ export default function RestaurantPOSPage() {
         }
       }
 
-      const firstProduct = products.find((p) => p.id === kotItems[0]?.product_id);
-      const stationId = firstProduct?.kitchen_station_id || kdsStationPref || null;
-      const hub = stations.find((s) => s.id === stationId)?.kitchen_hub || null;
+      if (kotItems.length > 0) {
+        const firstProduct = products.find((p) => p.id === kotItems[0]?.product_id);
+        const stationId = firstProduct?.kitchen_station_id || kdsStationPref || null;
+        const hub = stations.find((s) => s.id === stationId)?.kitchen_hub || null;
 
-      await dispatchKitchenTicket(supabase, {
-        shopId: shopId!,
-        invoiceId: activeInvoiceId!,
-        tableId: selectedTable?.id || null,
-        waiterId: selectedWaiterId ? selectedWaiterId : null,
-        lines: kotItems.map((it) => ({
-          product_id: it.product_id,
-          quantity: it.quantity,
-          remarks: it.remarks,
-        })),
-        stationId,
-        kitchenHub: hub,
-      });
+        await dispatchKitchenTicket(supabase, {
+          shopId: shopId!,
+          invoiceId: activeInvoiceId!,
+          tableId: selectedTable?.id || null,
+          waiterId: selectedWaiterId ? selectedWaiterId : null,
+          lines: kotItems.map((it) => ({
+            product_id: it.product_id,
+            quantity: it.quantity,
+            remarks: it.remarks,
+          })),
+          stationId,
+          kitchenHub: hub,
+        });
+      }
 
       setCurrentOrderStatus("pending");
 
@@ -1831,8 +1823,90 @@ export default function RestaurantPOSPage() {
         if (kotPrintOrderNumber) setOrderNumber(kotPrintOrderNumber);
       }
 
+      const kotDeltaPrintLines = kotItems as ReturnType<typeof cartItemToKitchenKotLine>[];
+
+      const prepLineKeys = new Set(
+        computeKitchenPrepareActualLines(prevForKot, nextForKot).map((d) =>
+          restaurantBillLineKey({
+            product_id: d.product_id,
+            packing_name: d.packing_name,
+          })
+        )
+      );
+      const kotActualPrintLines = billingCart
+        .filter((c) => prepLineKeys.has(restaurantCartBillLineKey(c)))
+        .map((c) =>
+          cartItemToKitchenKotLine(c, c.quantity, {
+            dealTitleById,
+            category_id: productCategoryById.get(c.productId) ?? null,
+          })
+        );
+
+      const kotAmendmentPrint =
+        kotChanges.length > 0 && (syncMeta.versionSaved || wasResumeBillEdit);
+      const kotPrintLines =
+        kotAmendmentPrint && kotActualPrintLines.length > 0
+          ? kotActualPrintLines
+          : kotDeltaPrintLines.length > 0
+            ? kotDeltaPrintLines
+            : kitchenDelta.map((d) => {
+                const key = restaurantBillLineKey({
+                  product_id: d.product_id,
+                  packing_name: d.packing_name,
+                });
+                const cartHit = billingCart.find(
+                  (c) => restaurantCartBillLineKey(c) === key
+                );
+                if (cartHit) {
+                  return cartItemToKitchenKotLine(cartHit, d.quantity, {
+                    dealTitleById,
+                    category_id: productCategoryById.get(d.product_id) ?? null,
+                  });
+                }
+                return cartItemToKitchenKotLine(
+                  {
+                    productId: d.product_id,
+                    name: d.name,
+                    sizeLabel: d.packing_name,
+                    isDeal: Boolean(
+                      d.packing_name && String(d.packing_name).includes("DEAL_ID:")
+                    ),
+                    dealMeta:
+                      d.packing_name && String(d.packing_name).includes("DEAL_ID:")
+                        ? d.packing_name
+                        : undefined,
+                  },
+                  d.quantity,
+                  {
+                    dealTitleById,
+                    category_id: productCategoryById.get(d.product_id) ?? null,
+                  }
+                );
+              });
+
+      const billAmendment =
+        kotChanges.length > 0 && (syncMeta.versionSaved || wasResumeBillEdit)
+          ? {
+              revisionNumber: syncMeta.revisionCount,
+              editedAt: new Date().toISOString(),
+              editedBy: userName ?? undefined,
+              changes: kotChanges,
+              showChangeDetails: billEditPrefs.showChangeDetailsOnKot !== false,
+              prepareNow: kotPrintLines.map(({ name, quantity, sizeLabel, remarks }) => ({
+                name,
+                quantity,
+                sizeLabel,
+                remarks,
+              })),
+            }
+          : undefined;
+
+      const shouldPrintKot =
+        printKitchenReceipt &&
+        (kotPrintLines.length > 0 || (billAmendment?.changes?.length ?? 0) > 0);
+
       // 6. Print KOT Slip (cap wait so POS never hangs if spooler stalls)
-      if (printKitchenReceipt) {
+      if (shouldPrintKot) {
         const printErr =
           language === "en"
             ? "Kitchen print failed or timed out — check printer name in Settings."
@@ -1845,19 +1919,20 @@ export default function RestaurantPOSPage() {
                 tableName: selectedTable?.name || null,
                 serviceType: posMode,
                 ...posGuestDetails(),
-                items: kotItems.map((it: any) => ({
-                  name: it.name,
-                  quantity: it.quantity,
-                  sizeLabel: it.sizeLabel,
-                  remarks: it.remarks,
+                items: kotPrintLines.map(({ name, quantity, sizeLabel, remarks }) => ({
+                  name,
+                  quantity,
+                  sizeLabel,
+                  remarks,
                 })),
                 settings: receiptSettings,
                 shopDetails: companyRowToShopDetails(companyDetails, shopName),
                 companyRow: companyDetails,
+                billAmendment,
               },
               {
                 productIdToCategoryId: productCategoryById,
-                lineMeta: kotItems,
+                lineMeta: kotPrintLines,
               },
               {
                 onError: (msg) =>
@@ -2927,31 +3002,31 @@ export default function RestaurantPOSPage() {
                                     ).toFixed(0)}
                                   </span>
                                 </div>
-                                ) : (
-                                  <div className="text-[9px] text-slate-400">
-                                    {language === "en"
-                                      ? "COGS - add items or send KOT"
-                                      : "آئٹم یا KOT"}
-                                  </div>
-                                )}
-                                {!isPaid && ord.id && (
-                                  <button
-                                    type="button"
-                                    onClick={() => void loadInvoiceIntoPosForEdit(ord.id)}
-                                    className="mt-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer transition flex items-center gap-1"
-                                  >
-                                    <Edit size={10} />
-                                    {resumeInvoiceId === ord.id
-                                      ? language === "en"
-                                        ? "Editing Now"
-                                        : "ایڈٹ جاری"
-                                      : language === "en"
-                                        ? "Edit Bill"
-                                        : "بل ایڈٹ"}
-                                  </button>
-                                )}
-                              </div>
+                              ) : (
+                                <div className="text-[9px] text-slate-400">
+                                  {language === "en"
+                                    ? "COGS - add items or send KOT"
+                                    : "آئٹم یا KOT"}
+                                </div>
+                              )}
+                              {!isPaid && ord.id && (
+                                <button
+                                  type="button"
+                                  onClick={() => void loadInvoiceIntoPosForEdit(ord.id)}
+                                  className="mt-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2 py-0.5 rounded cursor-pointer transition flex items-center gap-1"
+                                >
+                                  <Edit size={10} />
+                                  {resumeInvoiceId === ord.id
+                                    ? language === "en"
+                                      ? "Editing Now"
+                                      : "ایڈٹ جاری"
+                                    : language === "en"
+                                      ? "Edit Bill"
+                                      : "بل ایڈٹ"}
+                                </button>
+                              )}
                             </div>
+                          </div>
                         );
                       })}
                     </div>
@@ -3065,15 +3140,16 @@ export default function RestaurantPOSPage() {
 
         {/* Right cart panel - width draggable on desktop (left edge) */}
         <div
-          className={`w-full h-full flex flex-col bg-white border-l border-slate-200 overflow-hidden shrink-0 min-h-0 relative ${
+          className={`@container w-full h-full flex flex-col bg-white border-l border-slate-200 overflow-hidden min-w-0 min-h-0 relative ${
             showMobileCart ? "flex" : "hidden md:flex"
           }`}
           style={
             cartPanelDesktop
               ? {
-                  width: `${cartPanelWidth}px`,
-                  minWidth: CART_PANEL_MIN_W,
-                  maxWidth: CART_PANEL_MAX_W,
+                  width: `min(${cartPanelWidth}px, 100%)`,
+                  minWidth: "min(17.5rem, 100%)",
+                  maxWidth: "100%",
+                  flex: `0 1 ${cartPanelWidth}px`,
                   transition: cartPanelResizing ? "none" : "width 0.15s ease-out",
                 }
               : undefined
@@ -3093,9 +3169,9 @@ export default function RestaurantPOSPage() {
             />
           </div>
           {/* Top bar: table + guest + clear (cart title header hidden) */}
-          <div className="px-2 py-1 border-b border-slate-200 shrink-0 bg-white">
-            <div className="flex items-center justify-between gap-2 text-xs min-h-7">
-              <div className="flex items-center gap-1 min-w-0 flex-1">
+          <div className="px-2.5 py-2 border-b border-slate-200 shrink-0 bg-white min-w-0 max-h-[38%] overflow-y-auto overflow-x-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1 text-xs">
+              <div className="flex items-start gap-1 min-w-0 flex-1 basis-36">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -3104,7 +3180,7 @@ export default function RestaurantPOSPage() {
                 >
                   <ArrowLeft size={18} />
                 </Button>
-                <div className="min-w-0 truncate text-[11px] leading-tight">
+                <div className="min-w-0 flex-1 text-[11px] leading-snug break-words">
                   {posMode === "dining" && selectedTable && (
                     <div className="font-black text-slate-900">{selectedTable.name}</div>
                   )}
@@ -3132,7 +3208,7 @@ export default function RestaurantPOSPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
                 {cart.length > 0 && (
                   <button
                     type="button"
@@ -3165,8 +3241,8 @@ export default function RestaurantPOSPage() {
               </div>
             </div>
             {activeOrderInvoiceId && onBillItemCount > 0 && (
-              <div className="mt-1.5 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px]">
-                <div className="min-w-0 truncate text-slate-700">
+              <div className="mt-1.5 flex flex-wrap items-start justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] min-w-0">
+                <div className="min-w-0 flex-1 basis-28 break-words text-slate-700 space-y-0.5">
                   <div className="font-bold text-slate-800">
                     {language === "en" ? "Open kitchen bill" : "کھلا بل"}
                   </div>
@@ -3203,18 +3279,18 @@ export default function RestaurantPOSPage() {
                 </div>
               </div>
             )}
-            <div className="flex items-center justify-between gap-2 text-[11px] pt-0.5">
-              <div className="flex items-center gap-1.5 truncate min-w-0">
-                <div className="font-bold text-slate-800 truncate">
+            <div className="flex items-start justify-between gap-2 text-[11px] pt-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+                <div className="font-bold text-slate-800 break-words">
                   👤 {customerName || (selectedCustomerId === "walkin" ? "Walk-in Guest" : customers.find(c => c.id === selectedCustomerId)?.name || "Guest")}
                 </div>
                 {posMode === "dining" && selectedWaiterId && (
-                  <div className="text-[10px] text-slate-500 truncate">
+                  <div className="text-[10px] text-slate-500 break-words">
                     · 👨‍🍳 {staff.find(s => s.id === selectedWaiterId)?.name || "Waiter"}
                   </div>
                 )}
                 {posMode === "delivery" && (
-                  <div className={`text-[10px] truncate ${selectedRiderId ? "text-emerald-700" : "text-amber-700 font-bold"}`}>
+                  <div className={`text-[10px] break-words ${selectedRiderId ? "text-emerald-700" : "text-amber-700 font-bold"}`}>
                     · 🛵 {selectedRiderId
                       ? riderLabel(staff.find((s) => s.id === selectedRiderId))
                       : "No rider"}
@@ -3226,8 +3302,8 @@ export default function RestaurantPOSPage() {
             {/* Expandable Inputs */}
             {showCustomerDetails && (
               <div className="mt-2 pt-2 border-t border-slate-200 space-y-1.5 animate-in fade-in duration-200">
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div>
+                <div className="grid grid-cols-1 @[20rem]:grid-cols-2 gap-1.5 min-w-0">
+                  <div className="min-w-0">
                     <div className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Guest / Khata</div>
                     <select
                       value={selectedCustomerId}
@@ -3249,7 +3325,7 @@ export default function RestaurantPOSPage() {
                   </div>
 
                   {posMode === "dining" && (
-                    <div>
+                    <div className="min-w-0">
                       <div className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Waiter</div>
                       <select
                         value={selectedWaiterId}
@@ -3265,7 +3341,7 @@ export default function RestaurantPOSPage() {
                   )}
 
                   {posMode === "delivery" && (
-                    <div>
+                    <div className="min-w-0">
                       <div className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">
                         Rider (required before pay)
                       </div>
@@ -3285,9 +3361,9 @@ export default function RestaurantPOSPage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-1.5">
-                  <Input placeholder="Guest Name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="h-7 text-[11px]" />
-                  <Input placeholder="Phone Number" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="h-7 text-[11px]" />
+                <div className="grid grid-cols-1 @[20rem]:grid-cols-2 gap-1.5 min-w-0">
+                  <Input placeholder="Guest Name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="h-7 text-[11px] min-w-0" />
+                  <Input placeholder="Phone Number" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="h-7 text-[11px] min-w-0" />
                 </div>
                 {posMode === "delivery" && (
                   <Input placeholder="Delivery Address" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} className="h-7 text-[11px]" />
@@ -3305,10 +3381,10 @@ export default function RestaurantPOSPage() {
           {/* Cart Item Rows - Primary Scrollable Area */}
           <div
             key={`restaurant-cart-${cartEpoch}`}
-            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1.5 py-1 space-y-1 bg-white"
+            className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-2 py-2 flex flex-col gap-2 bg-slate-50/70"
           >
             {resumeInvoiceId && (
-              <div className="mb-2 p-2 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-between gap-2 shadow-xs shrink-0">
+              <div className="mb-1 p-2 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-between gap-2 shadow-xs shrink-0">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-xs font-black text-amber-950">
                     <Edit size={13} className="text-amber-700 shrink-0" />
@@ -3377,18 +3453,19 @@ export default function RestaurantPOSPage() {
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
                     key={itemKey} 
-                    className="py-1.5 px-1 border-b border-slate-100 relative"
+                    className="rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm space-y-2 min-w-0 shrink-0"
                   >
-                    {isNew && (
-                      <div className="absolute top-2 right-2 text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded">
-                        NEW
-                      </div>
-                    )}
-
-                    <div className="flex justify-between items-start gap-1 pr-7">
-                      <div className="min-w-0">
-                        <div className="text-[10px] font-bold text-slate-400 font-mono mr-1">#{idx + 1}</div>
-                        <div className="font-bold text-slate-900 text-xs">{item.name}</div>
+                    <div className="flex items-start justify-between gap-2 min-w-0">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <div className="text-[10px] font-bold text-slate-400 font-mono">#{idx + 1}</div>
+                          {isNew && (
+                            <div className="text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.5 rounded">
+                              NEW
+                            </div>
+                          )}
+                        </div>
+                        <div className="font-bold text-slate-900 text-xs leading-snug break-words">{item.name}</div>
                         {item.addOns && item.addOns.length > 0 && (
                           <ul className="mt-1 space-y-0.5 pl-1">
                             {item.addOns.map((a) => (
@@ -3396,7 +3473,7 @@ export default function RestaurantPOSPage() {
                                 key={`${item.cartItemId}-${a.name}`}
                                 className="flex justify-between gap-2 text-[10px] text-emerald-800 font-semibold"
                               >
-                                <div className="truncate">+ {a.name}</div>
+                                <div className="min-w-0 break-words">+ {a.name}</div>
                                 <div className="shrink-0 font-mono">
                                   {a.priceAdd > 0 ? `Rs ${a.priceAdd}` : "Free"}
                                 </div>
@@ -3405,18 +3482,18 @@ export default function RestaurantPOSPage() {
                           </ul>
                         )}
                       </div>
-                      <div className="font-black text-slate-900 text-xs font-mono shrink-0">
+                      <div className="font-black text-slate-900 text-xs font-mono shrink-0 text-right leading-tight">
                         Rs {(item.price * item.quantity).toLocaleString()}
                       </div>
                     </div>
 
                     {/* Quantity controls & Unit Price */}
-                    <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
                       <div className="text-[10px] text-slate-500 font-mono font-medium">
                         Rs {item.price.toLocaleString()} each
                       </div>
                       
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <div className="flex items-center border border-slate-200 bg-slate-50 rounded-lg p-0.5 shadow-inner">
                           <button
                             onClick={() => updateCartQty(item.cartItemId, item.quantity - 1)}
@@ -3458,8 +3535,8 @@ export default function RestaurantPOSPage() {
           </div>
 
           {/* Pricing Summary & Checkout Action Buttons */}
-          <div className="border-t border-slate-200 px-1.5 py-1.5 bg-white shrink-0">
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(6.25rem,1fr))] gap-x-2 gap-y-1.5 w-full">
+          <div className="border-t border-slate-200 px-2 py-2 bg-white shrink-0 min-w-0 max-h-[48%] overflow-y-auto overflow-x-hidden">
+            <div className="grid grid-cols-1 @[22rem]:grid-cols-2 gap-x-2 gap-y-2 w-full min-w-0">
               {awaitingNextKot ? (
                 <div className="col-span-full min-w-0">
                   <div className="text-[10px] font-semibold text-slate-500">
@@ -3641,7 +3718,7 @@ export default function RestaurantPOSPage() {
               </label>
             </div>
 
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-1 pt-1">
+            <div className="grid grid-cols-1 @[22rem]:grid-cols-2 gap-1.5 pt-2 min-w-0">
               <Button
                 onClick={sendKOT}
                 disabled={isSubmittingKOT || cart.length === 0 || !!activeClosingBook}
@@ -3670,7 +3747,7 @@ export default function RestaurantPOSPage() {
             <Button
               onClick={openSettleOrderModal}
               disabled={billingCart.length === 0 || !!activeClosingBook || !orderFlowSettleReady}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-600 text-white font-black h-9 text-xs flex items-center justify-center gap-1.5 cursor-pointer mt-1 rounded-lg shadow-none"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-600 text-white font-black min-h-9 h-auto whitespace-normal text-center leading-tight text-xs flex items-center justify-center gap-1.5 cursor-pointer mt-1.5 rounded-lg shadow-none px-2 py-2"
             >
               <DollarSign size={16} />
               {orderFlowSettleReady
@@ -3688,7 +3765,7 @@ export default function RestaurantPOSPage() {
                 type="button"
                 onClick={() => setIsSplitModalOpen(true)}
                 disabled={billingCart.length === 0 || !!activeClosingBook}
-                className="text-[11px] font-bold text-purple-700 hover:text-purple-900 cursor-pointer flex items-center gap-1 py-0.5"
+                className="text-[11px] font-bold text-purple-700 hover:text-purple-900 cursor-pointer flex flex-wrap items-center justify-center gap-1 py-1 text-center leading-snug"
               >
                 <Users size={11} /> Split Bill Between Seats / Items
               </button>

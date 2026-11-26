@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
             try {
               const itemsRes = await sql.query(
                 `SELECT ii.*, 
-                        json_build_object('name', COALESCE(p.name, 'Item'), 'purchase_price_single', COALESCE(p.purchase_price_single, 0)) AS products
+                        json_build_object('name', COALESCE(p.name, 'Item'), 'purchase_price_single', COALESCE(p.purchase_price_single, 0), 'category_id', p.category_id) AS products
                  FROM "public"."invoice_items" ii
                  LEFT JOIN "public"."products" p ON p.id = ii.product_id
                  WHERE ii.invoice_id = ANY($1)
@@ -307,7 +307,7 @@ export async function POST(request: NextRequest) {
           if (prodIds.length > 0) {
             try {
               const prodsRes = await sql.query(
-                `SELECT id, name, purchase_price_single, not_discounted FROM "public"."products" WHERE id = ANY($1)`,
+                `SELECT id, name, purchase_price_single, not_discounted, category_id FROM "public"."products" WHERE id = ANY($1)`,
                 [prodIds]
               );
               const prodMap = new Map(prodsRes.map((p: any) => [p.id, p]));

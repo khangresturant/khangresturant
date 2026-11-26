@@ -7,6 +7,7 @@ import {
 } from "@/lib/restaurant-orders";
 import { restoreStockForInvoiceLines } from "@/lib/restaurant-recipe-cost";
 import { restaurantReceiptItemLabels } from "@/lib/restaurant-deal-slots";
+import { restaurantBillLineKey } from "@/lib/restaurant-kot-line-build";
 
 export type RestaurantBillHistoryItem = {
   product_id?: string;
@@ -90,7 +91,13 @@ export function parseRestaurantEditHistory(raw: unknown): RestaurantBillEditHist
 }
 
 function lineKey(item: { product_id?: string; packing_name?: string | null; product_name?: string }) {
-  return `${item.product_id || item.product_name || "?"}::${item.packing_name || ""}`;
+  if (item.product_id) {
+    return restaurantBillLineKey({
+      product_id: item.product_id,
+      packing_name: item.packing_name,
+    });
+  }
+  return `${item.product_name || "?"}::${item.packing_name || ""}`;
 }
 
 export function mapInvoiceRowsToHistoryItems(
@@ -185,7 +192,7 @@ export type KitchenDispatchDeltaLine = {
   packing_name?: string | null;
 };
 
-/** Items kitchen must prepare after a bill edit (new lines + qty increases only). */
+/** Kitchen ticket queue: qty increase / new lines only (delta to cook). */
 export function computeKitchenDispatchDelta(
   previous: RestaurantBillHistoryItem[],
   next: RestaurantBillHistoryItem[]
@@ -209,6 +216,52 @@ export function computeKitchenDispatchDelta(
     }
   }
   return deltas;
+}
+
+/** KOT slip: show actual bill qty to prepare (new total), not +delta only. */
+export function computeKitchenPrepareActualLines(
+  previous: RestaurantBillHistoryItem[],
+  next: RestaurantBillHistoryItem[]
+): KitchenDispatchDeltaLine[] {
+  const prevMap = new Map<string, RestaurantBillHistoryItem>();
+  for (const p of previous) prevMap.set(lineKey(p), p);
+
+  const lines: KitchenDispatchDeltaLine[] = [];
+  for (const n of next) {
+    if (!n.product_id) continue;
+    const prev = prevMap.get(lineKey(n));
+    const oldQty = prev?.quantity ?? 0;
+    if (n.quantity > oldQty) {
+      lines.push({
+        product_id: n.product_id,
+        quantity: n.quantity,
+        name: n.product_name,
+        packing_name: n.packing_name,
+      });
+    }
+  }
+  return lines;
+}
+
+/** Kitchen KOT: qty/item only — no Rs / bill totals. */
+export function formatBillChangeForKitchenKot(c: RestaurantBillChangeLine): string | null {
+  switch (c.type) {
+    case "qty_increased":
+    case "qty_decreased":
+      return c.detail;
+    case "added": {
+      const m = c.detail.match(/Added ·\s*(\d+)/i);
+      return m ? `New item · qty ${m[1]}` : c.detail.replace(/\s*×\s*Rs\s*[\d,.]+/gi, "").trim();
+    }
+    case "removed": {
+      const m = c.detail.match(/was\s+(\d+)/i);
+      return m ? `Cancelled · was qty ${m[1]}` : c.detail.replace(/\s*×\s*Rs\s*[\d,.]+/gi, "").trim();
+    }
+    case "price_changed":
+      return null;
+    default:
+      return c.detail.replace(/Rs\s*[\d,.]+/gi, "").trim() || null;
+  }
 }
 
 export function kotChangeTypeLabel(type: RestaurantBillChangeLine["type"], en = true): string {

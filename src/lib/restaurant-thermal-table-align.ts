@@ -44,7 +44,8 @@ th {
     text-align: left;
     background: #dad9db;
     color: #000;
-    border-bottom: 0.45px solid #000;
+    border-top: none;
+    border-bottom: none;
     line-height: 1.2;
     vertical-align: top;
 }
@@ -73,7 +74,6 @@ table.cols-3 th.qty, table.cols-3 td.qty { width: 25%; }
 export const RESTAURANT_BILL_ITEMS_TABLE_CSS = `
 .receipt-container {
   box-sizing: border-box !important;
-  padding-right: 2px !important;
 }
 .receipt-container table.restaurant-bill-items {
   width: 100% !important;
@@ -86,6 +86,9 @@ export const RESTAURANT_BILL_ITEMS_TABLE_CSS = `
 .receipt-container table.restaurant-bill-items col.bill-col-qty { width: ${RESTAURANT_BILL_COL_MM.qty}mm !important; }
 .receipt-container table.restaurant-bill-items col.bill-col-unit { width: ${RESTAURANT_BILL_COL_MM.unitPrice}mm !important; }
 .receipt-container table.restaurant-bill-items col.bill-col-total { width: ${RESTAURANT_BILL_COL_MM.lineTotal}mm !important; }
+.receipt-container table.restaurant-bill-items th {
+  border-bottom: 0.45px solid #000 !important;
+}
 .receipt-container table.restaurant-bill-items th,
 .receipt-container table.restaurant-bill-items td {
   font-size: 9px !important;

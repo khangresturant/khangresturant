@@ -40,11 +40,13 @@ import {
   secondaryKotSlipTitle,
   simpleKotSlipTitle,
   consolidateKotLines,
+  normalizeKotLineQuantity,
   splitKotLinesForPrint,
   type KotLineWithMeta,
 } from "@/lib/restaurant-kot-split";
 import { restaurantPaymentLabel } from "@/lib/restaurant-riders";
 import {
+  formatBillChangeForKitchenKot,
   kotChangeTypeLabel,
   type RestaurantBillChangeLine,
 } from "@/lib/restaurant-bill-edit";
@@ -169,7 +171,13 @@ function buildRestaurantSlipDocumentStyle(
 /** Same HTML the guest bill and payment receipt send to the printer. */
 export function buildRestaurantBillPreviewHtml(
   settings: Partial<ReceiptSettings>,
-  shop?: { name?: string; phone?: string | null; address?: string | null }
+  shop?: {
+    name?: string;
+    phone?: string | null;
+    address?: string | null;
+    email?: string | null;
+    website?: string | null;
+  }
 ): string {
   const merged = mergeRestaurantReceiptPrintSettings({
     ...DEFAULT_RECEIPT_SETTINGS,
@@ -197,6 +205,10 @@ export function buildRestaurantBillPreviewHtml(
       companyName: shop?.name || "Cook Swift",
       companyPhone: shop?.phone || undefined,
       companyAddress: shop?.address || undefined,
+      companyEmail: shop?.email || undefined,
+      companyWebsite: shop?.website || undefined,
+      headerTagline: merged.headerTagline,
+      logoUrl: merged.logoUrl?.trim() ? merged.logoUrl.trim() : null,
       items: items.map((i) => ({
         name: i.name,
         size: "",
@@ -213,6 +225,9 @@ export function buildRestaurantBillPreviewHtml(
       thankYouMessage: merged.thankYouMessage,
       showShopPhone: merged.showPhone !== false,
       showShopAddress: merged.showAddress !== false,
+      showShopEmail: merged.showEmail === true || Boolean((shop?.email || "").trim()),
+      showShopWebsite: merged.showWebsite === true || Boolean((shop?.website || "").trim()),
+      showHeaderTagline: merged.showHeaderTagline !== false,
       showCustomerInfo: merged.showCustomerInfo !== false,
       showDiscount: merged.showDiscount !== false,
       showTax: merged.showTax !== false,
@@ -224,6 +239,28 @@ export function buildRestaurantBillPreviewHtml(
       headMeta: restaurantSlipHeadMetaTags(merged),
     }
   );
+}
+
+function kitchenShopHeader(input: RestaurantKOTInput) {
+  const merged = mergeRestaurantReceiptPrintSettings({
+    ...DEFAULT_RECEIPT_SETTINGS,
+    ...input.settings,
+  });
+  const shop = input.shopDetails;
+  return {
+    companyName: shop?.name,
+    companyPhone: shop?.phone || undefined,
+    companyAddress: shop?.address || undefined,
+    companyEmail: shop?.email || undefined,
+    companyWebsite: shop?.website || undefined,
+    headerTagline: merged.headerTagline,
+    logoUrl: merged.logoUrl?.trim() ? merged.logoUrl.trim() : null,
+    showShopPhone: merged.showPhone !== false,
+    showShopAddress: merged.showAddress !== false,
+    showShopEmail: merged.showEmail === true || Boolean((shop?.email || "").trim()),
+    showShopWebsite: merged.showWebsite === true || Boolean((shop?.website || "").trim()),
+    showHeaderTagline: merged.showHeaderTagline !== false,
+  };
 }
 
 function kotReprintBannerHtml(input: RestaurantKOTInput): string {
@@ -243,8 +280,6 @@ function thermalSettingsForKitchenSlip(
     billingLanguage: "en",
     customUrduNote: "",
     showHeaderTagline: false,
-    marginLeft: 0,
-    marginRight: 0,
     marginTop: 0,
     marginBottom: 0,
   };
@@ -348,7 +383,7 @@ function mapKotLines(lines: RestaurantKOTLine[]): FastFoodKitchenLine[] {
     const sizeLabel = receiptSizeColumnValue(name, it.sizeLabel) || null;
     return {
       name,
-      quantity: it.quantity,
+      quantity: normalizeKotLineQuantity(it.quantity),
       sizeLabel,
       description: it.description,
       remarks: it.remarks,
@@ -399,7 +434,10 @@ function paymentReceiptPayload(
     companyName: input.shopDetails.name,
     companyPhone: input.shopDetails.phone || undefined,
     companyAddress: input.shopDetails.address || undefined,
-    logoUrl: merged.showLogo && merged.logoUrl ? merged.logoUrl : null,
+    companyEmail: input.shopDetails.email || undefined,
+    companyWebsite: input.shopDetails.website || undefined,
+    headerTagline: merged.headerTagline,
+    logoUrl: merged.logoUrl?.trim() ? merged.logoUrl.trim() : null,
     items: toFastFoodPaymentLines(items),
     subtotal: input.subtotal,
     discount: input.discount,
@@ -411,6 +449,9 @@ function paymentReceiptPayload(
     thankYouMessage: merged.thankYouMessage,
     showShopPhone: merged.showPhone !== false,
     showShopAddress: merged.showAddress !== false,
+    showShopEmail: merged.showEmail === true || Boolean((input.shopDetails.email || "").trim()),
+    showShopWebsite: merged.showWebsite === true || Boolean((input.shopDetails.website || "").trim()),
+    showHeaderTagline: merged.showHeaderTagline !== false,
     showCustomerInfo: merged.showCustomerInfo !== false,
     showDiscount: merged.showDiscount !== false,
     showTax: merged.showTax !== false,
@@ -917,6 +958,7 @@ async function printRestaurantSectionKOTSlip(
       deliveryBoyPhone: input.riderPhone,
       specialInstructions: input.specialInstructions,
       items: mapKotLines(consolidateKotLines(input.items)),
+      ...kitchenShopHeader(input),
     },
     { sectionTitle: slipLabel, reprintBanner: kotReprintBannerHtml(input) },
     slipStyle
@@ -995,7 +1037,10 @@ export async function printRestaurantKOTDispatch(
   const { main, simple, secondary } = split;
   const slipCount = kotSlipJobsForSplit(split);
 
-  if (slipCount === 0 && input.items.length > 0) {
+  if (
+    slipCount === 0 &&
+    (input.items.length > 0 || (input.billAmendment?.changes?.length ?? 0) > 0)
+  ) {
     await printRestaurantKOTSlip(input, callbacks);
     return;
   }
@@ -1064,20 +1109,24 @@ export async function printRestaurantKOTSlip(
   if (amend && amend.showChangeDetails !== false && amend.changes?.length) {
     const changeRows = amend.changes
       .map((c) => {
+        const kitchenDetail = formatBillChangeForKitchenKot(c);
+        if (!kitchenDetail) return "";
         const tag = kotChangeTypeLabel(c.type, true);
         return `<div style="margin:2px 0;font-size:9px;line-height:1.35;">
-          <strong>[${tag}]</strong> ${esc(c.name)} - ${esc(c.detail)}
+          <strong>[${tag}]</strong> ${esc(c.name)} - ${esc(kitchenDetail)}
         </div>`;
       })
+      .filter(Boolean)
       .join("");
-    amendmentBlock = `
+    amendmentBlock = changeRows
+      ? `
     <div style="border:2px solid #000;padding:5px;margin:6px 0;background:#fff;">
       <div style="text-align:center;font-weight:bold;font-size:11px;margin-bottom:4px;">
-        BILL EDIT · KOT UPDATE / بل میں تبدیلی
+        ORDER UPDATE (KITCHEN) / آرڈر اپڈیٹ
       </div>
       ${
         amend.revisionNumber
-          ? `<div style="font-size:9px;text-align:center;margin-bottom:3px;">Revision #${amend.revisionNumber}${
+          ? `<div style="font-size:9px;text-align:center;margin-bottom:3px;">Rev #${amend.revisionNumber}${
               amend.editedAt
                 ? ` · ${new Date(amend.editedAt).toLocaleString()}`
                 : ""
@@ -1085,7 +1134,8 @@ export async function printRestaurantKOTSlip(
           : ""
       }
       <div style="border-top:1px dashed #000;padding-top:4px;">${changeRows}</div>
-    </div>`;
+    </div>`
+      : "";
   }
 
   const slipStyle = buildRestaurantSlipDocumentStyle(settings);
@@ -1102,6 +1152,7 @@ export async function printRestaurantKOTSlip(
       deliveryBoyPhone: input.riderPhone,
       specialInstructions: input.specialInstructions,
       items: mapKotLines(prepareLines),
+      ...kitchenShopHeader(input),
     },
     {
       title: kotTitle,

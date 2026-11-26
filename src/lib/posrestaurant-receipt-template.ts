@@ -123,10 +123,10 @@ table {
 th {
     font-size: ${RECEIPT_ITEMS_TABLE_HEADER_PX}px;
     text-align: left;
+    border: none;
     border-top: 1px solid #000;
-    border-bottom: 1px solid #000;
     padding: 3px 6px;
-    background: #dad9db;
+    background: transparent;
 }
 `;
 

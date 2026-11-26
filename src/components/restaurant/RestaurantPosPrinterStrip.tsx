@@ -27,8 +27,8 @@ export function RestaurantPosPrinterStrip({
 
   return (
     <div className="col-span-full rounded-lg border border-slate-200 bg-slate-50/90 px-2.5 py-2 text-[10px] text-slate-700 space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-black uppercase tracking-wide text-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 min-w-0">
+        <span className="font-black uppercase tracking-wide text-slate-800 break-words min-w-0">
           {isEn ? "Print routing (Business Settings)" : "پرنٹ روٹنگ (سیٹنگز)"}
         </span>
         <Link
@@ -38,9 +38,9 @@ export function RestaurantPosPrinterStrip({
           {isEn ? "Edit" : "تبدیل"}
         </Link>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+      <div className="grid grid-cols-1 gap-1.5 min-w-0">
         {slots.map((slot, i) => (
-          <div key={i} className="font-mono leading-snug">
+          <div key={i} className="font-mono leading-snug break-words min-w-0">
             <span className="font-bold text-slate-900">P{i + 1}</span>{" "}
             {slot.name?.trim() || (isEn ? "(no name)" : "(نام نہیں)")}{" "}
             <span className="text-slate-500">

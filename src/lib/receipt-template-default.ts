@@ -84,9 +84,15 @@ export function mergeRestaurantReceiptPrintSettings(
   };
   const templateId = normalizeReceiptTemplateId(merged.templateId);
   if (templateId === RESTAURANT_DEFAULT_RECEIPT_TEMPLATE_ID) {
+    const marginMm = (value: unknown) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? Math.max(0, n) : 0;
+    };
     return {
       ...merged,
       ...DEFAULT_LAYOUT_RESET,
+      marginLeft: marginMm(merged.marginLeft),
+      marginRight: marginMm(merged.marginRight),
       pageSize: merged.pageSize === "MM58" ? "MM58" : DEFAULT_RECEIPT_SETTINGS.pageSize,
       templateId: RESTAURANT_DEFAULT_RECEIPT_TEMPLATE_ID,
     };

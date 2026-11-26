@@ -117,6 +117,13 @@ function stripMeta(line: KotLineWithMeta): RestaurantKOTLine {
   };
 }
 
+/** Parse qty for KOT — never substitute 1 when value is missing. */
+export function normalizeKotLineQuantity(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.round(n));
+}
+
 /** Merge duplicate bread/roti rows on the same slip (name + size + note). */
 export function consolidateKotLines(lines: RestaurantKOTLine[]): RestaurantKOTLine[] {
   const merged: RestaurantKOTLine[] = [];
@@ -127,7 +134,8 @@ export function consolidateKotLines(lines: RestaurantKOTLine[]): RestaurantKOTLi
     const size = (line.sizeLabel || "").trim();
     const note = (line.remarks || "").trim();
     const key = `${name.toLowerCase()}|${size.toLowerCase()}|${note.toLowerCase()}`;
-    const qty = Math.max(1, Math.floor(Number(line.quantity) || 1));
+    const qty = normalizeKotLineQuantity(line.quantity);
+    if (qty <= 0) continue;
     const hit = index.get(key);
     if (hit !== undefined) {
       merged[hit].quantity += qty;

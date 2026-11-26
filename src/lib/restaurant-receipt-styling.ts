@@ -7,7 +7,10 @@ import {
   DEFAULT_RECEIPT_SETTINGS,
   type ReceiptSettings,
 } from "@/components/ReceiptTemplate";
-import { buildRestaurantKitchenReceiptHeadStyles } from "@/lib/fast-food-order-view-receipts";
+import {
+  buildRestaurantKitchenReceiptHeadStyles,
+  THERMAL_HIGH_INK_CSS,
+} from "@/lib/fast-food-order-view-receipts";
 import {
   RESTAURANT_DEFAULT_RECEIPT_TEMPLATE_ID,
   normalizeReceiptTemplateId,
@@ -62,6 +65,12 @@ export function restaurantDesignerTypeCss(settings?: Partial<ReceiptSettings>): 
           ? "'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', Tahoma, sans-serif"
           : "'Courier New', Courier, monospace";
   const shopPx = Math.min(fontPx + 3, 22);
+  const marginMm = (value: unknown) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  };
+  const leftMm = marginMm(settings?.marginLeft);
+  const rightMm = marginMm(settings?.marginRight);
   return `
 .receipt-container,
 .receipt-container .info,
@@ -75,22 +84,16 @@ export function restaurantDesignerTypeCss(settings?: Partial<ReceiptSettings>): 
 .receipt-container .header p {
   font-family: ${fontCss} !important;
   font-size: ${fontPx}px !important;
-  color: #000 !important;
-  font-weight: 700 !important;
   -webkit-font-smoothing: none !important;
   text-rendering: geometricPrecision !important;
 }
 .receipt-container .shop-name,
-.receipt-container .header .shop-name,
-.receipt-container strong,
-.receipt-container b,
-.receipt-container th {
-  color: #000 !important;
-  font-weight: 900 !important;
-}
-.receipt-container .shop-name,
 .receipt-container .header .shop-name {
   font-size: ${shopPx}px !important;
+}
+.receipt-container {
+  padding-left: ${leftMm}mm !important;
+  padding-right: ${rightMm}mm !important;
 }
 .receipt-container, .receipt-container * {
   -webkit-font-smoothing: none !important;
@@ -107,7 +110,6 @@ export function restaurantDesignerTypeCss(settings?: Partial<ReceiptSettings>): 
 .receipt-container table.restaurant-bill-items th,
 .receipt-container table.restaurant-bill-items td {
   font-size: 9px !important;
-  font-weight: 800 !important;
   line-height: 1.15 !important;
 }
 `;
@@ -124,9 +126,11 @@ export function resolveRestaurantReceiptDocumentStyle(
   const { rollWidthMm, contentWidthMm } = resolveRestaurantRollDimensions(merged);
   const typeCss = restaurantDesignerTypeCss(merged);
 
+  const highInk = THERMAL_HIGH_INK_CSS;
+
   if (usesRestaurantDefaultPrintLayout(normalizeReceiptTemplateId(merged.templateId))) {
     return {
-      css: `${buildRestaurantKitchenReceiptHeadStyles(contentWidthMm, rollWidthMm)}\n${typeCss}`,
+      css: `${buildRestaurantKitchenReceiptHeadStyles(contentWidthMm, rollWidthMm)}\n${typeCss}\n${highInk}`,
       thermalWidthMetaMm: rollWidthMm,
       inkMeta: "restaurant-high",
     };
@@ -138,13 +142,13 @@ export function resolveRestaurantReceiptDocumentStyle(
         rollWidthMm,
         contentWidthMm,
         rootSelector: ".receipt-container",
-      })}\n${typeCss}`,
+      })}\n${typeCss}\n${highInk}`,
       thermalWidthMetaMm: rollWidthMm,
-      inkMeta: "configuration-high",
+      inkMeta: "restaurant-high",
     };
   } catch {
     return {
-      css: `${buildRestaurantKitchenReceiptHeadStyles(contentWidthMm, rollWidthMm)}\n${typeCss}`,
+      css: `${buildRestaurantKitchenReceiptHeadStyles(contentWidthMm, rollWidthMm)}\n${typeCss}\n${highInk}`,
       thermalWidthMetaMm: rollWidthMm,
       inkMeta: "restaurant-high",
     };

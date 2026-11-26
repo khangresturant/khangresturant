@@ -418,7 +418,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
           </div>
         )}
 
-        {showLogo === true && logoUrl.trim() ? (
+        {logoUrl.trim() ? (
           <div className="flex justify-center mb-1">
             <img src={logoUrl.trim()} alt="" className="receipt-logo h-9 w-auto max-w-full object-contain" />
           </div>
@@ -456,14 +456,14 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         )}
 
         {/* Contact details */}
-        {(showAddress || showPhone || showEmail || showWebsite) && (
+        {(shopDetails.address?.trim() || shopDetails.phone?.trim() || shopDetails.email?.trim() || shopDetails.website?.trim()) && (
           <div className="text-[9px] text-zinc-800 font-medium space-y-0.5 pt-0.5">
-            {showAddress && shopDetails.address && <p>{shopDetails.address}</p>}
+            {shopDetails.address?.trim() && showAddress !== false && <p>{shopDetails.address}</p>}
             <div className="flex justify-center gap-2 flex-wrap">
-              {showPhone && shopDetails.phone && <div>Ph: {shopDetails.phone}</div>}
-              {showEmail && shopDetails.email && <div>Email: {shopDetails.email}</div>}
+              {shopDetails.phone?.trim() && showPhone !== false && <div>Ph: {shopDetails.phone}</div>}
+              {shopDetails.email?.trim() && <div>Email: {shopDetails.email}</div>}
             </div>
-            {showWebsite && shopDetails.website && <p className="font-bold underline">{shopDetails.website}</p>}
+            {shopDetails.website?.trim() && <p className="font-bold underline">{shopDetails.website}</p>}
           </div>
         )}
 

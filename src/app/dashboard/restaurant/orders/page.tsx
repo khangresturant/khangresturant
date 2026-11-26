@@ -38,7 +38,8 @@ import {
   printRestaurantGuestBill,
   printRestaurantKOTDispatch,
 } from "@/lib/restaurant-receipt-print";
-import { loadLatestKOTForInvoice, loadKitchenTicketForPrint } from "@/lib/restaurant-kitchen";
+import { loadLatestKOTForInvoice } from "@/lib/restaurant-kitchen";
+import { invoiceItemsToKitchenKotLines } from "@/lib/restaurant-kot-line-build";
 import { staffPhone } from "@/lib/restaurant-riders";
 import { RestaurantBillEditHistoryModal } from "@/components/restaurant/RestaurantBillEditHistoryModal";
 import {
@@ -526,35 +527,40 @@ export default function RestaurantOrdersPage() {
 
   const handleReprintKOT = async (order: OrderRow) => {
     const kotId = await loadLatestKOTForInvoice(supabase, order.id);
-    if (!kotId) {
-      toast.error(isEn ? "No kitchen ticket for this order." : "KOT نہیں ملا۔");
+    const productCategoryById = new Map<string, string>();
+    for (const row of order.invoice_items || []) {
+      const cid = (row.products as { category_id?: string } | null)?.category_id;
+      if (row.product_id && cid) productCategoryById.set(row.product_id, cid);
+    }
+    const kotLines = invoiceItemsToKitchenKotLines(order.invoice_items || [], {
+      productCategoryById,
+    });
+    if (!kotLines.length) {
+      toast.error(isEn ? "No bill items to print on KOT." : "KOT کے لیے بل میں آئٹم نہیں۔");
       return;
     }
-    const payload = await loadKitchenTicketForPrint(supabase, kotId);
-    if (!payload) {
-      toast.error(isEn ? "Could not load KOT." : "KOT لوڈ نہیں ہوا۔");
-      return;
-    }
+    const waiter = staff.find((s) => s.id === order.waiter_id);
+    const rider = staff.find((s) => s.id === order.rider_id);
     await printRestaurantKOTDispatch(
       {
-        orderNumber: payload.orderNumber,
-        tableName: payload.tableName,
-        serviceType: payload.serviceType,
-        customerName: payload.customerName || order.customer_name,
-        customerPhone: payload.customerPhone || order.customer_phone,
-        customerAddress: payload.customerAddress || order.customer_address || null,
-        waiterName: payload.waiterName,
-        riderName: payload.riderName,
-        riderPhone: payload.riderPhone,
-        specialInstructions: payload.specialInstructions || order.special_instructions || null,
-        items: payload.items,
+        orderNumber: order.order_number,
+        tableName: order.tableName || null,
+        serviceType: order.service_type,
+        customerName: order.customer_name || order.parties?.name || null,
+        customerPhone: order.customer_phone || null,
+        customerAddress: order.customer_address || null,
+        waiterName: waiter?.name || null,
+        riderName: rider?.name || null,
+        riderPhone: staffPhone(rider),
+        specialInstructions: order.special_instructions || null,
+        items: kotLines,
         settings: receiptSettings,
         shopDetails: shopDetailsForPrint(),
         companyRow: companyDetails,
         isReprint: true,
-        kotTicketId: payload.kotId,
+        kotTicketId: kotId,
       },
-      { lineMeta: payload.items.map((it) => ({ ...it })) },
+      { lineMeta: kotLines.map((it) => ({ ...it })), productIdToCategoryId: productCategoryById },
       { onError: (msg) => toast.error(msg) }
     );
   };

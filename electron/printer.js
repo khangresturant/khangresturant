@@ -6,6 +6,9 @@ const os = require("os");
 const {
   parseThermalPaperWidthMm,
   injectThermalRollLayoutHtml,
+  prepareThermalSlipForPrint,
+  ensureThermalSlipPainted,
+  assertSlipHasPrintableContent,
   printWindowToThermalPdf,
 } = require("./thermal-pdf");
 
@@ -74,12 +77,12 @@ async function waitForPrintWindowReady(webContents, loadPromise) {
   if (webContents.isDestroyed()) {
     throw new Error("Print window destroyed before print");
   }
-  await new Promise((r) => setTimeout(r, 450));
+  await new Promise((r) => setTimeout(r, 1150));
 }
 
 /**
- * Silent thermal print: HTML → PDF (Chromium, 80mm roll) → pdf-to-printer / Sumatra.
- * Proven path for ESC/POS drivers (Black Copper, Xprinter, etc.).
+ * Silent thermal print: HTML → vector PDF (scale 1) → Sumatra/pdf-to-printer.
+ * Direct webContents.print is skipped — thermal drivers often spool blank pages from it.
  */
 async function printThermalSilentJobOnce({ html, printerName, copies = 1 }) {
   if (!html || typeof html !== "string") {
@@ -112,10 +115,11 @@ async function printThermalSilentJobOnce({ html, printerName, copies = 1 }) {
     const htmlForPrint = injectThermalRollLayoutHtml(html, paperWidthMm);
     await fs.writeFile(htmlPath, htmlForPrint, "utf8");
 
-    const slipPxW = Math.round((paperWidthMm / 25.4) * 96) + 32;
+    const slipPxW = Math.max(280, Math.round((paperWidthMm / 25.4) * 96));
     printWindow = new BrowserWindow({
       show: false,
-      width: Math.max(336, slipPxW),
+      useContentSize: true,
+      width: slipPxW,
       height: 1600,
       webPreferences: {
         nodeIntegration: false,
@@ -125,6 +129,7 @@ async function printThermalSilentJobOnce({ html, printerName, copies = 1 }) {
       },
     });
     printWindow.webContents.setZoomFactor(1);
+    printWindow.webContents.setVisualZoomLevelLimits(1, 1);
 
     await waitForPrintWindowReady(
       printWindow.webContents,
@@ -138,11 +143,23 @@ async function printThermalSilentJobOnce({ html, printerName, copies = 1 }) {
       throw new Error("No Windows printer found for silent thermal print.");
     }
 
-    const { pdfBuffer } = await printWindowToThermalPdf(
+    const copyCount = Math.max(1, Math.min(99, Math.floor(Number(copies) || 1)));
+    const slipHeightMm = await prepareThermalSlipForPrint(
       printWindow.webContents,
       paperWidthMm
     );
+    await ensureThermalSlipPainted(
+      printWindow.webContents,
+      paperWidthMm,
+      slipHeightMm
+    );
+    await assertSlipHasPrintableContent(printWindow.webContents);
 
+    const { pdfBuffer, heightMm: pdfHeightMm } = await printWindowToThermalPdf(
+      printWindow.webContents,
+      paperWidthMm,
+      slipHeightMm
+    );
     await fs.writeFile(pdfPath, pdfBuffer);
 
     const mod = loadPdfToPrinter();
@@ -151,17 +168,16 @@ async function printThermalSilentJobOnce({ html, printerName, copies = 1 }) {
       throw new Error("pdf-to-printer module is missing print().");
     }
 
-    const copyCount = Math.max(1, Math.min(99, Math.floor(Number(copies) || 1)));
     await printFn(pdfPath, {
       printer: matchedPrinter,
       silent: true,
+      orientation: "portrait",
       scale: "noscale",
-      monochrome: true,
+      monochrome: false,
       copies: copyCount,
     });
-
     console.info(
-      `[Electron Print] PDF → ${matchedPrinter} ×${copyCount} (${paperWidthMm}mm roll)`
+      `[Electron Print] PDF (vector, 1×) → ${matchedPrinter} ×${copyCount} (${paperWidthMm}×${pdfHeightMm}mm)`
     );
 
     await cleanup();

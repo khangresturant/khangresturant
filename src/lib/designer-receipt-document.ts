@@ -2,11 +2,18 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import {
+  DEFAULT_RECEIPT_SETTINGS,
   ReceiptTemplate,
   type ReceiptSettings,
 } from "@/components/ReceiptTemplate";
+import { resolveRestaurantRollDimensions } from "@/lib/restaurant-receipt-styling";
+import { THERMAL_RECEIPT_TAILWIND_SHIM_CSS } from "@/lib/thermal-receipt-tailwind-shim";
+import {
+  buildConfigurationThermalSlipCss,
+  THERMAL_ROLL_HARDWARE_MM,
+} from "@/lib/thermalPrinter";
 
-/** Page CSS so the print window matches the Receipt Designer preview. */
+/** Live dashboard styles (preview only — do not use in silent thermal print). */
 export function captureDocumentCss(): string {
   if (typeof document === "undefined") return "";
   let css = "";
@@ -23,6 +30,16 @@ export function captureDocumentCss(): string {
   return css;
 }
 
+function designerPrintCss(settings?: Partial<ReceiptSettings>): string {
+  const merged = { ...DEFAULT_RECEIPT_SETTINGS, ...settings };
+  const { rollWidthMm, contentWidthMm } = resolveRestaurantRollDimensions(merged);
+  return `${buildConfigurationThermalSlipCss(merged, {
+    rollWidthMm,
+    contentWidthMm,
+    rootSelector: ".thermal-receipt-view",
+  })}\n${THERMAL_RECEIPT_TAILWIND_SHIM_CSS}`;
+}
+
 function pageWidth(settings?: Partial<ReceiptSettings>): string {
   if (settings?.pageSize === "MM58") return "58mm";
   if (settings?.pageSize === "A4") return "210mm";
@@ -37,40 +54,18 @@ export function buildDesignerReceiptDocument(
   title: string
 ): string {
   const width = pageWidth(settings);
+  const widthMm = width.replace("mm", "") || String(THERMAL_ROLL_HARDWARE_MM);
   const safeTitle = title.replace(/[<>&]/g, "");
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="x-thermal-width-mm" content="${width.replace("mm", "")}" />
+  <meta name="x-thermal-width-mm" content="${widthMm}" />
   <meta name="x-thermal-format" content="roll" />
+  <meta name="x-thermal-ink-level" content="restaurant-high" />
   <title>${safeTitle}</title>
   <style>
-    ${captureDocumentCss()}
-    @page { size: ${width} auto portrait; margin: 0; }
-    html, body {
-      margin: 0;
-      padding: 0 2px 3mm 0;
-      background: #fff;
-      width: ${width};
-      max-width: ${width};
-      box-sizing: border-box;
-    }
-    * {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-      -webkit-font-smoothing: none !important;
-      text-rendering: geometricPrecision !important;
-      transform: none !important;
-      filter: none !important;
-      transition: none !important;
-    }
-    .thermal-receipt-view, .receipt-container {
-      width: 100% !important;
-      max-width: 100% !important;
-      box-sizing: border-box !important;
-    }
-    table { width: 100% !important; max-width: 100% !important; table-layout: fixed !important; }
+    ${designerPrintCss(settings)}
     img.receipt-logo, img {
       max-width: 100% !important;
       image-rendering: -webkit-optimize-contrast;

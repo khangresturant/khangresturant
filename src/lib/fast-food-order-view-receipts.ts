@@ -12,6 +12,7 @@ import {
 
 export { RESTAURANT_THERMAL_TABLE_ALIGN_CSS } from "@/lib/restaurant-thermal-table-align";
 import { mergeSizeIntoKitchenDisplayName } from "@/lib/restaurant-kot-display";
+import { normalizeKotLineQuantity } from "@/lib/restaurant-kot-split";
 import {
   receiptSizeColumnValue,
   slipUsesTwoColumnItemTable,
@@ -20,6 +21,7 @@ import {
   RESTAURANT_BILL_COL_MM,
   RESTAURANT_BILL_ITEMS_TABLE_CSS,
 } from "@/lib/restaurant-thermal-table-align";
+import { THERMAL_HIGH_INK_CSS } from "@/lib/thermal-sharp-text-css";
 
 /** Shown at the very bottom of thermal slips (restaurant). */
 export const RECEIPT_DEVELOPED_BY = "Powered by Falcon Shift";
@@ -63,6 +65,18 @@ export type FastFoodKitchenReceiptInput = {
   items: FastFoodKitchenLine[];
   /** Default: Kitchen Order */
   title?: string;
+  companyName?: string;
+  companyPhone?: string;
+  companyAddress?: string;
+  companyEmail?: string;
+  companyWebsite?: string;
+  headerTagline?: string;
+  logoUrl?: string | null;
+  showShopPhone?: boolean;
+  showShopAddress?: boolean;
+  showShopEmail?: boolean;
+  showShopWebsite?: boolean;
+  showHeaderTagline?: boolean;
 };
 
 export type FastFoodPaymentLine = {
@@ -86,6 +100,9 @@ export type FastFoodPaymentReceiptInput = {
   companyName?: string;
   companyPhone?: string;
   companyAddress?: string;
+  companyEmail?: string;
+  companyWebsite?: string;
+  headerTagline?: string;
   logoUrl?: string | null;
   items: FastFoodPaymentLine[];
   subtotal: number;
@@ -103,6 +120,9 @@ export type FastFoodPaymentReceiptInput = {
   /** Receipt Designer detail toggles (guest bill + payment). */
   showShopPhone?: boolean;
   showShopAddress?: boolean;
+  showShopEmail?: boolean;
+  showShopWebsite?: boolean;
+  showHeaderTagline?: boolean;
   showCustomerInfo?: boolean;
   showDiscount?: boolean;
   showTax?: boolean;
@@ -158,7 +178,8 @@ export function kitchenOrderItemsTableRows(items: FastFoodKitchenLine[]): string
   return items
     .map((item) => {
       const sizeTxt = (item.sizeLabel || "").trim();
-      const qty = item.quantity || 1;
+      const qty = normalizeKotLineQuantity(item.quantity);
+      if (qty <= 0) return "";
       const rawCi = item.remarks || "";
       let note = cleanOrderItemInstructionsForKitchen(rawCi);
       if (note.toLowerCase().startsWith("deal:") && rawCi.toLowerCase().includes("deal_id:")) {
@@ -394,7 +415,7 @@ body {
   width: 100%;
   max-width: ${contentWidthMm}mm;
   background: #fff;
-  padding: 0 2px ${THERMAL_RECEIPT_BOTTOM_MARGIN_MM}mm 0;
+  padding: 0 0 ${THERMAL_RECEIPT_BOTTOM_MARGIN_MM}mm 0;
   margin: 0;
   box-sizing: border-box;
   overflow: visible;
@@ -443,46 +464,20 @@ body {
 ${RESTAURANT_THERMAL_TABLE_ALIGN_CSS}
 ${RECEIPT_FOOTER_CSS}
 ${THERMAL_HAIRLINE_CSS}
+table.cols-2,
+table.cols-3 {
+  border-top: 0.45px solid #000;
+}
+table.cols-2 thead th,
+table.cols-3 thead th,
+table.kitchen-section-items thead th {
+  border-bottom: 1px solid #000;
+  background: transparent;
+}
 `;
 }
 
-/** Dense black thermal output — guest bill, paid receipt, reprint KOT (same as kitchen slip). */
-const THERMAL_HIGH_INK_CSS = `
-*, *::before, *::after {
-  -webkit-print-color-adjust: exact !important;
-  print-color-adjust: exact !important;
-  color-adjust: exact !important;
-}
-html, body, .receipt-container {
-  -webkit-font-smoothing: none !important;
-  -moz-osx-font-smoothing: grayscale !important;
-  text-rendering: geometricPrecision !important;
-  transform: none !important;
-  filter: none !important;
-}
-th, td, p, span, div, strong, b, .info, .totals, .header, .footer,
-.kitchen-order-heading, .section-title {
-  color: #000 !important;
-}
-th {
-  font-weight: 800 !important;
-}
-td, p, span, div, .info p, .totals p {
-  font-weight: 700 !important;
-}
-strong, b, .shop-name, .kitchen-order-heading, .section-title {
-  font-weight: 900 !important;
-}
-.receipt-developed-by {
-  text-align: center;
-  font-size: 10px;
-  font-weight: 800;
-  color: #000 !important;
-  padding: 6px 0 2px;
-  margin: 0;
-  line-height: 1.2;
-}
-`;
+export { THERMAL_HIGH_INK_CSS, THERMAL_SHARP_TEXT_CSS } from "@/lib/thermal-sharp-text-css";
 
 /** Default hardcoded kitchen-order CSS (unchanged); 80mm roll / 78mm content. */
 export function buildRestaurantKitchenReceiptHeadStyles(
@@ -520,6 +515,57 @@ function slipDocumentStyle(
     : defaultSlipDocumentStyle();
 }
 
+/** Logo, shop name, tagline, phone, address, email, website. Empty values are omitted. */
+export function receiptShopHeaderInnerHtml(input: {
+  logoUrl?: string | null;
+  companyName?: string;
+  headerTagline?: string;
+  companyPhone?: string;
+  companyAddress?: string;
+  companyEmail?: string;
+  companyWebsite?: string;
+  showShopPhone?: boolean;
+  showShopAddress?: boolean;
+  showShopEmail?: boolean;
+  showShopWebsite?: boolean;
+  showHeaderTagline?: boolean;
+}): string {
+  const logoUrl = (input.logoUrl || "").trim();
+  const logoHtml = logoUrl
+    ? `<div style="text-align:center;margin:0 0 2px 0;"><img class="receipt-logo" src="${htmlEscape(logoUrl)}" alt="" style="height:28px;width:auto;max-width:100%;display:inline-block;" /></div>`
+    : "";
+  const tagline = (input.headerTagline || "").trim();
+  const taglineHtml =
+    input.showHeaderTagline !== false && tagline
+      ? `<p style="text-align:center;margin:0;">${htmlEscape(tagline)}</p>`
+      : "";
+  const email = (input.companyEmail || "").trim();
+  const emailHtml =
+    input.showShopEmail !== false && email
+      ? `<p style="text-align:center;margin:0;"><strong>Email: ${htmlEscape(email)}</strong></p>`
+      : "";
+  const website = (input.companyWebsite || "").trim();
+  const websiteHtml =
+    input.showShopWebsite !== false && website
+      ? `<p style="text-align:center;margin:0;">${htmlEscape(website)}</p>`
+      : "";
+  return [
+    logoHtml,
+    input.companyName
+      ? `<p class="shop-name"><strong>${htmlEscape(input.companyName)}</strong></p>`
+      : "",
+    taglineHtml,
+    input.showShopPhone !== false && input.companyPhone
+      ? `<p style="text-align:center;margin:0;"><strong>Phone: ${htmlEscape(input.companyPhone)}</strong></p>`
+      : "",
+    input.showShopAddress !== false && input.companyAddress
+      ? `<p style="text-align:center;margin:0;">${htmlEscape(input.companyAddress)}</p>`
+      : "",
+    emailHtml,
+    websiteHtml,
+  ].join("");
+}
+
 /** Roti/kathi section slip — drop only the single full-width rule above the item table (not column rules). */
 const KITCHEN_SECTION_TABLE_CSS = `
 table.kitchen-section-items {
@@ -550,18 +596,20 @@ function kitchenItemTableRows(
 ): string {
   const parts: string[] = [];
   for (const item of items) {
+    const qty = normalizeKotLineQuantity(item.quantity);
+    if (qty <= 0) continue;
     const displayName = mergeSizeIntoKitchenDisplayName(item.name, item.sizeLabel);
     const sizeCell = receiptSizeColumnValue(displayName, item.sizeLabel);
     if (twoCol) {
       parts.push(`<tr>
                             <td class="product">${htmlEscape(displayName)}</td>
-                            <td class="qty">${item.quantity}</td>
+                            <td class="qty">${qty}</td>
                         </tr>`);
     } else {
       parts.push(`<tr>
                             <td class="product">${htmlEscape(displayName)}</td>
                             <td class="size">${htmlEscape(sizeCell)}</td>
-                            <td class="qty">${item.quantity}</td>
+                            <td class="qty">${qty}</td>
                         </tr>`);
     }
   }
@@ -667,6 +715,9 @@ export function buildKitchenReceiptHtmlDocument(
             <body>
                 <div class="receipt-container">
                     ${extra?.reprintBanner || ""}
+                    <div class="header">
+                        ${receiptShopHeaderInnerHtml(input)}
+                    </div>
                     <div class="kitchen-order-heading">${htmlEscape(title)}</div>
                     ${extra?.amendmentHtml || ""}
                     <div class="info" style="margin: 0px; padding: 0px;">
@@ -717,6 +768,9 @@ export function buildKitchenSectionReceiptHtmlDocument(
             <body>
                 <div class="receipt-container">
                     ${extra?.reprintBanner || ""}
+                    <div class="header">
+                        ${receiptShopHeaderInnerHtml(input)}
+                    </div>
                     ${
                       sectionTitle
                         ? `<div class="section-title">${htmlEscape(sectionTitle)}</div>`
@@ -745,10 +799,7 @@ export function buildPaymentReceiptHtmlDocument(
   documentStyle?: RestaurantSlipDocumentStyle | null
 ): string {
   const doc = slipDocumentStyle(documentStyle);
-  const logoUrl = (input.logoUrl || "").trim();
-  const logoHtml = logoUrl
-    ? `<div style="text-align:center;margin:0 0 2px 0;"><img class="receipt-logo" src="${htmlEscape(logoUrl)}" alt="" style="height:28px;width:auto;max-width:100%;display:inline-block;" /></div>`
-    : "";
+  const headerInner = receiptShopHeaderInnerHtml(input);
   const billItemsTable = buildRestaurantBillItemsTableHtml(input.items, input.netTotal);
 
   const discount = input.discount || 0;
@@ -785,10 +836,7 @@ export function buildPaymentReceiptHtmlDocument(
                 <div class="receipt-container">
                     ${input.headerBannerHtml || ""}
                     <div class="header">
-                        ${logoHtml}
-                        ${input.companyName ? `<p class="shop-name"><strong>${htmlEscape(input.companyName)}</strong></p>` : ""}
-                        ${input.showShopPhone !== false && input.companyPhone ? `<p><strong>Phone: ${htmlEscape(input.companyPhone)}</strong></p>` : ""}
-                        ${input.showShopAddress !== false && input.companyAddress ? `<p style="text-align:left;">${htmlEscape(input.companyAddress)}</p>` : ""}
+                        ${headerInner}
                     </div>
                     <div class="info" style="margin: 0px; padding: 0px;">
                         ${infoHtml}
