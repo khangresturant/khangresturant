@@ -20,10 +20,14 @@ if (fs.existsSync(defaultAsar)) {
   fs.unlinkSync(defaultAsar);
 }
 
-// 1. Copy electron/ -> resources/app/electron/
+// 1. Copy electron/ -> resources/app/electron/ (and sync public/icon.ico as electron/icon.ico)
 const srcElectron = path.join(root, "electron");
 const destElectron = path.join(appDir, "electron");
 fs.cpSync(srcElectron, destElectron, { recursive: true });
+const publicIcoSrc = path.join(root, "public", "icon.ico");
+if (fs.existsSync(publicIcoSrc)) {
+  fs.copyFileSync(publicIcoSrc, path.join(destElectron, "icon.ico"));
+}
 
 // 2. Copy public/ -> resources/app/public/
 const srcPublic = path.join(root, "public");
@@ -68,12 +72,13 @@ if (!fs.existsSync(destElevate) && fs.existsSync(cafeElevate)) {
   fs.copyFileSync(cafeElevate, destElevate);
 }
 
-// 6. Embed custom icon into Cook Swift.exe using rcedit
+// 6. Embed custom icon into Cook Swift.exe using modern rcedit (avoid legacy winCodeSign-2.6.0 rcedit which corrupts Electron 32 PE headers)
 const iconIco = path.join(root, "public", "icon.ico");
 const rceditCandidates = [
-  path.join(process.env.LOCALAPPDATA || "", "electron-builder", "Cache", "winCodeSign", "winCodeSign-2.6.0", "rcedit-x64.exe"),
-  path.join(process.env.LOCALAPPDATA || "", "electron-builder", "Cache", "winCodeSign", "winCodeSign-2.6.0", "rcedit-ia32.exe"),
+  path.join(root, "node_modules", "rcedit", "bin", "rcedit-x64.exe"),
+  path.join(root, "node_modules", "rcedit", "bin", "rcedit.exe"),
   path.join(process.env.LOCALAPPDATA || "", "Programs", "Antigravity IDE", "resources", "app", "node_modules", "rcedit", "bin", "rcedit.exe"),
+  path.join(process.env.LOCALAPPDATA || "", "Programs", "Antigravity IDE", "_", "resources", "app", "node_modules", "rcedit", "bin", "rcedit.exe"),
 ];
 
 const rceditPath = rceditCandidates.find(p => fs.existsSync(p));
@@ -85,6 +90,8 @@ if (rceditPath && fs.existsSync(brandedExe) && fs.existsSync(iconIco)) {
   } catch (err) {
     console.warn("[prepare_unpacked] rcedit warning:", err.message);
   }
+} else if (!rceditPath) {
+  console.warn("[prepare_unpacked] Modern rcedit.exe not found; skipping icon patch.");
 }
 
 console.log("[prepare_unpacked] Ready! Cook Swift executable prepared at:", brandedExe);
