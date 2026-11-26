@@ -2,13 +2,13 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { 
-  Store, 
-  Search, 
-  MapPin, 
-  Phone, 
-  Sparkles, 
-  Building2, 
+import {
+  Store,
+  Search,
+  MapPin,
+  Phone,
+  Sparkles,
+  Building2,
   ArrowRight,
   CheckCircle2,
   ShieldCheck,
@@ -124,13 +124,13 @@ export default function PublicShopsDirectoryPage() {
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shadow-sm">
             <Sparkles size={14} /> Direct Online Shopping Platform
           </div>
-          
+
           <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
             Explore <span className="text-emerald-600">Verified Stores</span> Near You
           </h2>
-          
+
           <p className="text-sm text-slate-600 max-w-2xl mx-auto font-medium">
-            Order directly from authorized pharmacies, retail outlets, clothing boutiques, electronics centers, and supermarkets powered by Falcon Shift.
+            Order directly from authorized pharmacies, retail outlets, clothing boutiques, electronics centers, and supermarkets Powered by Falcon Swift.
           </p>
 
           {/* Search & Filter Bar */}
@@ -207,7 +207,7 @@ export default function PublicShopsDirectoryPage() {
                           <Store size={22} className="text-slate-400" /> {shop.name}
                         </div>
                       )}
-                      
+
                       <span className={`absolute top-3 left-3 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border shadow-sm ${badge.bg} ${badge.text} ${badge.border}`}>
                         {badge.label}
                       </span>

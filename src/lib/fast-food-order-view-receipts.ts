@@ -24,7 +24,7 @@ import {
 import { THERMAL_HIGH_INK_CSS } from "@/lib/thermal-sharp-text-css";
 
 /** Shown at the very bottom of thermal slips (restaurant). */
-export const RECEIPT_DEVELOPED_BY = "Powered by Falcon Shift";
+export const RECEIPT_DEVELOPED_BY = "Powered by Falcon Swift";
 /** @deprecated Use RECEIPT_DEVELOPED_BY */
 export const RECEIPT_ORDERED_BY = RECEIPT_DEVELOPED_BY;
 export const DEVELOPER_CREDIT = RECEIPT_DEVELOPED_BY;
@@ -234,16 +234,16 @@ function getReceiptCustomerName(name?: string | null): string {
 /** `fast_food_order_view.format_payment_receipt_info_html` */
 export function formatPaymentReceiptInfoHtml(
   input: {
-  orderNumber?: string | null;
-  createdAt?: string | Date;
-  serviceType?: string | null;
-  tableName?: string | null;
-  waiterName?: string | null;
-  customerName?: string | null;
-  customerPhone?: string | null;
-  customerAddress?: string | null;
-  deliveryBoyPhone?: string | null;
-  orderStatus?: string | null;
+    orderNumber?: string | null;
+    createdAt?: string | Date;
+    serviceType?: string | null;
+    tableName?: string | null;
+    waiterName?: string | null;
+    customerName?: string | null;
+    customerPhone?: string | null;
+    customerAddress?: string | null;
+    deliveryBoyPhone?: string | null;
+    orderStatus?: string | null;
   },
   opts?: { showCustomer?: boolean }
 ): string {
@@ -436,15 +436,24 @@ body {
 .header .shop-name {
   font-size: 14px;
   font-weight: bold;
+  text-align: center;
 }
 .kitchen-order-heading, .section-title {
   text-align: center;
-  font-weight: 800;
-  font-size: 15px;
-  padding: 0 0 4px 0;
-  margin-top: 0;
+  font-weight: 900;
+  font-size: 17px;
+  line-height: 1.25;
+  letter-spacing: 0.6px;
+  padding: 5px 8px;
+  margin: 5px 0 6px 0;
+  border: 2px solid #000;
+  border-radius: 3px;
+  background: #fff;
   text-transform: uppercase;
   color: #000;
+  box-sizing: border-box;
+  width: 100%;
+  display: block;
 }
 .info, .totals, .footer {
   font-size: 11px;
@@ -552,7 +561,7 @@ export function receiptShopHeaderInnerHtml(input: {
   return [
     logoHtml,
     input.companyName
-      ? `<p class="shop-name"><strong>${htmlEscape(input.companyName)}</strong></p>`
+      ? `<p class="shop-name" style="text-align:center;margin:0;"><strong>${htmlEscape(input.companyName)}</strong></p>`
       : "",
     taglineHtml,
     input.showShopPhone !== false && input.companyPhone
@@ -715,10 +724,10 @@ export function buildKitchenReceiptHtmlDocument(
             <body>
                 <div class="receipt-container">
                     ${extra?.reprintBanner || ""}
-                    <div class="header">
+                    <div class="header" style="text-align:center;">
                         ${receiptShopHeaderInnerHtml(input)}
                     </div>
-                    <div class="kitchen-order-heading">${htmlEscape(title)}</div>
+                    <div class="kitchen-order-heading" style="text-align:center;font-weight:900;font-size:17px;line-height:1.25;letter-spacing:0.6px;padding:5px 8px;margin:5px 0 6px 0;border:2px solid #000;border-radius:3px;text-transform:uppercase;box-sizing:border-box;width:100%;display:block;">${htmlEscape(title)}</div>
                     ${extra?.amendmentHtml || ""}
                     <div class="info" style="margin: 0px; padding: 0px;">
                         ${formatKitchenReceiptInfoHtml(input)}
@@ -768,14 +777,13 @@ export function buildKitchenSectionReceiptHtmlDocument(
             <body>
                 <div class="receipt-container">
                     ${extra?.reprintBanner || ""}
-                    <div class="header">
+                    <div class="header" style="text-align:center;">
                         ${receiptShopHeaderInnerHtml(input)}
                     </div>
-                    ${
-                      sectionTitle
-                        ? `<div class="section-title">${htmlEscape(sectionTitle)}</div>`
-                        : ""
-                    }
+                    ${sectionTitle
+      ? `<div class="section-title" style="text-align:center;font-weight:900;font-size:17px;line-height:1.25;letter-spacing:0.6px;padding:5px 8px;margin:5px 0 6px 0;border:2px solid #000;border-radius:3px;text-transform:uppercase;box-sizing:border-box;width:100%;display:block;">${htmlEscape(sectionTitle)}</div>`
+      : ""
+    }
                     <div class="info">
                         ${formatKitchenReceiptInfoHtml(input)}
                     </div>

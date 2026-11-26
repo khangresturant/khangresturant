@@ -30,7 +30,7 @@ export async function GET(
   const manifest = {
     name: shopName,
     short_name: shopName,
-    description: `Official Online Store for ${shopName} powered by Falcon Shift`,
+    description: `Official Online Store for ${shopName} Powered by Falcon Swift`,
     start_url: `/store/${slug}`,
     display: "standalone",
     background_color: "#020617",

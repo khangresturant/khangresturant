@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Search, ShoppingCart, UserPlus, Trash2, Plus, Minus, 
+import {
+  Search, ShoppingCart, UserPlus, Trash2, Plus, Minus,
   CreditCard, Check, X, Printer, Loader2, DollarSign, ArrowRight, ArrowLeft,
   Store, Lock, Unlock, LogOut, Calculator, AlertTriangle,
   ChevronLeft, ChevronRight, Menu, LayoutGrid, Zap, Smartphone, Camera,
@@ -246,7 +246,7 @@ export const isControlledDrug = (item: { name?: string | null; note?: string | n
   if (item?.note?.includes("[CONTROLLED_DRUG]")) return true;
   const text = `${item?.name || ""} ${item?.note || ""} ${item?.formulations?.name || ""}`.toLowerCase();
   const controlledKeywords = [
-    "xanax", "lexotanil", "rivotril", "valium", "diazepam", 
+    "xanax", "lexotanil", "rivotril", "valium", "diazepam",
     "alprazolam", "bromazepam", "clonazepam", "lorazepam", "midazolam",
     "tramadol", "ketamine", "morphine", "epival", "tegretol", "dormicum",
     "gabapentin", "pregabalin", "lyrica", "nalbuphine", "pethidine", "phenobarbital",
@@ -261,22 +261,22 @@ function POSPageContent() {
   const searchParams = useSearchParams();
   const editParam = searchParams?.get("edit");
 
-  const { 
-    shopId, 
-    userId, 
-    userName, 
-    shopName, 
-    industryType, 
-    permissions, 
-    allowNegativeStock, 
-    hasEmi, 
-    hasTax, 
-    defaultTaxRate, 
-    defaultTaxType, 
-    hasLoyalty, 
-    hasGiftCards, 
-    activeClosingBook, 
-    subscriptionTier, 
+  const {
+    shopId,
+    userId,
+    userName,
+    shopName,
+    industryType,
+    permissions,
+    allowNegativeStock,
+    hasEmi,
+    hasTax,
+    defaultTaxRate,
+    defaultTaxType,
+    hasLoyalty,
+    hasGiftCards,
+    activeClosingBook,
+    subscriptionTier,
     activeLanguages,
     showCostPriceOnPos,
     setShowCostPriceOnPos
@@ -303,7 +303,7 @@ function POSPageContent() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  
+
   // Quick Add Product Modal State
   const [isQuickAddProductOpen, setIsQuickAddProductOpen] = useState(false);
   const [quickAddInitialName, setQuickAddInitialName] = useState("");
@@ -1105,14 +1105,14 @@ function POSPageContent() {
           const prod = it.products;
           const variant = it.product_variants;
           const isCustom = !it.product_id;
-          
+
           let parsedImeis: Array<{ id: string; imei1: string; imei2?: string | null }> | undefined = undefined;
           if (it.sold_imeis) {
             try {
               if (Array.isArray(it.sold_imeis)) {
                 parsedImeis = it.sold_imeis;
               }
-            } catch {}
+            } catch { }
           }
 
           return {
@@ -1331,7 +1331,7 @@ function POSPageContent() {
       if (inventoryChannel) {
         try {
           inventoryChannel.close();
-        } catch (e) {}
+        } catch (e) { }
       }
     };
   }, [shopId, userId]);
@@ -1357,7 +1357,7 @@ function POSPageContent() {
           setCustomers(snap.parties as Party[]);
           if (snap.cashAccounts?.length) setAccounts(snap.cashAccounts as any);
           if (snap.savedAt) setLastCatalogSync(snap.savedAt);
-          
+
           // Hydrate register session from localStorage cache offline
           if (typeof window !== "undefined" && userId) {
             const cachedSession = localStorage.getItem(`pos_active_session_${shopId}_${userId}`);
@@ -1452,11 +1452,11 @@ function POSPageContent() {
         // 5. Active Register Session (Shop-wide Daybook Session)
         shopId
           ? supabase
-              .from("register_sessions")
-              .select("*")
-              .eq("shop_id", shopId)
-              .eq("status", "open")
-              .order("opened_at", { ascending: false })
+            .from("register_sessions")
+            .select("*")
+            .eq("shop_id", shopId)
+            .eq("status", "open")
+            .order("opened_at", { ascending: false })
           : Promise.resolve({ data: null, error: null }),
 
         // 6. Cash Accounts
@@ -1483,41 +1483,41 @@ function POSPageContent() {
         // 9. Near-Expiry Batches (Pharmacy / Medical / Fertilizer only)
         (industryType === "pharmacy" || industryType === "medical" || industryType === "fertilizer")
           ? supabase
-              .from("product_batches")
-              .select("id, batch_number, expiry_date, stock_quantity, products(name)")
-              .eq("shop_id", shopId)
-              .gt("stock_quantity", 0)
-              .lte("expiry_date", ninetyDaysFromNow.toISOString().split("T")[0])
-              .order("expiry_date", { ascending: true })
-              .limit(10)
+            .from("product_batches")
+            .select("id, batch_number, expiry_date, stock_quantity, products(name)")
+            .eq("shop_id", shopId)
+            .gt("stock_quantity", 0)
+            .lte("expiry_date", ninetyDaysFromNow.toISOString().split("T")[0])
+            .order("expiry_date", { ascending: true })
+            .limit(10)
           : Promise.resolve({ data: null, error: null }),
 
         // 10. All Batches from product_batches (Pharmacy / Medical / Fertilizer only)
         (industryType === "pharmacy" || industryType === "medical" || industryType === "fertilizer")
           ? supabase
-              .from("product_batches")
-              .select("id, product_id, batch_number, expiry_date, stock_quantity, purchase_price")
-              .eq("shop_id", shopId)
-              .order("expiry_date", { ascending: true })
+            .from("product_batches")
+            .select("id, product_id, batch_number, expiry_date, stock_quantity, purchase_price")
+            .eq("shop_id", shopId)
+            .order("expiry_date", { ascending: true })
           : Promise.resolve({ data: [], error: null }),
 
         // 11. All Batches from stock table (Pharmacy / Medical / Fertilizer only)
         (industryType === "pharmacy" || industryType === "medical" || industryType === "fertilizer")
           ? supabase
-              .from("stock")
-              .select("id, product_id, batch_number, expiry_date, quantity_single, quantity_pack")
-              .eq("shop_id", shopId)
-              .order("expiry_date", { ascending: true })
+            .from("stock")
+            .select("id, product_id, batch_number, expiry_date, quantity_single, quantity_pack")
+            .eq("shop_id", shopId)
+            .order("expiry_date", { ascending: true })
           : Promise.resolve({ data: [], error: null }),
 
         // 12. All Batches from purchase_order_items (Pharmacy / Medical / Fertilizer only)
         (industryType === "pharmacy" || industryType === "medical" || industryType === "fertilizer")
           ? supabase
-              .from("purchase_order_items")
-              .select("id, product_id, batch_number, expiry_date, quantity, purchase_orders!inner(shop_id)")
-              .eq("purchase_orders.shop_id", shopId)
-              .not("batch_number", "is", null)
-              .order("expiry_date", { ascending: true })
+            .from("purchase_order_items")
+            .select("id, product_id, batch_number, expiry_date, quantity, purchase_orders!inner(shop_id)")
+            .eq("purchase_orders.shop_id", shopId)
+            .not("batch_number", "is", null)
+            .order("expiry_date", { ascending: true })
           : Promise.resolve({ data: [], error: null })
       ]);
 
@@ -1556,7 +1556,7 @@ function POSPageContent() {
                 .eq("shop_id", shopId)
                 .order("name", { ascending: true })
                 .range(offset, offset + limit - 1);
-              
+
               const chunk = nextRes.data || [];
               if (chunk.length > 0) {
                 setProducts(prev => {
@@ -1589,7 +1589,7 @@ function POSPageContent() {
           cashAccounts: accountsRes.data || [],
         }).then(() => {
           setLastCatalogSync(syncTime);
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       // --- Process Categories ---
@@ -1758,7 +1758,7 @@ function POSPageContent() {
             .from("cash_accounts")
             .insert(defaultAccounts)
             .select("id, name, current_balance");
-          
+
           if (newAccounts && newAccounts.length > 0) {
             accountsData = newAccounts.sort((a: any, b: any) => a.name.localeCompare(b.name));
           }
@@ -1888,7 +1888,7 @@ function POSPageContent() {
       ]);
 
       if (invRes.error) throw invRes.error;
-      
+
       const filteredInvoices = (invRes.data || []).filter(
         (inv: any) => inv.register_session_id === activeSession.id || (inv.created_at && inv.created_at >= sessionStart)
       );
@@ -1951,11 +1951,11 @@ function POSPageContent() {
         .filter(inv => inv.payment_mode === "cash" || (inv.payment_mode === "credit" && Number(inv.paid_amount || 0) > 0))
         .reduce((sum, inv) => sum + Number(inv.paid_amount || 0), 0);
 
-      const calculatedClosingCash = Math.max(0, 
-        Number(activeSession.opening_balance) + 
-        cashSales + 
-        shiftKhataIn - 
-        shiftExpenses - 
+      const calculatedClosingCash = Math.max(0,
+        Number(activeSession.opening_balance) +
+        cashSales +
+        shiftKhataIn -
+        shiftExpenses -
         shiftPurchases
       );
 
@@ -2049,7 +2049,7 @@ function POSPageContent() {
       setSelectedCustomerId(invoice.party_id || "walkin");
       setDiscount(Number(invoice.discount) || 0);
       setRemarks(invoice.remarks || "");
-      
+
       const invSubtotal = cartItems.reduce((acc, it) => acc + it.price * it.quantity, 0);
       const calculatedTaxRate = invSubtotal > 0 ? (Number(invoice.tax_amount) * 100) / invSubtotal : 0;
       setTaxRate(Math.round(calculatedTaxRate * 100) / 100);
@@ -2129,7 +2129,7 @@ function POSPageContent() {
       setSelectedCustomerId(invoice.party_id || "walkin");
       setDiscount(Number(invoice.discount) || 0);
       setRemarks(invoice.remarks || "");
-      
+
       const invSubtotal = cartItems.reduce((acc, it) => acc + it.price * it.quantity, 0);
       const calculatedTaxRate = invSubtotal > 0 ? (Number(invoice.tax_amount) * 100) / invSubtotal : 0;
       setTaxRate(Math.round(calculatedTaxRate * 100) / 100);
@@ -2137,7 +2137,7 @@ function POSPageContent() {
       setReceivedAmount(0);
 
       toast.success(`Loaded quotation #${quotationId.slice(0, 8).toUpperCase()}! Ready to complete sale.`);
-      
+
       if (typeof window !== "undefined") {
         window.history.replaceState(null, "", "/dashboard/pos");
       }
@@ -2165,15 +2165,15 @@ function POSPageContent() {
 
   // Helper: Get both manual variants and automatic unit-relation subunits for a product
   const getProductUnitOptions = (product: DBProduct) => {
-    const options: { 
-      id: string; 
-      name: string; 
-      price: number; 
+    const options: {
+      id: string;
+      name: string;
+      price: number;
       purchasePrice: number;
-      stock: number; 
-      isAutoSubunit: boolean; 
-      conversionFactor: number; 
-      type: "multiplier" | "divisor" 
+      stock: number;
+      isAutoSubunit: boolean;
+      conversionFactor: number;
+      type: "multiplier" | "divisor"
     }[] = [];
 
     const productUnitCode = product.unit?.toLowerCase() || "";
@@ -2181,13 +2181,13 @@ function POSPageContent() {
 
     if (industryType === "karyana" && baseUnit) {
       const subUnits = allUnits.filter(u => u.parent_unit_id === baseUnit.id);
-      
+
       for (const sub of subUnits) {
         const cCode = sub.code.toLowerCase();
         const pCode = baseUnit.code.toLowerCase();
-        
+
         // Division condition (e.g. Gram under Kilogram, or Milliliter under Liter)
-        const isDivisor = 
+        const isDivisor =
           ((cCode === "g" || cCode.startsWith("gram")) && (pCode === "kg" || pCode.startsWith("kilo"))) ||
           ((cCode === "ml" || cCode.startsWith("milli")) && (pCode === "ltr" || pCode === "lit" || pCode.startsWith("liter")));
 
@@ -2209,7 +2209,7 @@ function POSPageContent() {
         options.push({
           id: `auto-${sub.id}`,
           name: sub.name,
-          price: Math.round(price * 100) / 100, 
+          price: Math.round(price * 100) / 100,
           purchasePrice: Math.round(subPurchasePrice * 100) / 100,
           stock: Math.floor(stock * 100) / 100,
           isAutoSubunit: true,
@@ -2248,9 +2248,9 @@ function POSPageContent() {
     if (industryType === "pharmacy" && product.pack_size && Number(product.pack_size) > 1) {
       const pSize = Number(product.pack_size);
       const hasExistingPack = options.some(
-        o => o.conversionFactor === pSize || 
-             o.name.toLowerCase().includes("box") || 
-             o.name.toLowerCase().includes("pack")
+        o => o.conversionFactor === pSize ||
+          o.name.toLowerCase().includes("box") ||
+          o.name.toLowerCase().includes("pack")
       );
       if (!hasExistingPack) {
         const packPrice = Math.round(product.sale_price_single * pSize * 100) / 100;
@@ -2353,7 +2353,7 @@ function POSPageContent() {
 
     // Convert ft+in to total feet
     const totalLengthFt = hardwareCalcLengthFt + hardwareCalcLengthIn / 12;
-    const totalWidthFt  = hardwareCalcWidthFt  + hardwareCalcWidthIn  / 12;
+    const totalWidthFt = hardwareCalcWidthFt + hardwareCalcWidthIn / 12;
 
     if (totalLengthFt <= 0) {
       toast.error("Please enter a valid length.");
@@ -2393,8 +2393,8 @@ function POSPageContent() {
     const stock = hardwareCalcProduct.current_stock;
     const purchasePrice = hardwareCalcProduct.purchase_price_single || 0;
 
-    const existingIndex = cart.findIndex(item => 
-      item.productId === hardwareCalcProduct.id && 
+    const existingIndex = cart.findIndex(item =>
+      item.productId === hardwareCalcProduct.id &&
       item.packingName === descSuffix
     );
 
@@ -2479,7 +2479,7 @@ function POSPageContent() {
         setImeiModalProduct(product);
         setLoadingImeis(true);
         setIsImeiSelectModalOpen(true);
-        
+
         const existingItem = cart.find(item => item.productId === product.id && !item.variantId);
         const preSelected = existingItem?.selectedImeis || [];
         setSelectedImeisForItem(preSelected);
@@ -2558,8 +2558,8 @@ function POSPageContent() {
       }
     }
 
-    const existingIndex = cart.findIndex(item => 
-      variantId 
+    const existingIndex = cart.findIndex(item =>
+      variantId
         ? item.productId === product.id && item.variantId === variantId && item.batchNumber === resolvedBatchNumber
         : item.productId === product.id && !item.variantId && item.batchNumber === resolvedBatchNumber
     );
@@ -2615,7 +2615,7 @@ function POSPageContent() {
       ]);
       toast.success(`Added ${product.name} (Qty: ${initialQty}) to cart`);
     }
-    
+
     setActiveProductForVariants(null);
   };
 
@@ -2720,7 +2720,7 @@ function POSPageContent() {
       const lowerQuery = scannedCode.toLowerCase();
       let matchedProduct: any = null;
       let matchedVariant: any = null;
-      
+
       for (const p of products) {
         if (p.code && p.code.toLowerCase() === lowerQuery) {
           matchedProduct = p;
@@ -2731,7 +2731,7 @@ function POSPageContent() {
           break;
         }
         if (p.product_variants) {
-          const vMatch = p.product_variants.find((v: any) => 
+          const vMatch = p.product_variants.find((v: any) =>
             v.product_barcodes && v.product_barcodes.some((b: any) => b.barcode.toLowerCase() === lowerQuery)
           );
           if (vMatch) {
@@ -2741,7 +2741,7 @@ function POSPageContent() {
           }
         }
       }
-      
+
       if (matchedProduct) {
         if (matchedVariant) {
           const options = getProductUnitOptions(matchedProduct);
@@ -2798,21 +2798,21 @@ function POSPageContent() {
           e.preventDefault();
           const scannedCode = barcodeBufferRef.current;
           barcodeBufferRef.current = "";
-          
+
           if (activeEl?.tagName === "INPUT" && (activeEl as HTMLInputElement).value !== undefined) {
-             (activeEl as HTMLInputElement).value = "";
-             setSearchQuery("");
-             if (activeEl.id === "pos-search-input") (activeEl as HTMLElement).blur();
+            (activeEl as HTMLInputElement).value = "";
+            setSearchQuery("");
+            if (activeEl.id === "pos-search-input") (activeEl as HTMLElement).blur();
           }
-          
+
           handleGlobalBarcodeScan(scannedCode);
           return;
         }
         barcodeBufferRef.current = "";
       }
 
-      const isEditingInputOrSelect = 
-        (activeEl?.tagName === "INPUT" && activeEl.id !== "pos-search-input" && activeEl.id !== "pos-customer-search-input") || 
+      const isEditingInputOrSelect =
+        (activeEl?.tagName === "INPUT" && activeEl.id !== "pos-search-input" && activeEl.id !== "pos-customer-search-input") ||
         activeEl?.tagName === "SELECT";
 
       if (isEditingInputOrSelect) {
@@ -2912,7 +2912,7 @@ function POSPageContent() {
           e.preventDefault();
           setActiveProductForVariants(null);
         }
-        return; 
+        return;
       }
 
       // INTERCEPT keys if Cart is focused (only when user is not typing in search bar or any other text input)
@@ -2996,7 +2996,7 @@ function POSPageContent() {
             handleCartItemUnitChange(selectedCartItemIndex, options[nextIdx].id);
           }
         }
-        
+
         // Checkout or Toggle Pay from Cart Mode
         if (e.key === "F8") {
           e.preventDefault();
@@ -3193,7 +3193,7 @@ function POSPageContent() {
           e.preventDefault();
           const query = searchQuery.trim();
           setSearchQuery(""); // Clear input immediately to prevent double scans
-          
+
           handleGlobalBarcodeScan(query);
           return;
         }
@@ -3282,9 +3282,9 @@ function POSPageContent() {
     }
 
     // Check for duplicates with same variant/base and merge
-    const duplicateIndex = cart.findIndex((item, i) => 
-      i !== index && 
-      item.productId === product.id && 
+    const duplicateIndex = cart.findIndex((item, i) =>
+      i !== index &&
+      item.productId === product.id &&
       (variantId ? item.variantId === variantId : !item.variantId)
     );
 
@@ -3310,7 +3310,7 @@ function POSPageContent() {
         price,
         purchasePrice,
         stock,
-        quantity: Math.max(1, cappedQty), 
+        quantity: Math.max(1, cappedQty),
         isAutoSubunit,
         conversionFactor,
         unitType
@@ -3491,30 +3491,30 @@ function POSPageContent() {
     try {
       const { default: jsPDF } = await import("jspdf");
       const { default: autoTable } = await import("jspdf-autotable");
-      
+
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      
+
       // Header
       doc.setFont("helvetica", "bold");
       doc.setFontSize(22);
       doc.setTextColor(79, 70, 229); // Indigo-600
       doc.text("HX ESTIMATE / QUOTATION", 15, 20);
-      
+
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
       doc.text("This is not a financial invoice. Prices are estimates only.", 15, 26);
-      
+
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(51, 65, 85);
       doc.text(`Quotation Date: ${new Date().toLocaleString()}`, 130, 20);
       doc.text(`Customer: ${selectedCustomerId === "walkin" ? "Walk-in Customer" : customers.find(c => c.id === selectedCustomerId)?.name || "Customer"}`, 130, 25);
-      
+
       doc.setDrawColor(226, 232, 240);
       doc.setLineWidth(0.4);
       doc.line(15, 32, 195, 32);
-      
+
       // Table
       autoTable(doc, {
         head: [["#", "Product", "Packing/Unit", "Qty", "Sale Price", "Subtotal"]],
@@ -3533,9 +3533,9 @@ function POSPageContent() {
         columnStyles: { 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right", fontStyle: "bold" } },
         margin: { left: 15, right: 15 }
       });
-      
+
       const finalY = (doc as any).lastAutoTable.finalY + 8;
-      
+
       // Totals
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
@@ -3548,17 +3548,17 @@ function POSPageContent() {
         doc.setTextColor(220, 38, 38);
         doc.text(`Discount: -Rs ${discountRupees.toLocaleString()}`, 130, finalY + 10);
       }
-      
+
       doc.setFontSize(13);
       doc.setTextColor(79, 70, 229);
       const grandTotalY = finalY + (discountRupees > 0 ? 16 : (taxRate > 0 ? 11 : 6));
       doc.text(`Estimated Total: Rs ${total.toLocaleString()}`, 130, grandTotalY);
-      
+
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
-      doc.text("Powered by Falcon Shift", 15, 285);
-      
+      doc.text("Powered by Falcon Swift", 15, 285);
+
       doc.save(`estimate_${Date.now()}.pdf`);
       toast.success("Quotation PDF generated and downloaded! 📄");
     } catch (err: any) {
@@ -3575,9 +3575,9 @@ function POSPageContent() {
     }
 
     if (!lastInvoice) return;
-    
+
     const phoneNum = whatsappInputPhone;
-    
+
     if (!phoneNum) {
       toast.error("برائے مہربانی واٹس ایپ نمبر درج کریں!");
       return;
@@ -3588,7 +3588,7 @@ function POSPageContent() {
     if (waWindow) {
       waWindow.document.write("<html><head><title>Opening WhatsApp...</title><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;background:#f8fafc;color:#475569;margin:0;} .spinner{border:3px solid #e2e8f0;border-top:3px solid #10b981;border-radius:50%;width:24px;height:24px;animation:spin 1s linear infinite;margin-bottom:12px;} @keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}} .container{text-align:center;}</style></head><body><div class='container'><div class='spinner' style='margin:0 auto 12px auto;'></div><div>Opening WhatsApp, please wait...</div></div></body></html>");
     }
-    
+
     const cleanPhone = phoneNum.replace(/[^0-9]/g, "");
     let formattedPhone = cleanPhone;
     if (cleanPhone.startsWith("03")) {
@@ -3627,19 +3627,19 @@ function POSPageContent() {
       const { default: autoTable } = await import("jspdf-autotable");
 
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      
+
       // Header: Business Branding
       doc.setFont("helvetica", "bold");
       doc.setFontSize(20);
       doc.setTextColor(30, 41, 59); // Slate-800
       doc.text(businessName, 15, 18);
-      
+
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(100, 116, 139);
       if (businessAddress) doc.text(businessAddress, 15, 23);
       if (businessPhone) doc.text(`Phone: ${businessPhone}`, 15, businessAddress ? 27 : 23);
-      
+
       // Meta Info Card (Right side)
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9.5);
@@ -3650,12 +3650,12 @@ function POSPageContent() {
       doc.text(`Date: ${invDateStr}`, 130, 23);
       doc.text(`Customer: ${custName}`, 130, 27);
       if (lastInvoice.customer_phone) doc.text(`Contact: ${lastInvoice.customer_phone}`, 130, 31);
-      
+
       // Divider
       doc.setDrawColor(226, 232, 240);
       doc.setLineWidth(0.4);
       doc.line(15, 35, 195, 35);
-      
+
       // Items Table
       const tableRows = invItems.map((item: any, idx: number) => {
         let desc = item.name || "Item";
@@ -3685,26 +3685,26 @@ function POSPageContent() {
         theme: "striped",
         headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 8.5, fontStyle: "bold" },
         bodyStyles: { fontSize: 8, textColor: [51, 65, 85] },
-        columnStyles: { 
+        columnStyles: {
           0: { cellWidth: 10, halign: "center" },
           1: { cellWidth: 80 },
           2: { cellWidth: 25 },
           3: { cellWidth: 15, halign: "center" },
           4: { cellWidth: 25, halign: "right" },
-          5: { cellWidth: 25, halign: "right", fontStyle: "bold" } 
+          5: { cellWidth: 25, halign: "right", fontStyle: "bold" }
         },
         margin: { left: 15, right: 15 }
       });
-      
+
       let nextY = (doc as any).lastAutoTable.finalY + 6;
-      
+
       // Totals Box
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(71, 85, 105);
       doc.text(`Gross Subtotal:`, 130, nextY);
       doc.text(`Rs ${grossTotal.toLocaleString()}`, 195, nextY, { align: "right" });
-      
+
       if (discAmt > 0) {
         nextY += 5;
         doc.setTextColor(220, 38, 38);
@@ -3790,7 +3790,7 @@ function POSPageContent() {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
-      doc.text("Thank you for shopping with us! Online verification & cloud powered by Falcon Shift", 15, 285);
+      doc.text("Thank you for shopping with us! Online verification & cloud Powered by Falcon Swift", 15, 285);
 
       const blob = doc.output("blob");
       const filename = `${lastInvoice.id}_${Date.now()}.pdf`;
@@ -3826,7 +3826,7 @@ function POSPageContent() {
       const pQty = item.quantity;
       const pPrice = Number(item.price).toLocaleString();
       const pSubtotal = Number(item.subtotal !== undefined ? item.subtotal : (item.price * item.quantity)).toLocaleString();
-      
+
       let extraMeta = "";
       if (item.sold_imeis) {
         extraMeta += `\n   📱 IMEI: ${item.sold_imeis}`;
@@ -3934,25 +3934,25 @@ function POSPageContent() {
   ) => {
     const principal = totalBill - downPayment;
     if (principal <= 0) return [];
-    
+
     const markup = principal * (markupPct / 100);
     const totalDebt = principal + markup;
     const instAmount = Math.round(totalDebt / installmentsCount);
-    
+
     const schedule = [];
     let currentDate = new Date(firstDateStr || new Date());
-    
+
     for (let i = 0; i < installmentsCount; i++) {
-      const amt = i === installmentsCount - 1 
-        ? totalDebt - (instAmount * (installmentsCount - 1)) 
+      const amt = i === installmentsCount - 1
+        ? totalDebt - (instAmount * (installmentsCount - 1))
         : instAmount;
-      
+
       schedule.push({
         installmentNum: i + 1,
         dueDate: currentDate.toISOString().split("T")[0],
         amount: amt
       });
-      
+
       if (frequency === "monthly") {
         currentDate.setMonth(currentDate.getMonth() + 1);
       } else {
@@ -3974,29 +3974,29 @@ function POSPageContent() {
         .eq("code", giftCardCode.trim().toUpperCase())
         .eq("shop_id", shopId)
         .single();
-      
+
       if (error || !gc) {
         toast.error("Invalid Gift Card Code!");
         return;
       }
-      
+
       if (gc.expiry_date && new Date(gc.expiry_date) < new Date()) {
         toast.error("This Gift Card has expired!");
         return;
       }
-      
+
       const currentBalance = Number(gc.balance);
       if (currentBalance <= 0) {
         toast.error("This Gift Card has zero balance!");
         return;
       }
-      
+
       const remainingTotal = subtotal + taxAmount - discountRupees;
       if (remainingTotal <= 0) {
         toast.error("No balance left to deduct!");
         return;
       }
-      
+
       const amountToApply = Math.min(currentBalance, remainingTotal);
       setAppliedGiftCard(gc);
       setAppliedGiftCardAmount(amountToApply);
@@ -4103,8 +4103,8 @@ function POSPageContent() {
     if ((paymentMode === "credit" || paymentMode === "emi") && selectedCustomerId !== "walkin") {
       const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
       if (selectedCustomer && selectedCustomer.credit_limit !== null && selectedCustomer.credit_limit !== undefined) {
-        const creditAmount = paymentMode === "credit" 
-          ? total - receivedAmount 
+        const creditAmount = paymentMode === "credit"
+          ? total - receivedAmount
           : (total - receivedAmount) + ((total - receivedAmount) * (emiMarkupRate / 100));
         const newBalance = Number(selectedCustomer.current_balance || 0) + creditAmount;
         if (newBalance > Number(selectedCustomer.credit_limit)) {
@@ -4127,7 +4127,7 @@ Do you want to proceed with this sale anyway?`);
       const invoiceStatus = paymentMode === "quotation"
         ? "quotation"
         : (paymentMode === "credit" || paymentMode === "emi")
-          ? (receivedAmount >= total ? "paid" : receivedAmount > 0 ? "partial" : "unpaid") 
+          ? (receivedAmount >= total ? "paid" : receivedAmount > 0 ? "partial" : "unpaid")
           : "paid";
 
       const paidAmount =
@@ -4155,13 +4155,13 @@ Do you want to proceed with this sale anyway?`);
       const emiScheduleList =
         paymentMode === "emi"
           ? generateEmiSchedule(
-              total,
-              receivedAmount,
-              emiInstallments,
-              emiFrequency,
-              emiMarkupRate,
-              emiFirstDueDate
-            )
+            total,
+            receivedAmount,
+            emiInstallments,
+            emiFrequency,
+            emiMarkupRate,
+            emiFirstDueDate
+          )
           : [];
 
       // ── Phase 2/3: atomic pos_checkout RPC + offline queue ──
@@ -4313,7 +4313,7 @@ Do you want to proceed with this sale anyway?`);
               const bChannel = new BroadcastChannel("theaccounts_inventory_channel");
               bChannel.postMessage({ type: "SALE_SAVED", shopId, invoiceId: invoiceData.id, timestamp: Date.now() });
               bChannel.close();
-            } catch (e) {}
+            } catch (e) { }
           }
           setIsDraftRestored(false);
           setIsReceiptOpen(true);
@@ -4425,7 +4425,7 @@ Do you want to proceed with this sale anyway?`);
             if (it.variant_id) {
               const product = products.find(p => p.id === it.product_id);
               const variant = product?.product_variants?.find(v => v.id === it.variant_id);
-              
+
               if (variant?.is_packing && variant.pack_size) {
                 await supabase.rpc("decrement_product_stock", {
                   p_id: it.product_id,
@@ -4702,7 +4702,7 @@ Do you want to proceed with this sale anyway?`);
           const bChannel = new BroadcastChannel("theaccounts_inventory_channel");
           bChannel.postMessage({ type: "SALE_SAVED", shopId, invoiceId: invoiceData.id, timestamp: Date.now() });
           bChannel.close();
-        } catch (e) {}
+        } catch (e) { }
       }
       setIsDraftRestored(false);
       setIsReceiptOpen(true);
@@ -4712,7 +4712,7 @@ Do you want to proceed with this sale anyway?`);
           window.history.replaceState(null, "", "/dashboard/pos");
         }
       }
-      fetchData(); 
+      fetchData();
 
     } catch (err: any) {
       toast.error("Checkout failed: " + err.message);
@@ -4728,7 +4728,7 @@ Do you want to proceed with this sale anyway?`);
 
   const customerChoices = [
     { id: "walkin", name: "Walk-in Customer", phone: null, current_balance: 0 },
-    ...customers.filter(c => 
+    ...customers.filter(c =>
       c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
       (c.phone && c.phone.includes(customerSearchQuery))
     )
@@ -4744,7 +4744,7 @@ Do you want to proceed with this sale anyway?`);
             ⚠️ Closed Period View ({activeClosingBook.name}). Checkouts and adjustments are locked.
           </div>
         )}
-                <CustomerSelector 
+        <CustomerSelector
           selectedCustomerId={selectedCustomerId}
           setSelectedCustomerId={setSelectedCustomerId}
           customerSearchQuery={customerSearchQuery}
@@ -4769,40 +4769,38 @@ Do you want to proceed with this sale anyway?`);
           <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-[10px] text-slate-700 relative overflow-hidden shadow-xs">
             <div className="flex items-center justify-between">
               <span className="font-extrabold text-slate-900">{selectedCustomer.name}</span>
-              <span className={`px-2 py-0.5 rounded-full font-black text-[9px] border uppercase ${
-                selectedCustomer.type === "dual" 
-                  ? "bg-purple-50 text-purple-700 border-purple-100" 
+              <span className={`px-2 py-0.5 rounded-full font-black text-[9px] border uppercase ${selectedCustomer.type === "dual"
+                  ? "bg-purple-50 text-purple-700 border-purple-100"
                   : "bg-blue-50 text-blue-700 border-blue-100"
-              }`}>
+                }`}>
                 {selectedCustomer.type === "dual" ? "Dual (Both)" : "Customer"}
               </span>
             </div>
-            
+
             {selectedCustomer.phone && (
               <p className="flex items-center gap-1 text-slate-550 font-semibold">
                 <span>📞 {selectedCustomer.phone}</span>
               </p>
             )}
-            
+
             {selectedCustomer.address && (
               <p className="flex items-center gap-1 text-slate-550 truncate font-semibold" title={selectedCustomer.address}>
                 <span>📍 {selectedCustomer.address}</span>
               </p>
             )}
-            
+
             <div className="flex items-center justify-between pt-1 border-t border-slate-200/50 mt-1">
               <span className="text-slate-400 font-bold">Khata Balance:</span>
-              <span className={`font-black font-mono ${
-                selectedCustomer.current_balance > 0 
-                  ? "text-rose-600" 
-                  : selectedCustomer.current_balance < 0 
-                    ? "text-emerald-600" 
+              <span className={`font-black font-mono ${selectedCustomer.current_balance > 0
+                  ? "text-rose-600"
+                  : selectedCustomer.current_balance < 0
+                    ? "text-emerald-600"
                     : "text-slate-500"
-              }`}>
-                {selectedCustomer.current_balance > 0 
-                  ? `Rs ${selectedCustomer.current_balance.toLocaleString()} (Receivable)` 
-                  : selectedCustomer.current_balance < 0 
-                    ? `Rs ${Math.abs(selectedCustomer.current_balance).toLocaleString()} (Payable)` 
+                }`}>
+                {selectedCustomer.current_balance > 0
+                  ? `Rs ${selectedCustomer.current_balance.toLocaleString()} (Receivable)`
+                  : selectedCustomer.current_balance < 0
+                    ? `Rs ${Math.abs(selectedCustomer.current_balance).toLocaleString()} (Payable)`
                     : "Rs 0 (Settled)"
                 }
               </span>
@@ -4840,11 +4838,10 @@ Do you want to proceed with this sale anyway?`);
                     setDiscountType("percentage");
                     setDiscount(0);
                   }}
-                  className={`px-1 py-0.5 text-[8.5px] font-black rounded select-none cursor-pointer transition ${
-                    discountType === "percentage"
+                  className={`px-1 py-0.5 text-[8.5px] font-black rounded select-none cursor-pointer transition ${discountType === "percentage"
                       ? "bg-white text-slate-800 shadow-xs"
                       : "text-slate-500 hover:text-slate-800"
-                  }`}
+                    }`}
                 >
                   %
                 </button>
@@ -4854,24 +4851,23 @@ Do you want to proceed with this sale anyway?`);
                     setDiscountType("fixed");
                     setDiscount(0);
                   }}
-                  className={`px-1 py-0.5 text-[8.5px] font-black rounded select-none cursor-pointer transition ${
-                    discountType === "fixed"
+                  className={`px-1 py-0.5 text-[8.5px] font-black rounded select-none cursor-pointer transition ${discountType === "fixed"
                       ? "bg-white text-slate-800 shadow-xs"
                       : "text-slate-500 hover:text-slate-800"
-                  }`}
+                    }`}
                 >
                   Rs
                 </button>
               </div>
             </div>
-            <Input 
+            <Input
               id="pos-discount-input"
-              type="number" 
-              placeholder="0" 
-              value={discount || ""} 
+              type="number"
+              placeholder="0"
+              value={discount || ""}
               onChange={(e) => {
                 const newDiscount = Math.max(0, parseFloat(e.target.value) || 0);
-                
+
                 if (discountType === "percentage") {
                   if (newDiscount > 100) {
                     toast.error("100% ڈسکاؤنٹ کی اجازت نہیں ہے!");
@@ -4911,7 +4907,7 @@ Do you want to proceed with this sale anyway?`);
                   const rawSubtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
                   const totalPurchaseCost = cart.reduce((acc, item) => acc + item.purchasePrice * item.quantity, 0);
                   const calculatedTaxAmount = taxType === "flat" ? taxRate : (rawSubtotal * taxRate) / 100;
-        const effectiveTotal = Math.max(0, rawSubtotal + calculatedTaxAmount - calcDiscRupees);
+                  const effectiveTotal = Math.max(0, rawSubtotal + calculatedTaxAmount - calcDiscRupees);
                   if (totalPurchaseCost > 0 && effectiveTotal < totalPurchaseCost) {
                     toast.error("خسارے (Loss) پر فروخت کرنے کی اجازت نہیں ہے!", {
                       description: `Selling below total purchase cost (Rs ${totalPurchaseCost.toFixed(2)}) is blocked.`,
@@ -4931,11 +4927,11 @@ Do you want to proceed with this sale anyway?`);
             <div>
               <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Tax Rate (F7)</label>
               <div className="flex items-center gap-1">
-                <Input 
+                <Input
                   id="pos-tax-input"
-                  type="number" 
-                  placeholder="0" 
-                  value={taxRate || ""} 
+                  type="number"
+                  placeholder="0"
+                  value={taxRate || ""}
                   onChange={(e) => setTaxRate(Math.max(0, parseFloat(e.target.value) || 0))}
                   className="h-8 bg-white border-slate-200 rounded-lg text-[11px] w-20 text-right font-bold"
                 />
@@ -4955,10 +4951,10 @@ Do you want to proceed with this sale anyway?`);
         {/* Remarks / Custom Note */}
         <div>
           <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{t("bill_remarks")}</label>
-          <Input 
-            type="text" 
-            placeholder="e.g. Warranty details, special requests..." 
-            value={remarks} 
+          <Input
+            type="text"
+            placeholder="e.g. Warranty details, special requests..."
+            value={remarks}
             onChange={(e) => setRemarks(e.target.value)}
             className="h-8 bg-white border-slate-200 rounded-lg text-[11px]"
           />
@@ -5013,11 +5009,10 @@ Do you want to proceed with this sale anyway?`);
         {/* Payment Mode */}
         <div>
           <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Mode (F8)</label>
-          <div className={`grid ${
-            (industryType !== "pharmacy" && (industryType === "hardware" || industryType === "electronics" || hasEmi))
-              ? "grid-cols-3" 
+          <div className={`grid ${(industryType !== "pharmacy" && (industryType === "hardware" || industryType === "electronics" || hasEmi))
+              ? "grid-cols-3"
               : "grid-cols-2"
-          } gap-2`}>
+            } gap-2`}>
             {[
               { id: "cash", label: "💵 " + t("cash"), color: "bg-emerald-600 border-emerald-600 shadow-emerald-500/20" },
               { id: "credit", label: t("credit_udhaar_btn"), color: "bg-amber-600 border-amber-600 shadow-amber-500/20" },
@@ -5028,11 +5023,10 @@ Do you want to proceed with this sale anyway?`);
                 key={mode.id}
                 type="button"
                 onClick={() => setPaymentMode(mode.id as any)}
-                className={`py-2 rounded-xl text-[10px] font-black tracking-wide transition-all border ${
-                  paymentMode === mode.id
+                className={`py-2 rounded-xl text-[10px] font-black tracking-wide transition-all border ${paymentMode === mode.id
                     ? `${mode.color} text-white shadow-md`
                     : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                }`}
+                  }`}
               >
                 {mode.label}
               </button>
@@ -5040,7 +5034,7 @@ Do you want to proceed with this sale anyway?`);
           </div>
 
           {paymentMode === "emi" && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               className="bg-indigo-50/50 border border-indigo-200/60 rounded-xl p-3 space-y-3 mt-2 overflow-hidden"
@@ -5049,11 +5043,11 @@ Do you want to proceed with this sale anyway?`);
                 <span className="text-[9px] font-bold text-indigo-800 uppercase tracking-wide">{t("emi_settings")}</span>
                 <span className="text-[9px] text-indigo-600 font-medium">{t("select_plan_label")}</span>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[8px] font-bold text-indigo-700 uppercase tracking-widest mb-0.5">Down Payment / Advance (Rs)</label>
-                  <Input 
+                  <Input
                     type="number"
                     placeholder="0"
                     value={receivedAmount || ""}
@@ -5067,7 +5061,7 @@ Do you want to proceed with this sale anyway?`);
 
                 <div>
                   <label className="block text-[8px] font-bold text-indigo-700 uppercase tracking-widest mb-0.5">{t("total_installments")}</label>
-                  <Input 
+                  <Input
                     type="number"
                     min={1}
                     value={emiInstallments || ""}
@@ -5080,7 +5074,7 @@ Do you want to proceed with this sale anyway?`);
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-[8px] font-bold text-indigo-700 uppercase tracking-widest mb-0.5">Markup Rate / Profit %</label>
-                  <Input 
+                  <Input
                     type="number"
                     placeholder="0"
                     value={emiMarkupRate || ""}
@@ -5104,7 +5098,7 @@ Do you want to proceed with this sale anyway?`);
 
               <div>
                 <label className="block text-[8px] font-bold text-indigo-700 uppercase tracking-widest mb-0.5">First Payment Due Date</label>
-                <Input 
+                <Input
                   type="date"
                   value={emiFirstDueDate}
                   onChange={(e) => setEmiFirstDueDate(e.target.value)}
@@ -5154,7 +5148,7 @@ Do you want to proceed with this sale anyway?`);
           )}
 
           {paymentMode === "credit" && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               className="bg-amber-50/50 border border-amber-200/60 rounded-xl p-2.5 space-y-1.5 mt-2 overflow-hidden"
@@ -5166,7 +5160,7 @@ Do you want to proceed with this sale anyway?`);
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[8px] font-bold text-amber-700 uppercase tracking-widest mb-0.5">Cash Paid Now (Rs)</label>
-                  <Input 
+                  <Input
                     id="pos-credit-paid-input"
                     type="number"
                     placeholder="0"
@@ -5188,7 +5182,7 @@ Do you want to proceed with this sale anyway?`);
           {(paymentMode !== "credit" || receivedAmount > 0) && accounts.length > 0 && (
             <div className="mt-2 select-none">
               <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Deposit payment to</label>
-              <select 
+              <select
                 value={selectedAccountId}
                 onChange={e => setSelectedAccountId(e.target.value)}
                 className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-700"
@@ -5301,14 +5295,13 @@ Do you want to proceed with this sale anyway?`);
         </div>
 
         {/* Submit Button */}
-        <Button 
+        <Button
           onClick={handleCheckout}
           disabled={isSubmitting || cart.length === 0 || !!activeClosingBook}
-          className={`w-full font-black h-9 rounded-lg shadow-lg mt-0.5 text-[11.5px] cursor-pointer ${
-            paymentMode === "quotation"
+          className={`w-full font-black h-9 rounded-lg shadow-lg mt-0.5 text-[11.5px] cursor-pointer ${paymentMode === "quotation"
               ? "bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/15"
               : "bg-indigo-600 hover:bg-indigo-755 text-white shadow-indigo-500/15"
-          }`}
+            }`}
         >
           {isSubmitting ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
@@ -5381,11 +5374,10 @@ Do you want to proceed with this sale anyway?`);
                     type="button"
                     size="sm"
                     onClick={() => setIsTradeInModalOpen(true)}
-                    className={`font-extrabold text-[10px] sm:text-[11px] h-6.5 sm:h-7.5 rounded-lg sm:rounded-xl flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs px-2 sm:px-3 ${
-                      tradeInItem
+                    className={`font-extrabold text-[10px] sm:text-[11px] h-6.5 sm:h-7.5 rounded-lg sm:rounded-xl flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs px-2 sm:px-3 ${tradeInItem
                         ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                         : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                    }`}
+                      }`}
                     title="Exchange customer's old mobile phone and deduct value from total bill"
                   >
                     <Smartphone size={12} />
@@ -5431,9 +5423,9 @@ Do you want to proceed with this sale anyway?`);
 
           <div className="relative mb-2 sm:mb-3.5 flex-shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-400" />
-            <Input 
+            <Input
               id="pos-search-input"
-              placeholder="Search product by name or scan barcode... (F1, Enter to select)" 
+              placeholder="Search product by name or scan barcode... (F1, Enter to select)"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -5449,7 +5441,7 @@ Do you want to proceed with this sale anyway?`);
               className="pl-8.5 sm:pl-10 pr-14 sm:pr-16 h-8.5 sm:h-11 bg-slate-50 border-slate-200 text-slate-800 text-xs sm:text-sm rounded-xl sm:rounded-2xl focus-visible:ring-indigo-500/20"
               autoFocus
             />
-            <button 
+            <button
               type="button"
               onClick={() => setIsScannerOpen(true)}
               className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-650 p-1 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer ${searchQuery ? "right-10" : "right-3.5"}`}
@@ -5458,11 +5450,11 @@ Do you want to proceed with this sale anyway?`);
               <Camera size={16} />
             </button>
             {searchQuery && (
-              <button 
+              <button
                 onClick={() => {
                   setSearchQuery("");
                   setIsSearchDropdownOpen(false);
-                }} 
+                }}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650"
               >
                 <X size={16} />
@@ -5560,132 +5552,126 @@ Do you want to proceed with this sale anyway?`);
                         </div>
                       </div>
                       {autocompleteResults.map((product, pIdx) => {
-                      const isHighlighted = selectedSearchProductIndex === pIdx;
-                      const options = getProductUnitOptions(product);
-                      return (
-                        <div
-                          key={`${product.id}-${pIdx}`}
-                          onClick={() => {
-                            handleAddProductToCart(product);
-                            setSearchQuery("");
-                            setIsSearchDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer border ${
-                            isHighlighted 
-                              ? "bg-indigo-600 border-indigo-600 text-white font-black shadow-sm" 
-                              : "hover:bg-slate-50 border-transparent text-slate-700"
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0 pr-3">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-black text-xs truncate flex items-center gap-1.5 ${isHighlighted ? "text-white" : "text-slate-800"}`}>
-                                {product.name}
-                                {language && language !== "en" && product.translated_names?.[language] && (
-                                  <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded ${isHighlighted ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-100"}`}>
-                                    {product.translated_names[language]}
+                        const isHighlighted = selectedSearchProductIndex === pIdx;
+                        const options = getProductUnitOptions(product);
+                        return (
+                          <div
+                            key={`${product.id}-${pIdx}`}
+                            onClick={() => {
+                              handleAddProductToCart(product);
+                              setSearchQuery("");
+                              setIsSearchDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3.5 py-2.5 rounded-xl flex items-center justify-between transition-all cursor-pointer border ${isHighlighted
+                                ? "bg-indigo-600 border-indigo-600 text-white font-black shadow-sm"
+                                : "hover:bg-slate-50 border-transparent text-slate-700"
+                              }`}
+                          >
+                            <div className="flex-1 min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-black text-xs truncate flex items-center gap-1.5 ${isHighlighted ? "text-white" : "text-slate-800"}`}>
+                                  {product.name}
+                                  {language && language !== "en" && product.translated_names?.[language] && (
+                                    <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded ${isHighlighted ? "bg-white/20 text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-100"}`}>
+                                      {product.translated_names[language]}
+                                    </span>
+                                  )}
+                                </span>
+                                {product.code && (
+                                  <span className={`text-[9px] font-mono tracking-wider px-1 rounded ${isHighlighted ? "text-white bg-indigo-700/50" : "text-slate-400 bg-slate-100"}`}>
+                                    {product.code}
                                   </span>
                                 )}
-                              </span>
-                              {product.code && (
-                                <span className={`text-[9px] font-mono tracking-wider px-1 rounded ${isHighlighted ? "text-white bg-indigo-700/50" : "text-slate-400 bg-slate-100"}`}>
-                                  {product.code}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                <span className={`text-[9.5px] font-bold ${isHighlighted ? "text-indigo-100" : "text-slate-400"}`}>
+                                  Stock: {product.current_stock} {product.unit || "unit"}
                                 </span>
-                              )}
+                                <span className={`text-[9.5px] font-black ${isHighlighted ? "text-white" : "text-indigo-700"}`}>
+                                  Rs {product.sale_price_single}
+                                </span>
+                                {showCostPriceOnPos && (
+                                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${isHighlighted
+                                      ? "bg-amber-400 text-slate-950 border-amber-300 shadow-xs"
+                                      : "bg-amber-50 text-amber-950 border-amber-200/90"
+                                    }`} title="Purchase/Cost Price and Markup">
+                                    Cost: Rs {product.purchase_price_single ?? 0}
+                                    {product.sale_price_single > (product.purchase_price_single ?? 0) ? (
+                                      <span className={`font-black ml-1 ${isHighlighted ? "text-emerald-950" : "text-emerald-700"}`}>
+                                        (+{Math.round(product.sale_price_single - (product.purchase_price_single ?? 0))})
+                                      </span>
+                                    ) : product.sale_price_single < (product.purchase_price_single ?? 0) ? (
+                                      <span className={`font-black ml-1 ${isHighlighted ? "text-rose-950" : "text-rose-600"}`}>
+                                        (-{Math.round((product.purchase_price_single ?? 0) - product.sale_price_single)})
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                )}
+                                {product.formulations?.name && (
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${isHighlighted ? "bg-white/20 text-white" : "bg-violet-50 text-violet-700 border border-violet-200"
+                                    }`}>
+                                    🧪 {product.formulations.name}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                              <span className={`text-[9.5px] font-bold ${isHighlighted ? "text-indigo-100" : "text-slate-400"}`}>
-                                Stock: {product.current_stock} {product.unit || "unit"}
-                              </span>
-                              <span className={`text-[9.5px] font-black ${isHighlighted ? "text-white" : "text-indigo-700"}`}>
-                                Rs {product.sale_price_single}
-                              </span>
-                              {showCostPriceOnPos && (
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${
-                                  isHighlighted 
-                                    ? "bg-amber-400 text-slate-950 border-amber-300 shadow-xs" 
-                                    : "bg-amber-50 text-amber-950 border-amber-200/90"
-                                }`} title="Purchase/Cost Price and Markup">
-                                  Cost: Rs {product.purchase_price_single ?? 0}
-                                  {product.sale_price_single > (product.purchase_price_single ?? 0) ? (
-                                    <span className={`font-black ml-1 ${isHighlighted ? "text-emerald-950" : "text-emerald-700"}`}>
-                                      (+{Math.round(product.sale_price_single - (product.purchase_price_single ?? 0))})
-                                    </span>
-                                  ) : product.sale_price_single < (product.purchase_price_single ?? 0) ? (
-                                    <span className={`font-black ml-1 ${isHighlighted ? "text-rose-950" : "text-rose-600"}`}>
-                                      (-{Math.round((product.purchase_price_single ?? 0) - product.sale_price_single)})
-                                    </span>
-                                  ) : null}
-                                </span>
-                              )}
-                              {product.formulations?.name && (
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                                  isHighlighted ? "bg-white/20 text-white" : "bg-violet-50 text-violet-700 border border-violet-200"
-                                }`}>
-                                  🧪 {product.formulations.name}
-                                </span>
-                              )}
-                            </div>
-                          </div>
 
-                          {/* Quick Packings & Alternatives pills */}
-                          <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                            {industryType === "pharmacy" && (
+                            {/* Quick Packings & Alternatives pills */}
+                            <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              {industryType === "pharmacy" && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleOpenAlternateModal(product);
+                                    setIsSearchDropdownOpen(false);
+                                  }}
+                                  className={`text-[9.5px] font-black px-2 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${isHighlighted
+                                      ? "bg-violet-800 border-violet-700 text-white hover:bg-white hover:text-violet-900"
+                                      : "bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-600 hover:text-white shadow-2xs"
+                                    }`}
+                                  title="Find alternative medicines with same salt/formula"
+                                >
+                                  💊 ALT
+                                </button>
+                              )}
                               <button
-                                type="button"
                                 onClick={() => {
-                                  handleOpenAlternateModal(product);
-                                  setIsSearchDropdownOpen(false);
-                                }}
-                                className={`text-[9.5px] font-black px-2 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
-                                  isHighlighted 
-                                    ? "bg-violet-800 border-violet-700 text-white hover:bg-white hover:text-violet-900" 
-                                    : "bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-600 hover:text-white shadow-2xs"
-                                }`}
-                                title="Find alternative medicines with same salt/formula"
-                              >
-                                💊 ALT
-                              </button>
-                            )}
-                            <button
-                              onClick={() => {
-                                handleAddBaseUnitDirectly(product);
-                                setSearchQuery("");
-                                setIsSearchDropdownOpen(false);
-                              }}
-                              className={`text-[9.5px] font-black px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-                                isHighlighted 
-                                  ? "bg-indigo-800 border-indigo-700 text-white hover:bg-white hover:text-black" 
-                                  : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-900 hover:text-white"
-                              }`}
-                            >
-                              {product.unit || "Base"}
-                            </button>
-                            {options.map(opt => (
-                              <button
-                                key={opt.id}
-                                onClick={() => {
-                                  handleAddProductToCart(product, opt);
+                                  handleAddBaseUnitDirectly(product);
                                   setSearchQuery("");
                                   setIsSearchDropdownOpen(false);
                                 }}
-                                className={`text-[9.5px] font-black px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-                                  isHighlighted
-                                    ? "bg-indigo-800 border-indigo-700 text-white hover:bg-white hover:text-indigo-950"
-                                    : "bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-600 hover:text-white"
-                                }`}
+                                className={`text-[9.5px] font-black px-2 py-1 rounded-lg border transition-all cursor-pointer ${isHighlighted
+                                    ? "bg-indigo-800 border-indigo-700 text-white hover:bg-white hover:text-black"
+                                    : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-900 hover:text-white"
+                                  }`}
                               >
-                                {opt.name}
+                                {product.unit || "Base"}
                               </button>
-                            ))}
+                              {options.map(opt => (
+                                <button
+                                  key={opt.id}
+                                  onClick={() => {
+                                    handleAddProductToCart(product, opt);
+                                    setSearchQuery("");
+                                    setIsSearchDropdownOpen(false);
+                                  }}
+                                  className={`text-[9.5px] font-black px-2 py-1 rounded-lg border transition-all cursor-pointer ${isHighlighted
+                                      ? "bg-indigo-800 border-indigo-700 text-white hover:bg-white hover:text-indigo-950"
+                                      : "bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-600 hover:text-white"
+                                    }`}
+                                >
+                                  {opt.name}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </div>
-            </>
-          )}
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Cart Table List */}
@@ -5714,9 +5700,8 @@ Do you want to proceed with this sale anyway?`);
                     return (
                       <div
                         key={idx}
-                        className={`p-2.5 rounded-xl border transition-all bg-white shadow-xs ${
-                          isItemHighlighted ? "border-indigo-500 ring-1 ring-indigo-500/20 bg-indigo-50/20" : "border-slate-200/90"
-                        }`}
+                        className={`p-2.5 rounded-xl border transition-all bg-white shadow-xs ${isItemHighlighted ? "border-indigo-500 ring-1 ring-indigo-500/20 bg-indigo-50/20" : "border-slate-200/90"
+                          }`}
                       >
                         {/* Card Header: Item name, badge, and delete */}
                         <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -5874,11 +5859,10 @@ Do you want to proceed with this sale anyway?`);
                         const product = products.find(p => p.id === item.productId);
                         const isItemHighlighted = isCartFocused && selectedCartItemIndex === idx;
                         return (
-                          <tr 
+                          <tr
                             key={idx}
-                            className={`transition-all ${
-                              isItemHighlighted ? "bg-indigo-50/50" : "hover:bg-slate-50/50"
-                            }`}
+                            className={`transition-all ${isItemHighlighted ? "bg-indigo-50/50" : "hover:bg-slate-50/50"
+                              }`}
                           >
                             {/* Spreadsheet Row Number */}
                             <td className="py-2 px-2 border border-slate-200 text-center font-black text-slate-400 bg-slate-50/50 select-none">
@@ -6057,8 +6041,8 @@ Do you want to proceed with this sale anyway?`);
                                     value={item.quantity}
                                     min={industryType === "karyana" ? 0.001 : 1}
                                     onChange={(e) => {
-                                      const parsed = industryType === "karyana" 
-                                        ? parseFloat(e.target.value) 
+                                      const parsed = industryType === "karyana"
+                                        ? parseFloat(e.target.value)
                                         : parseInt(e.target.value, 10);
                                       if (!isNaN(parsed) && parsed > 0) updateCartQty(idx, parsed);
                                     }}
@@ -6170,11 +6154,10 @@ Do you want to proceed with this sale anyway?`);
                                     const nextType = item.discountType === "percentage" ? "fixed" : "percentage";
                                     updateCartItemDiscountType(idx, nextType);
                                   }}
-                                  className={`h-7 px-1.5 rounded border text-[9px] font-black transition-all cursor-pointer ${
-                                    item.discountType === "percentage"
+                                  className={`h-7 px-1.5 rounded border text-[9px] font-black transition-all cursor-pointer ${item.discountType === "percentage"
                                       ? "bg-rose-50 border-rose-200 text-rose-700 font-bold"
                                       : "bg-amber-50 border-amber-200 text-amber-800 font-bold"
-                                  }`}
+                                    }`}
                                   title="Toggle discount percentage / flat amount"
                                 >
                                   {item.discountType === "percentage" ? "%" : "Rs"}
@@ -6247,7 +6230,7 @@ Do you want to proceed with this sale anyway?`);
               </>
             )}
           </div>
-          
+
           {/* Floating Cart Button for Mobile (Invoice Sheet / Search Mode) */}
           {!showMobileCart && cart.length > 0 && (
             <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] inset-x-3 sm:inset-x-auto sm:right-4 z-[70] lg:hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -6277,8 +6260,8 @@ Do you want to proceed with this sale anyway?`);
         {/* Right Side: Checkout controls (col-span-4) */}
         <div className={`
           lg:col-span-5 xl:col-span-4 flex-col bg-white border border-slate-200/80 shadow-md rounded-2xl overflow-hidden h-full
-          ${showMobileCart 
-            ? "fixed inset-0 z-[150] rounded-none border-0 shadow-2xl p-0 flex pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] overflow-y-auto custom-scrollbar lg:relative lg:inset-auto lg:z-auto lg:p-0 lg:rounded-2xl lg:border lg:pb-0" 
+          ${showMobileCart
+            ? "fixed inset-0 z-[150] rounded-none border-0 shadow-2xl p-0 flex pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] overflow-y-auto custom-scrollbar lg:relative lg:inset-auto lg:z-auto lg:p-0 lg:rounded-2xl lg:border lg:pb-0"
             : "hidden lg:flex"
           }
         `}>
@@ -6307,11 +6290,10 @@ Do you want to proceed with this sale anyway?`);
               <button
                 type="button"
                 onClick={() => togglePriceEdit()}
-                className={`text-[9px] font-black px-1.5 py-1 rounded-md border transition-all ${
-                  allowPriceEdit
+                className={`text-[9px] font-black px-1.5 py-1 rounded-md border transition-all ${allowPriceEdit
                     ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
                     : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
+                  }`}
                 title="Change Selling Price Directly"
               >
                 Price Edit: {allowPriceEdit ? "ON" : "OFF"}
@@ -6340,13 +6322,13 @@ Do you want to proceed with this sale anyway?`);
   if (!loading && !activeSession) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-7.5rem)] bg-slate-50/20 font-sans -m-2">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl p-8 max-w-md w-full text-center relative overflow-hidden"
         >
           <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
-          
+
           <div className="mx-auto w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-6 border border-indigo-100 shadow-sm">
             <Lock size={32} />
           </div>
@@ -6403,7 +6385,7 @@ Do you want to proceed with this sale anyway?`);
       <div className="h-11 sm:h-12 md:h-13 bg-zinc-950 text-white border-b border-zinc-800/80 flex items-center justify-between px-2.5 sm:px-4 shrink-0 shadow-md gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {/* Hamburger Toggle Button (Mobile Only) */}
-          <button 
+          <button
             onClick={() => {
               if (typeof window !== "undefined") {
                 window.dispatchEvent(new CustomEvent("open-sidebar"));
@@ -6414,7 +6396,7 @@ Do you want to proceed with this sale anyway?`);
           >
             <Menu size={17} />
           </button>
-          
+
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <div className="h-6 w-6 sm:h-7 sm:w-7 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center shadow-xs">
               <span className="text-white font-black text-[10px] sm:text-xs">HX</span>
@@ -6432,7 +6414,7 @@ Do you want to proceed with this sale anyway?`);
               </span>
               <div className="hidden md:flex items-center gap-2 text-zinc-400">
                 <span className="text-zinc-600 font-medium">|</span>
-                <span>Opened: <strong className="text-zinc-200">{new Date(activeSession.opened_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></span>
+                <span>Opened: <strong className="text-zinc-200">{new Date(activeSession.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></span>
                 <span className="text-zinc-600 font-medium">|</span>
                 <span>Float: <strong className="text-indigo-400">Rs {Number(activeSession.opening_balance).toLocaleString()}</strong></span>
                 {userName && (
@@ -6492,11 +6474,10 @@ Do you want to proceed with this sale anyway?`);
                 setLayoutView("grid");
                 if (typeof window !== "undefined" && shopId) localStorage.setItem(`pos_layout_view_${shopId}`, "grid");
               }}
-              className={`px-2 sm:px-3 py-1 text-[9px] sm:text-[9.5px] font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
-                layoutView === "grid" 
-                  ? "bg-indigo-600 text-white shadow-xs" 
+              className={`px-2 sm:px-3 py-1 text-[9px] sm:text-[9.5px] font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${layoutView === "grid"
+                  ? "bg-indigo-600 text-white shadow-xs"
                   : "text-zinc-400 hover:text-zinc-200"
-              }`}
+                }`}
               title="Grid View (F1)"
             >
               <LayoutGrid size={11} />
@@ -6507,11 +6488,10 @@ Do you want to proceed with this sale anyway?`);
                 setLayoutView("search");
                 if (typeof window !== "undefined" && shopId) localStorage.setItem(`pos_layout_view_${shopId}`, "search");
               }}
-              className={`px-2 sm:px-3 py-1 text-[9px] sm:text-[9.5px] font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
-                layoutView === "search" 
-                  ? "bg-indigo-600 text-white shadow-xs" 
+              className={`px-2 sm:px-3 py-1 text-[9px] sm:text-[9.5px] font-black rounded-lg transition-all cursor-pointer flex items-center gap-1 ${layoutView === "search"
+                  ? "bg-indigo-600 text-white shadow-xs"
                   : "text-zinc-400 hover:text-zinc-200"
-              }`}
+                }`}
               title="Search / Sheet View (F1)"
             >
               <Zap size={11} />
@@ -6523,11 +6503,10 @@ Do you want to proceed with this sale anyway?`);
           <button
             type="button"
             onClick={togglePriceEdit}
-            className={`flex items-center gap-1 px-2 sm:px-2.5 py-0.5 font-bold rounded-xl border transition-all text-[9px] sm:text-[9.5px] h-7.5 cursor-pointer ${
-              allowPriceEdit
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-0.5 font-bold rounded-xl border transition-all text-[9px] sm:text-[9.5px] h-7.5 cursor-pointer ${allowPriceEdit
                 ? "bg-emerald-600 border-emerald-600 text-white shadow-xs"
                 : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-400"
-            }`}
+              }`}
             title="Toggle Price Editing directly in cart (Alt+P)"
           >
             <Edit3 size={11} className={allowPriceEdit ? "text-white animate-pulse" : "text-zinc-500"} />
@@ -6541,11 +6520,10 @@ Do you want to proceed with this sale anyway?`);
           <button
             type="button"
             onClick={() => setShowCostPriceOnPos?.(!showCostPriceOnPos)}
-            className={`hidden md:flex items-center gap-1 px-2.5 py-0.5 font-bold rounded-xl border transition-all text-[9.5px] h-7.5 cursor-pointer ${
-              showCostPriceOnPos
+            className={`hidden md:flex items-center gap-1 px-2.5 py-0.5 font-bold rounded-xl border transition-all text-[9.5px] h-7.5 cursor-pointer ${showCostPriceOnPos
                 ? "bg-amber-500 border-amber-500 text-slate-950 font-black shadow-xs ring-1 ring-amber-400"
                 : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-400"
-            }`}
+              }`}
             title="Toggle Purchase/Cost Price & Margins Visibility"
           >
             <span>💰 Cost:</span>
@@ -6573,9 +6551,8 @@ Do you want to proceed with this sale anyway?`);
                 <button
                   key={lang}
                   onClick={() => setLanguage(lang as any)}
-                  className={`px-1.5 py-0.5 font-bold rounded transition-all ${
-                    language === lang ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
-                  }`}
+                  className={`px-1.5 py-0.5 font-bold rounded transition-all ${language === lang ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
+                    }`}
                 >
                   {langLabels[lang] || lang.toUpperCase()}
                 </button>
@@ -6723,7 +6700,7 @@ Do you want to proceed with this sale anyway?`);
             >
               Highlight Low Stock
             </Button>
-            <button 
+            <button
               onClick={() => setShowExpiryAlertsBanner(false)}
               className="p-1 hover:bg-amber-100 rounded-lg text-amber-650 hover:text-amber-800 transition-colors"
             >
@@ -6737,35 +6714,35 @@ Do you want to proceed with this sale anyway?`);
       {layoutView === "grid" ? (
         <div className="flex-1 lg:grid lg:grid-cols-12 gap-3.5 overflow-hidden p-3 min-h-0">
           {editingInvoiceId && (
-          <div className="col-span-full bg-amber-50 border border-amber-200 rounded-2xl p-2.5 px-4 flex items-center justify-between text-xs text-amber-800 shadow-sm shrink-0 mb-1.5">
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-sm text-amber-700">⚠️ EDITING BILL:</span>
-              <span>
-                You are editing bill <span className="font-mono bg-amber-100/80 px-1 py-0.5 rounded font-bold">#{editingInvoiceId.slice(0, 8).toUpperCase()}</span>.
-                Saving will restock old items, adjust Khata, and update the invoice.
-              </span>
+            <div className="col-span-full bg-amber-50 border border-amber-200 rounded-2xl p-2.5 px-4 flex items-center justify-between text-xs text-amber-800 shadow-sm shrink-0 mb-1.5">
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-sm text-amber-700">⚠️ EDITING BILL:</span>
+                <span>
+                  You are editing bill <span className="font-mono bg-amber-100/80 px-1 py-0.5 rounded font-bold">#{editingInvoiceId.slice(0, 8).toUpperCase()}</span>.
+                  Saving will restock old items, adjust Khata, and update the invoice.
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingInvoiceId(null);
+                  setCart([]);
+                  setDiscount(0);
+                  setTaxRate(defaultTaxRate || 0);
+                  setTaxType(defaultTaxType || "percentage");
+                  setPaymentMode("cash");
+                  setSelectedCustomerId("walkin");
+                  if (typeof window !== "undefined") {
+                    window.history.replaceState(null, "", "/dashboard/pos");
+                  }
+                  toast.info("Invoice edit cancelled.");
+                }}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
+              >
+                Cancel Edit
+              </button>
             </div>
-            <button
-              onClick={() => {
-                setEditingInvoiceId(null);
-                setCart([]);
-                setDiscount(0);
-                setTaxRate(defaultTaxRate || 0);
-                setTaxType(defaultTaxType || "percentage");
-                setPaymentMode("cash");
-                setSelectedCustomerId("walkin");
-                if (typeof window !== "undefined") {
-                  window.history.replaceState(null, "", "/dashboard/pos");
-                }
-                toast.info("Invoice edit cancelled.");
-              }}
-              className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
-            >
-              Cancel Edit
-            </button>
-          </div>
-        )}
-          <ProductGrid 
+          )}
+          <ProductGrid
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             isScannerOpen={isScannerOpen}
@@ -6799,7 +6776,7 @@ Do you want to proceed with this sale anyway?`);
               setIsQuickShortBookOpen(true);
             }}
           />
-          <CartSidebar 
+          <CartSidebar
             cart={cart}
             setCart={setCart}
             subtotal={subtotal}
@@ -6854,91 +6831,91 @@ Do you want to proceed with this sale anyway?`);
             onCartItemUnitChange={handleCartItemUnitChange}
           />
 
-      {/* Floating Cart Button for Mobile (Grid Mode) */}
-      {!showMobileCart && cart.length > 0 && (
-        <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] inset-x-3 sm:inset-x-auto sm:right-4 z-[70] lg:hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <button
-            type="button"
-            onClick={() => setShowMobileCart(true)}
-            className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 hover:from-indigo-700 hover:to-violet-800 text-white font-black rounded-2xl shadow-xl shadow-indigo-500/25 flex items-center justify-between gap-3 px-4 py-3 border border-indigo-400/30 cursor-pointer active:scale-98 transition-transform"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center text-white font-bold">
-                <ShoppingCart size={16} />
-              </div>
-              <div className="text-left">
-                <p className="text-xs font-black leading-tight">View Cart ({cart.reduce((sum, it) => sum + it.quantity, 0)} items)</p>
-                <p className="text-[10px] text-indigo-200 font-semibold">Tap to select customer & pay</p>
-              </div>
+          {/* Floating Cart Button for Mobile (Grid Mode) */}
+          {!showMobileCart && cart.length > 0 && (
+            <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] inset-x-3 sm:inset-x-auto sm:right-4 z-[70] lg:hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <button
+                type="button"
+                onClick={() => setShowMobileCart(true)}
+                className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-700 hover:from-indigo-700 hover:to-violet-800 text-white font-black rounded-2xl shadow-xl shadow-indigo-500/25 flex items-center justify-between gap-3 px-4 py-3 border border-indigo-400/30 cursor-pointer active:scale-98 transition-transform"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center text-white font-bold">
+                    <ShoppingCart size={16} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-black leading-tight">View Cart ({cart.reduce((sum, it) => sum + it.quantity, 0)} items)</p>
+                    <p className="text-[10px] text-indigo-200 font-semibold">Tap to select customer & pay</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-white/15 px-3 py-1.5 rounded-xl border border-white/20">
+                  <span className="font-mono text-xs font-extrabold">Rs {Math.round(total).toLocaleString()}</span>
+                  <span className="text-xs font-bold">→</span>
+                </div>
+              </button>
             </div>
-            <div className="flex items-center gap-2 bg-white/15 px-3 py-1.5 rounded-xl border border-white/20">
-              <span className="font-mono text-xs font-extrabold">Rs {Math.round(total).toLocaleString()}</span>
-              <span className="text-xs font-bold">→</span>
-            </div>
-          </button>
-        </div>
-      )}
+          )}
 
-      {/* Floating Held Bills Pill for Mobile when cart is empty */}
-      {!showMobileCart && cart.length === 0 && heldCarts.length > 0 && (
-        <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] inset-x-3 sm:inset-x-auto sm:right-4 z-[70] lg:hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <button
-            type="button"
-            onClick={() => setIsHeldModalOpen(true)}
-            className="w-full sm:w-auto bg-gradient-to-r from-amber-600 via-amber-700 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white font-black rounded-2xl shadow-xl shadow-amber-500/25 flex items-center justify-between gap-3 px-4 py-3 border border-amber-400/30 cursor-pointer active:scale-98 transition-transform"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center text-white font-bold">
-                <Pause size={16} />
-              </div>
-              <div className="text-left">
-                <p className="text-xs font-black leading-tight">
-                  {heldCarts.length} Held {heldCarts.length === 1 ? "Sale Bill" : "Sale Bills"}
-                </p>
-                <p className="text-[10px] text-amber-100 font-semibold">Tap to view & resume sale bill</p>
-              </div>
+          {/* Floating Held Bills Pill for Mobile when cart is empty */}
+          {!showMobileCart && cart.length === 0 && heldCarts.length > 0 && (
+            <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] inset-x-3 sm:inset-x-auto sm:right-4 z-[70] lg:hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <button
+                type="button"
+                onClick={() => setIsHeldModalOpen(true)}
+                className="w-full sm:w-auto bg-gradient-to-r from-amber-600 via-amber-700 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white font-black rounded-2xl shadow-xl shadow-amber-500/25 flex items-center justify-between gap-3 px-4 py-3 border border-amber-400/30 cursor-pointer active:scale-98 transition-transform"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center text-white font-bold">
+                    <Pause size={16} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-black leading-tight">
+                      {heldCarts.length} Held {heldCarts.length === 1 ? "Sale Bill" : "Sale Bills"}
+                    </p>
+                    <p className="text-[10px] text-amber-100 font-semibold">Tap to view & resume sale bill</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white/20 px-3 py-1.5 rounded-xl border border-white/20 text-xs font-extrabold">
+                  <span>Resume</span>
+                  <span>→</span>
+                </div>
+              </button>
             </div>
-            <div className="flex items-center gap-1.5 bg-white/20 px-3 py-1.5 rounded-xl border border-white/20 text-xs font-extrabold">
-              <span>Resume</span>
-              <span>→</span>
-            </div>
-          </button>
-        </div>
-      )}
+          )}
 
-      {/* Keyboard Shortcut Cheat Sheet */}
-      <div className="col-span-full bg-slate-900 text-slate-400 text-[10px] py-2 px-4 rounded-xl flex flex-wrap gap-x-4 gap-y-1 justify-center items-center mt-3 border border-slate-800 shrink-0 select-none">
-        <button 
-          type="button"
-          onClick={() => setIsShortcutsHelpOpen(true)}
-          className="font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-wider text-[9px] mr-1 flex items-center gap-1 transition-all focus:outline-none"
-        >
-          Hotkeys (F10 - View All):
-        </button>
-        {isCartFocused ? (
-          <>
-            <div><kbd className="bg-indigo-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm mr-1">F3</kbd>Exit Cart Focus</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Arrows Up/Dn</kbd>Nav Cart Items</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Enter / 0-9</kbd>Change Qty</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Del/Backsp</kbd>Delete Item</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Space / U</kbd>Cycle Unit</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F10</kbd>Show All</div>
-          </>
-        ) : (
-          <>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F1</kbd>Search Prod</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F2</kbd>Search Cust</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F3</kbd>Focus Cart</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F8</kbd>Toggle Pay</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F9</kbd>Checkout</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F6</kbd>Hold Bill</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Alt+R</kbd>Resume Bill</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">PgUp/PgDn</kbd>Page Nav</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F10</kbd>Show All</div>
-            <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">ESC</kbd>Clear/Close</div>
-          </>
-        )}
-      </div>
+          {/* Keyboard Shortcut Cheat Sheet */}
+          <div className="col-span-full bg-slate-900 text-slate-400 text-[10px] py-2 px-4 rounded-xl flex flex-wrap gap-x-4 gap-y-1 justify-center items-center mt-3 border border-slate-800 shrink-0 select-none">
+            <button
+              type="button"
+              onClick={() => setIsShortcutsHelpOpen(true)}
+              className="font-bold text-indigo-400 hover:text-indigo-300 uppercase tracking-wider text-[9px] mr-1 flex items-center gap-1 transition-all focus:outline-none"
+            >
+              Hotkeys (F10 - View All):
+            </button>
+            {isCartFocused ? (
+              <>
+                <div><kbd className="bg-indigo-600 text-white px-1.5 py-0.5 rounded font-bold shadow-sm mr-1">F3</kbd>Exit Cart Focus</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Arrows Up/Dn</kbd>Nav Cart Items</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Enter / 0-9</kbd>Change Qty</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Del/Backsp</kbd>Delete Item</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Space / U</kbd>Cycle Unit</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F10</kbd>Show All</div>
+              </>
+            ) : (
+              <>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F1</kbd>Search Prod</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F2</kbd>Search Cust</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F3</kbd>Focus Cart</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F8</kbd>Toggle Pay</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F9</kbd>Checkout</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F6</kbd>Hold Bill</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">Alt+R</kbd>Resume Bill</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">PgUp/PgDn</kbd>Page Nav</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">F10</kbd>Show All</div>
+                <div><kbd className="bg-slate-800 text-slate-200 px-1.5 py-0.5 rounded font-bold border border-slate-700 shadow-sm mr-1">ESC</kbd>Clear/Close</div>
+              </>
+            )}
+          </div>
         </div>
       ) : (
         renderSearchModeView()
@@ -6948,12 +6925,12 @@ Do you want to proceed with this sale anyway?`);
       <AnimatePresence>
         {hardwareCalcProduct && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               onClick={() => setHardwareCalcProduct(null)}
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm relative z-10 border border-slate-150 font-sans"
             >
@@ -7093,8 +7070,8 @@ Do you want to proceed with this sale anyway?`);
                 {/* Live Preview Box */}
                 {(() => {
                   const lenFt = hardwareCalcLengthFt + hardwareCalcLengthIn / 12;
-                  const widFt = hardwareCalcWidthFt  + hardwareCalcWidthIn  / 12;
-                  const qty  = hardwareCalcQty;
+                  const widFt = hardwareCalcWidthFt + hardwareCalcWidthIn / 12;
+                  const qty = hardwareCalcQty;
                   const isDim = hardwareCalcProduct.measurement_type === "dimension";
                   const computed = isDim ? lenFt * widFt * qty : lenFt * qty;
                   const total = computed * hardwareCalcProduct.sale_price_single;
@@ -7114,7 +7091,7 @@ Do you want to proceed with this sale anyway?`);
                       )}
                       <div className="flex justify-between items-center border-t border-indigo-200 pt-2 font-bold text-sm">
                         <span className="text-slate-600">Total Price:</span>
-                        <span className="font-mono text-blue-600">Rs {total.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                        <span className="font-mono text-blue-600">Rs {total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                       </div>
                     </div>
                   );
@@ -7138,26 +7115,26 @@ Do you want to proceed with this sale anyway?`);
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => setHardwareCalcProduct(null)} 
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setHardwareCalcProduct(null)}
                       className="h-10 rounded-xl text-xs"
                     >
                       Cancel
                     </Button>
                     {hardwareCalcWastage > 0 ? (
-                      <Button 
-                        type="button" 
-                        onClick={() => { handleConfirmHardwareCalculation(hardwareCalcWastage); }} 
+                      <Button
+                        type="button"
+                        onClick={() => { handleConfirmHardwareCalculation(hardwareCalcWastage); }}
                         className="bg-amber-500 hover:bg-amber-600 text-white font-bold h-10 rounded-xl text-xs"
                       >
                         + {hardwareCalcWastage}% Wastage Add
                       </Button>
                     ) : (
-                      <Button 
-                        type="button" 
-                        onClick={() => handleConfirmHardwareCalculation(0)} 
+                      <Button
+                        type="button"
+                        onClick={() => handleConfirmHardwareCalculation(0)}
                         className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-10 rounded-xl text-xs"
                       >
                         Add to Cart
@@ -7175,18 +7152,18 @@ Do you want to proceed with this sale anyway?`);
       <AnimatePresence>
         {activeProductForVariants && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               onClick={() => setActiveProductForVariants(null)}
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md relative z-10 border border-slate-150"
             >
               <h3 className="text-base font-bold text-slate-800 mb-1">Select Packing Variation</h3>
               <p className="text-xs text-slate-400 mb-4">"{activeProductForVariants.name}" has multiple packings available.</p>
-              
+
               <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar">
                 {modalChoices.map((opt, oIdx) => {
                   const isChoiceSelected = selectedModalIndex === oIdx;
@@ -7201,11 +7178,10 @@ Do you want to proceed with this sale anyway?`);
                         }
                         setActiveProductForVariants(null);
                       }}
-                      className={`w-full text-left p-3 rounded-xl transition-all flex justify-between items-center border ${
-                        isChoiceSelected 
-                          ? "bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20" 
+                      className={`w-full text-left p-3 rounded-xl transition-all flex justify-between items-center border ${isChoiceSelected
+                          ? "bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20"
                           : "bg-slate-50 border-slate-200 hover:bg-slate-100"
-                      }`}
+                        }`}
                     >
                       <div>
                         <p className={`font-extrabold text-xs ${isChoiceSelected ? "text-indigo-900" : "text-slate-800"}`}>
@@ -7233,12 +7209,12 @@ Do you want to proceed with this sale anyway?`);
       <AnimatePresence>
         {isCustomerModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               onClick={() => setIsCustomerModalOpen(false)}
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm relative z-10 border border-slate-150"
             >
@@ -7251,19 +7227,19 @@ Do you want to proceed with this sale anyway?`);
               <div className="space-y-4">
                 <div>
                   <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Name</label>
-                  <Input 
-                    placeholder="Customer Name" 
+                  <Input
+                    placeholder="Customer Name"
                     value={newCustomer.name}
-                    onChange={(e) => setNewCustomer({...newCustomer, name: e.target.value})}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
                     className="rounded-xl h-9.5 text-xs border-slate-200"
                   />
                 </div>
                 <div>
                   <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone Number (Optional)</label>
-                  <Input 
-                    placeholder="Phone e.g. 03001234567" 
+                  <Input
+                    placeholder="Phone e.g. 03001234567"
                     value={newCustomer.phone}
-                    onChange={(e) => setNewCustomer({...newCustomer, phone: e.target.value})}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
                     className="rounded-xl h-9.5 text-xs border-slate-200"
                   />
                 </div>
@@ -7276,7 +7252,7 @@ Do you want to proceed with this sale anyway?`);
         )}
       </AnimatePresence>
 
-            <CheckoutModal 
+      <CheckoutModal
         isOpen={isReceiptOpen}
         onClose={() => setIsReceiptOpen(false)}
         lastInvoice={lastInvoice}
@@ -7292,12 +7268,12 @@ Do you want to proceed with this sale anyway?`);
       <AnimatePresence>
         {isShortcutsHelpOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               onClick={() => setIsShortcutsHelpOpen(false)}
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-lg relative z-10 border border-slate-150 flex flex-col max-h-[85vh] overflow-hidden"
             >
@@ -7471,12 +7447,12 @@ Do you want to proceed with this sale anyway?`);
       <AnimatePresence>
         {isCloseRegisterOpen && activeSession && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               onClick={() => setIsCloseRegisterOpen(false)}
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md relative z-10 border border-slate-150 flex flex-col max-h-[90vh] overflow-hidden"
             >
@@ -7567,11 +7543,11 @@ Do you want to proceed with this sale anyway?`);
                           const cashSales = shiftInvoices
                             .filter(inv => inv.payment_mode === "cash" || (inv.payment_mode === "credit" && Number(inv.paid_amount || 0) > 0))
                             .reduce((sum, inv) => sum + Number(inv.paid_amount || 0), 0);
-                          const expectedDrawerCash = Math.max(0, 
-                            Number(activeSession.opening_balance) + 
-                            cashSales + 
-                            shiftKhataIn - 
-                            shiftExpenses - 
+                          const expectedDrawerCash = Math.max(0,
+                            Number(activeSession.opening_balance) +
+                            cashSales +
+                            shiftKhataIn -
+                            shiftExpenses -
                             shiftPurchases
                           );
                           return (
@@ -7622,14 +7598,14 @@ Do you want to proceed with this sale anyway?`);
               </div>
 
               <div className="flex gap-3 mt-4 pt-3 border-t border-slate-100 shrink-0">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => setIsCloseRegisterOpen(false)}
                   className="flex-1 text-slate-655 font-bold h-11 rounded-xl text-xs cursor-pointer"
                 >
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   onClick={handleCloseRegister}
                   disabled={isClosingRegister || loadingShiftStats}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white font-black h-11 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-red-500/20 cursor-pointer"
@@ -7651,7 +7627,7 @@ Do you want to proceed with this sale anyway?`);
       <AnimatePresence>
         {isImeiSelectModalOpen && imeiModalProduct && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-transparent"
               onClick={() => {
@@ -7660,7 +7636,7 @@ Do you want to proceed with this sale anyway?`);
                 setImeiSearchQuery("");
               }}
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-lg relative z-10 border border-slate-150 flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
             >
@@ -7674,12 +7650,12 @@ Do you want to proceed with this sale anyway?`);
                     <p className="text-[10px] text-slate-400">{imeiModalProduct.name}</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => {
                     setIsImeiSelectModalOpen(false);
                     setImeiModalProduct(null);
                     setImeiSearchQuery("");
-                  }} 
+                  }}
                   className="text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   <X size={16} />
@@ -7687,8 +7663,8 @@ Do you want to proceed with this sale anyway?`);
               </div>
 
               <div className="mb-4 shrink-0">
-                <Input 
-                  placeholder="Search IMEI numbers..." 
+                <Input
+                  placeholder="Search IMEI numbers..."
                   value={imeiSearchQuery}
                   onChange={(e) => setImeiSearchQuery(e.target.value)}
                   className="rounded-xl h-9.5 text-xs border-slate-200"
@@ -7703,7 +7679,7 @@ Do you want to proceed with this sale anyway?`);
                   </div>
                 ) : (
                   (() => {
-                    const filtered = availableImeis.filter(imei => 
+                    const filtered = availableImeis.filter(imei =>
                       imei.imei1.toLowerCase().includes(imeiSearchQuery.toLowerCase()) ||
                       (imei.imei2 && imei.imei2.toLowerCase().includes(imeiSearchQuery.toLowerCase()))
                     );
@@ -7713,7 +7689,7 @@ Do you want to proceed with this sale anyway?`);
                         <div className="flex flex-col items-center justify-center py-10 text-center text-slate-400">
                           <p className="text-xs font-bold mb-1">No matching IMEIs found</p>
                           <p className="text-[10px]">
-                            {availableImeis.length === 0 
+                            {availableImeis.length === 0
                               ? "There are no available IMEIs for this product in inventory. Add stock using purchase or edit product info."
                               : "Try adjusting your search filter."}
                           </p>
@@ -7726,16 +7702,15 @@ Do you want to proceed with this sale anyway?`);
                         {filtered.map((imei) => {
                           const isChecked = selectedImeisForItem.some(item => item.id === imei.id);
                           return (
-                            <label 
+                            <label
                               key={imei.id}
-                              className={`flex items-center justify-between p-3 rounded-2xl border text-xs cursor-pointer transition-all duration-200 ${
-                                isChecked 
-                                  ? "bg-indigo-50/50 border-indigo-200 shadow-sm shadow-indigo-500/5" 
+                              className={`flex items-center justify-between p-3 rounded-2xl border text-xs cursor-pointer transition-all duration-200 ${isChecked
+                                  ? "bg-indigo-50/50 border-indigo-200 shadow-sm shadow-indigo-500/5"
                                   : "bg-slate-50/30 border-slate-100 hover:bg-slate-50/80 hover:border-slate-200"
-                              }`}
+                                }`}
                             >
                               <div className="flex items-center gap-3">
-                                <input 
+                                <input
                                   type="checkbox"
                                   checked={isChecked}
                                   onChange={() => {
@@ -7752,11 +7727,10 @@ Do you want to proceed with this sale anyway?`);
                                   {imei.imei2 && <div className="text-[10px] text-slate-550 font-semibold">IMEI 2: {imei.imei2}</div>}
                                 </div>
                               </div>
-                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
-                                isChecked 
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${isChecked
                                   ? "bg-indigo-100 text-indigo-750"
                                   : "bg-emerald-100 text-emerald-755"
-                              }`}>
+                                }`}>
                                 {isChecked ? "Selected" : "Available"}
                               </span>
                             </label>
@@ -7773,8 +7747,8 @@ Do you want to proceed with this sale anyway?`);
               </div>
 
               <div className="flex gap-3 mt-3 shrink-0">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
                     setIsImeiSelectModalOpen(false);
                     setImeiModalProduct(null);
@@ -7784,7 +7758,7 @@ Do you want to proceed with this sale anyway?`);
                 >
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   onClick={handleConfirmImeiSelection}
                   className="flex-1 bg-indigo-650 hover:bg-indigo-700 text-white font-extrabold h-10 rounded-xl text-xs shadow-md shadow-indigo-500/10"
                 >
@@ -7816,8 +7790,8 @@ Do you want to proceed with this sale anyway?`);
                     <p className="text-[10px] text-slate-400">Select a held transaction to resume checkout</p>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setIsHeldModalOpen(false)} 
+                <button
+                  onClick={() => setIsHeldModalOpen(false)}
                   className="text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   <X size={16} />
@@ -7836,10 +7810,10 @@ Do you want to proceed with this sale anyway?`);
                     {heldCarts.map((held) => {
                       const totalItems = held.cart.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0);
                       const cartTotal = held.cart.reduce((sum: number, item: any) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
-                      
+
                       return (
-                        <div 
-                          key={held.id} 
+                        <div
+                          key={held.id}
                           className="flex flex-col md:flex-row md:items-center justify-between p-4 rounded-2xl border border-slate-150 hover:bg-slate-50/80 transition-all duration-200 gap-3"
                         >
                           <div>
@@ -7853,7 +7827,7 @@ Do you want to proceed with this sale anyway?`);
                               Held: {new Date(held.created_at).toLocaleString()}
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
                             <span className="text-xs font-black text-indigo-600 font-mono pr-1">
                               Rs {Math.round(cartTotal * 100) / 100}
@@ -7889,8 +7863,8 @@ Do you want to proceed with this sale anyway?`);
               </div>
 
               <div className="flex gap-3 mt-4 pt-3 border-t border-slate-100 shrink-0">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => setIsHeldModalOpen(false)}
                   className="w-full text-slate-600 font-bold h-10 rounded-xl text-xs cursor-pointer"
                 >
@@ -7949,8 +7923,8 @@ Do you want to proceed with this sale anyway?`);
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {cart.filter(item => isControlledDrug(item)).map((item, idx) => (
-                    <span 
-                      key={idx} 
+                    <span
+                      key={idx}
                       className="inline-flex items-center gap-1.5 bg-white border border-rose-300 text-rose-950 font-extrabold text-xs px-2.5 py-1 rounded-xl shadow-2xs"
                     >
                       <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
@@ -8099,8 +8073,8 @@ Do you want to proceed with this sale anyway?`);
                     try {
                       const controlledItems = cart.filter(item => isControlledDrug(item));
                       const logEntries = controlledItems.map(item => {
-                        const batch = productBatches[item.productId]?.find(b => b.id === item.batchId) || 
-                                      productBatches[item.productId]?.[0];
+                        const batch = productBatches[item.productId]?.find(b => b.id === item.batchId) ||
+                          productBatches[item.productId]?.[0];
                         return {
                           id: `ctrl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
                           shop_id: shopId,
@@ -8171,8 +8145,8 @@ Do you want to proceed with this sale anyway?`);
                   <div>
                     <h3 className="font-black text-slate-900 text-base">Pharmacy Substitute & Alternative Finder</h3>
                     <p className="text-xs text-slate-500 font-semibold">
-                      {selectedAltFormulation 
-                        ? `Showing substitute medicines for generic salt: "${selectedAltFormulation.name}"` 
+                      {selectedAltFormulation
+                        ? `Showing substitute medicines for generic salt: "${selectedAltFormulation.name}"`
                         : "Search by Generic Salt / Formula or Brand name"}
                     </p>
                   </div>
@@ -8230,11 +8204,10 @@ Do you want to proceed with this sale anyway?`);
                         return (
                           <div
                             key={`${prod.id}-${mIdx}`}
-                            className={`p-3 rounded-2xl border flex items-center justify-between transition-all ${
-                              inStock 
-                                ? "bg-white border-slate-200 hover:border-purple-300 hover:bg-purple-50/20 shadow-2xs" 
+                            className={`p-3 rounded-2xl border flex items-center justify-between transition-all ${inStock
+                                ? "bg-white border-slate-200 hover:border-purple-300 hover:bg-purple-50/20 shadow-2xs"
                                 : "bg-slate-50 border-slate-200 opacity-60"
-                            }`}
+                              }`}
                           >
                             <div className="space-y-1 min-w-0 pr-3">
                               <div className="flex items-center gap-2">
@@ -8265,11 +8238,10 @@ Do you want to proceed with this sale anyway?`);
                                   handleAddProductToCart(prod);
                                   toast.success(`Added substitute ${prod.name} to cart!`);
                                 }}
-                                className={`h-8 rounded-xl font-bold text-xs px-3 shadow-xs cursor-pointer ${
-                                  inStock 
-                                    ? "bg-purple-600 hover:bg-purple-700 text-white" 
+                                className={`h-8 rounded-xl font-bold text-xs px-3 shadow-xs cursor-pointer ${inStock
+                                    ? "bg-purple-600 hover:bg-purple-700 text-white"
                                     : "bg-slate-200 text-slate-500 cursor-not-allowed"
-                                }`}
+                                  }`}
                               >
                                 <Plus size={14} className="mr-1" /> Add
                               </Button>
@@ -8296,7 +8268,7 @@ Do you want to proceed with this sale anyway?`);
         )}
       </AnimatePresence>
 
-      <BarcodeScannerModal 
+      <BarcodeScannerModal
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         onScanSuccess={(decodedText) => {

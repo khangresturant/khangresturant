@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Search, Receipt, Calendar, DollarSign, CreditCard, CheckCircle, 
-  AlertCircle, Trash2, Edit, Eye, X, Printer, Loader2, Filter, 
+import {
+  Search, Receipt, Calendar, DollarSign, CreditCard, CheckCircle,
+  AlertCircle, Trash2, Edit, Eye, X, Printer, Loader2, Filter,
   ArrowUpRight, ShoppingCart, RefreshCcw, Download, Car, FileText, ExternalLink,
   MessageCircle, Share2, Package
 } from "lucide-react";
@@ -362,7 +362,7 @@ export default function SalesHistoryPage() {
           product_variants ( packing_name )
         `)
         .eq("invoice_id", invoice.id);
-      
+
       if (!error && data) {
         setSelectedInvoiceItems(data as any[]);
       }
@@ -808,7 +808,7 @@ export default function SalesHistoryPage() {
         theme: "striped",
         headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontSize: 8, fontStyle: "bold" },
         bodyStyles: { fontSize: 7.5, textColor: [51, 65, 85] },
-        columnStyles: { 
+        columnStyles: {
           3: { halign: "right" },
           4: { halign: "right" },
           5: { halign: "right" },
@@ -820,9 +820,9 @@ export default function SalesHistoryPage() {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7.5);
       doc.setTextColor(148, 163, 184);
-      doc.text("Powered by Falcon Shift", 15, 285);
+      doc.text("Powered by Falcon Swift", 15, 285);
 
-      doc.save(`sales_report_${activeSubTab}_${new Date().toISOString().slice(0,10)}.pdf`);
+      doc.save(`sales_report_${activeSubTab}_${new Date().toISOString().slice(0, 10)}.pdf`);
       toast.success("Sales report PDF downloaded successfully! 📄");
     } catch (err: any) {
       toast.error("Failed to generate Sales Report PDF: " + err.message);
@@ -835,7 +835,7 @@ export default function SalesHistoryPage() {
     return invoices.filter(inv => {
       const isVoided = inv.is_voided === true;
       const isQuot = inv.status === "quotation";
-      
+
       let matchesSubTab = false;
       if (activeSubTab === "quotation") {
         matchesSubTab = isQuot && !isVoided;
@@ -846,14 +846,14 @@ export default function SalesHistoryPage() {
       }
       if (!matchesSubTab) return false;
 
-      const matchesSearch = 
+      const matchesSearch =
         !q ||
         inv.id.toLowerCase().includes(q) ||
         (inv.parties?.name || "Walk-in Customer").toLowerCase().includes(q) ||
         (inv.parties?.phone || "").includes(q) ||
         (inv.items_summary && inv.items_summary.toLowerCase().includes(q)) ||
-        (inv.invoice_items_list && inv.invoice_items_list.some(it => 
-          it.name.toLowerCase().includes(q) || 
+        (inv.invoice_items_list && inv.invoice_items_list.some(it =>
+          it.name.toLowerCase().includes(q) ||
           (it.packing_name && it.packing_name.toLowerCase().includes(q))
         )) ||
         (inv.remarks && inv.remarks.toLowerCase().includes(q));
@@ -895,7 +895,7 @@ export default function SalesHistoryPage() {
       if (inv.is_voided === true) return false;
       if (inv.status === "quotation") return false;
 
-      const matchesSearch = 
+      const matchesSearch =
         inv.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (inv.parties?.name || "Walk-in Customer").toLowerCase().includes(searchQuery.toLowerCase()) ||
         (inv.parties?.phone || "").includes(searchQuery);
@@ -932,7 +932,7 @@ export default function SalesHistoryPage() {
     activeFiltered.forEach(inv => {
       const tot = Number(inv.total_amount);
       const paid = Number(inv.paid_amount || 0);
-      
+
       totalRevenue += tot;
       cashReceived += paid;
       outstandingCredit += Math.max(0, tot - paid);
@@ -959,9 +959,9 @@ export default function SalesHistoryPage() {
               <Download size={13} className="mr-1.5" /> PDF Report
             </Button>
           )}
-          <Button 
-            variant="outline" 
-            onClick={fetchInvoices} 
+          <Button
+            variant="outline"
+            onClick={fetchInvoices}
             className="rounded-lg h-8 text-xs font-bold text-slate-600 hover:bg-slate-50 border-slate-200 shadow-2xs"
           >
             <RefreshCcw size={13} className="mr-1.5" /> Reload
@@ -976,32 +976,32 @@ export default function SalesHistoryPage() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         {[
-          { 
-            label: "Total Revenue", 
-            val: `Rs ${Math.round(stats.totalRevenue).toLocaleString()}`, 
-            icon: DollarSign, 
-            bg: "bg-indigo-50/70 text-indigo-600 border-indigo-100" 
+          {
+            label: "Total Revenue",
+            val: `Rs ${Math.round(stats.totalRevenue).toLocaleString()}`,
+            icon: DollarSign,
+            bg: "bg-indigo-50/70 text-indigo-600 border-indigo-100"
           },
-          { 
-            label: "Total Invoices", 
-            val: stats.invoiceCount.toString(), 
-            icon: Receipt, 
-            bg: "bg-sky-50/70 text-sky-600 border-sky-100" 
+          {
+            label: "Total Invoices",
+            val: stats.invoiceCount.toString(),
+            icon: Receipt,
+            bg: "bg-sky-50/70 text-sky-600 border-sky-100"
           },
-          { 
-            label: "Cash Collected", 
-            val: `Rs ${Math.round(stats.cashReceived).toLocaleString()}`, 
-            icon: CheckCircle, 
-            bg: "bg-emerald-50/70 text-emerald-600 border-emerald-100" 
+          {
+            label: "Cash Collected",
+            val: `Rs ${Math.round(stats.cashReceived).toLocaleString()}`,
+            icon: CheckCircle,
+            bg: "bg-emerald-50/70 text-emerald-600 border-emerald-100"
           },
-          { 
-            label: "Udhaar (Outstanding)", 
-            val: `Rs ${Math.round(stats.outstandingCredit).toLocaleString()}`, 
-            icon: AlertCircle, 
-            bg: "bg-rose-50/70 text-rose-600 border-rose-100" 
+          {
+            label: "Udhaar (Outstanding)",
+            val: `Rs ${Math.round(stats.outstandingCredit).toLocaleString()}`,
+            icon: AlertCircle,
+            bg: "bg-rose-50/70 text-rose-600 border-rose-100"
           }
         ].map((stat, i) => (
-          <div 
+          <div
             key={i}
             className={`p-3 bg-white border rounded-2xl shadow-2xs flex items-center justify-between transition-all ${stat.bg}`}
           >
@@ -1020,14 +1020,14 @@ export default function SalesHistoryPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <Input 
+            <Input
               placeholder="Search by Bill #, Customer, Phone, or Item Name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8.5 pr-7 h-8.5 text-xs bg-slate-50 border-slate-200 focus-visible:ring-indigo-500/20 rounded-lg shadow-2xs"
             />
             {searchQuery && (
-              <button 
+              <button
                 onClick={() => setSearchQuery("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded cursor-pointer"
                 title="Clear Search"
@@ -1075,14 +1075,14 @@ export default function SalesHistoryPage() {
         </div>
 
         {dateFilter === "custom" && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             className="grid grid-cols-2 md:grid-cols-4 gap-2.5 pt-2 border-t border-dashed border-slate-100"
           >
             <div>
               <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Start Date</label>
-              <Input 
+              <Input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
@@ -1091,7 +1091,7 @@ export default function SalesHistoryPage() {
             </div>
             <div>
               <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">End Date</label>
-              <Input 
+              <Input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
@@ -1106,48 +1106,42 @@ export default function SalesHistoryPage() {
         <div className="flex border-b border-slate-200 bg-white rounded-t-3xl border-t border-x border-slate-200/80 p-1.5 pb-0 shrink-0 select-none">
           <button
             onClick={() => setActiveSubTab("active")}
-            className={`py-2.5 px-5 font-extrabold text-xs transition-all border-b-2 flex items-center gap-1.5 ${
-              activeSubTab === "active"
+            className={`py-2.5 px-5 font-extrabold text-xs transition-all border-b-2 flex items-center gap-1.5 ${activeSubTab === "active"
                 ? "border-indigo-600 text-indigo-600 font-black"
                 : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
+              }`}
           >
             Active Bills
-            <div className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
-              activeSubTab === "active" ? "bg-indigo-50 text-indigo-700 shadow-sm" : "bg-slate-100 text-slate-500"
-            }`}>
+            <div className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${activeSubTab === "active" ? "bg-indigo-50 text-indigo-700 shadow-sm" : "bg-slate-100 text-slate-500"
+              }`}>
               {invoices.filter(i => !i.is_voided && i.status !== "quotation").length}
             </div>
           </button>
           {industryType === "hardware" && (
             <button
               onClick={() => setActiveSubTab("quotation")}
-              className={`py-2.5 px-5 font-extrabold text-xs transition-all border-b-2 flex items-center gap-1.5 ${
-                activeSubTab === "quotation"
+              className={`py-2.5 px-5 font-extrabold text-xs transition-all border-b-2 flex items-center gap-1.5 ${activeSubTab === "quotation"
                   ? "border-purple-600 text-purple-600 font-black"
                   : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
+                }`}
             >
               📄 Quotations / Estimates
-              <div className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
-                activeSubTab === "quotation" ? "bg-purple-50 text-purple-700 shadow-sm" : "bg-slate-100 text-slate-500"
-              }`}>
+              <div className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${activeSubTab === "quotation" ? "bg-purple-50 text-purple-700 shadow-sm" : "bg-slate-100 text-slate-500"
+                }`}>
                 {invoices.filter(i => i.status === "quotation" && !i.is_voided).length}
               </div>
             </button>
           )}
           <button
             onClick={() => setActiveSubTab("trash")}
-            className={`py-2.5 px-5 font-extrabold text-xs transition-all border-b-2 flex items-center gap-1.5 ${
-              activeSubTab === "trash"
+            className={`py-2.5 px-5 font-extrabold text-xs transition-all border-b-2 flex items-center gap-1.5 ${activeSubTab === "trash"
                 ? "border-red-600 text-red-600 font-black"
                 : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
+              }`}
           >
             🗑 Trash / Voided Bills
-            <div className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
-              activeSubTab === "trash" ? "bg-red-50 text-red-700 shadow-sm" : "bg-slate-100 text-slate-500"
-            }`}>
+            <div className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${activeSubTab === "trash" ? "bg-red-50 text-red-700 shadow-sm" : "bg-slate-100 text-slate-500"
+              }`}>
               {invoices.filter(i => i.is_voided).length}
             </div>
           </button>
@@ -1165,302 +1159,301 @@ export default function SalesHistoryPage() {
             </div>
           ) : (
             <>
-            <MobileCardList>
-              {filteredInvoices.map((inv) => {
-                const outstanding = Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount || 0));
-                const statusTone =
-                  inv.status === "paid"
-                    ? "success"
-                    : inv.status === "partial"
-                      ? "warning"
-                      : inv.status === "quotation"
-                        ? "purple"
-                        : "danger";
+              <MobileCardList>
+                {filteredInvoices.map((inv) => {
+                  const outstanding = Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount || 0));
+                  const statusTone =
+                    inv.status === "paid"
+                      ? "success"
+                      : inv.status === "partial"
+                        ? "warning"
+                        : inv.status === "quotation"
+                          ? "purple"
+                          : "danger";
 
-                return (
-                  <MobileDataCard
-                    key={inv.id}
-                    title={`#${inv.id.slice(0, 8).toUpperCase()}`}
-                    subtitle={
-                      inv.items_summary
-                        ? `${inv.parties?.name || "Walk-in Customer"} • ${inv.items_summary}`
-                        : (inv.parties?.name || "Walk-in Customer")
-                    }
-                    meta={new Date(inv.created_at).toLocaleString()}
-                    badge={{
-                      label: inv.status === "quotation" ? "Quote" : inv.status,
-                      tone: statusTone,
-                    }}
-                    primaryAmount={`Rs ${Math.round(inv.total_amount).toLocaleString()}`}
-                    secondaryAmount={
-                      outstanding > 0
-                        ? `Rs ${Math.round(outstanding).toLocaleString()}`
-                        : undefined
-                    }
-                    secondaryLabel="Due"
-                    actions={
-                      <div className="flex items-center gap-1.5 w-full justify-end">
-                        {inv.is_showroom_inst ? (
-                          <>
+                  return (
+                    <MobileDataCard
+                      key={inv.id}
+                      title={`#${inv.id.slice(0, 8).toUpperCase()}`}
+                      subtitle={
+                        inv.items_summary
+                          ? `${inv.parties?.name || "Walk-in Customer"} • ${inv.items_summary}`
+                          : (inv.parties?.name || "Walk-in Customer")
+                      }
+                      meta={new Date(inv.created_at).toLocaleString()}
+                      badge={{
+                        label: inv.status === "quotation" ? "Quote" : inv.status,
+                        tone: statusTone,
+                      }}
+                      primaryAmount={`Rs ${Math.round(inv.total_amount).toLocaleString()}`}
+                      secondaryAmount={
+                        outstanding > 0
+                          ? `Rs ${Math.round(outstanding).toLocaleString()}`
+                          : undefined
+                      }
+                      secondaryLabel="Due"
+                      actions={
+                        <div className="flex items-center gap-1.5 w-full justify-end">
+                          {inv.is_showroom_inst ? (
+                            <>
+                              <button
+                                onClick={() => handleViewReceipt(inv)}
+                                className="h-10 px-3 flex items-center gap-1.5 bg-violet-50 text-violet-700 font-bold text-xs rounded-xl border border-violet-200"
+                                title="بیع نامہ اور اقساط معاہدہ پرنٹ کریں"
+                              >
+                                <FileText size={15} />
+                                <div>بیع نامہ</div>
+                              </button>
+                              {inv.showroom_data?.id && (
+                                <Link
+                                  href={`/dashboard/showroom/installments/agreement/${inv.showroom_data.id}`}
+                                  target="_blank"
+                                >
+                                  <div className="h-10 w-10 flex items-center justify-center bg-slate-100 text-slate-700 rounded-xl border border-slate-200">
+                                    <ExternalLink size={15} />
+                                  </div>
+                                </Link>
+                              )}
+                            </>
+                          ) : inv.is_showroom_veh ? (
                             <button
                               onClick={() => handleViewReceipt(inv)}
-                              className="h-10 px-3 flex items-center gap-1.5 bg-violet-50 text-violet-700 font-bold text-xs rounded-xl border border-violet-200"
-                              title="بیع نامہ اور اقساط معاہدہ پرنٹ کریں"
+                              className="h-10 px-3 flex items-center gap-1.5 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200"
+                              title="گاڑی کی فروخت کا بیع نامہ پرنٹ کریں"
                             >
                               <FileText size={15} />
                               <div>بیع نامہ</div>
                             </button>
-                            {inv.showroom_data?.id && (
-                              <Link
-                                href={`/dashboard/showroom/installments/agreement/${inv.showroom_data.id}`}
-                                target="_blank"
-                              >
-                                <div className="h-10 w-10 flex items-center justify-center bg-slate-100 text-slate-700 rounded-xl border border-slate-200">
-                                  <ExternalLink size={15} />
-                                </div>
-                              </Link>
-                            )}
-                          </>
-                        ) : inv.is_showroom_veh ? (
-                          <button
-                            onClick={() => handleViewReceipt(inv)}
-                            className="h-10 px-3 flex items-center gap-1.5 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200"
-                            title="گاڑی کی فروخت کا بیع نامہ پرنٹ کریں"
-                          >
-                            <FileText size={15} />
-                            <div>بیع نامہ</div>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleViewReceipt(inv)}
-                            className="h-10 w-10 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100"
-                            title="View / Print Receipt"
-                          >
-                            <Eye size={16} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleShareWhatsApp(inv)}
-                          className="h-10 w-10 flex items-center justify-center bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl border border-emerald-200"
-                          title="Share Bill on WhatsApp with Download Link"
-                        >
-                          <MessageCircle size={16} />
-                        </button>
-                        {activeSubTab === "active" && !inv.is_showroom_inst && !inv.is_showroom_veh && permissions?.actions?.edit_bill !== false && (
-                          <Link href={`/dashboard/pos?edit=${inv.id}`}>
-                            <div className="h-10 w-10 flex items-center justify-center bg-sky-50 text-sky-600 rounded-xl border border-sky-100">
-                              <Edit size={16} />
-                            </div>
-                          </Link>
-                        )}
-                      </div>
-                    }
-                  />
-                );
-              })}
-            </MobileCardList>
-
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-[10px] text-slate-700 font-extrabold uppercase tracking-wider bg-slate-100 select-none">
-                    <th className="py-2.5 px-3.5">Invoice ID</th>
-                    <th className="py-2.5 px-3.5">Date & Time</th>
-                    <th className="py-2.5 px-3.5">Customer Account</th>
-                    <th className="py-2.5 px-3.5 text-right">Invoice Total</th>
-                    <th className="py-2.5 px-3.5 text-right">Cash Paid</th>
-                    <th className="py-2.5 px-3.5 text-right">Due Balance</th>
-                    <th className="py-2.5 px-3.5 text-center">Status</th>
-                    <th className="py-2.5 px-3.5 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-xs">
-                  {filteredInvoices.map((inv) => {
-                    const outstanding = Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount || 0));
-                    return (
-                      <tr key={inv.id} className="hover:bg-slate-50/80 transition-all font-medium text-slate-700">
-                        <td className="py-2 px-3.5 font-mono font-bold text-slate-900 flex items-center gap-1.5">
-                          #{inv.id.slice(0, 8).toUpperCase()}
-                          {inv.is_showroom_inst && (
-                            <div className="bg-violet-50 text-violet-700 border border-violet-200 text-[8px] font-black px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
-                              🚗 اقساط
-                            </div>
-                          )}
-                          {inv.is_showroom_veh && (
-                            <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8px] font-black px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
-                              🚗 گاڑی نقد
-                            </div>
-                          )}
-                          {inv.is_edited && (
+                          ) : (
                             <button
-                              onClick={() => handleShowHistory(inv)}
-                              className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 font-extrabold text-[8px] px-1 py-0.5 rounded leading-none ml-1 flex items-center gap-0.5 cursor-pointer shadow-2xs"
-                              title="Click to view edits history"
+                              onClick={() => handleViewReceipt(inv)}
+                              className="h-10 w-10 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100"
+                              title="View / Print Receipt"
                             >
-                              Edited 📖
+                              <Eye size={16} />
                             </button>
                           )}
-                        </td>
-                        <td className="py-2 px-3.5 text-slate-400 font-medium text-[11px]">
-                          {formatDateTime(inv.created_at, timezone)}
-                        </td>
-                        <td className="py-2 px-3.5">
-                          {inv.parties ? (
-                            <div>
-                              <div className="font-extrabold text-slate-800 text-xs">{inv.parties.name}</div>
-                              {inv.parties.phone && (
-                                <p className="text-[8.5px] text-slate-400 font-mono leading-none mt-0.5">{inv.parties.phone}</p>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="text-slate-400 text-xs font-semibold">Walk-in Customer</div>
-                          )}
-
-                          {inv.items_summary && (
-                            <div className="mt-1 flex items-center gap-1 max-w-[240px]">
-                              <Package size={10} className="text-indigo-500 shrink-0" />
-                              <div 
-                                className="text-[10px] text-slate-500 truncate font-normal bg-slate-50 px-1 py-0.5 rounded border border-slate-200/60"
-                                title={inv.items_summary}
-                              >
-                                {inv.items_summary}
+                          <button
+                            onClick={() => handleShareWhatsApp(inv)}
+                            className="h-10 w-10 flex items-center justify-center bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl border border-emerald-200"
+                            title="Share Bill on WhatsApp with Download Link"
+                          >
+                            <MessageCircle size={16} />
+                          </button>
+                          {activeSubTab === "active" && !inv.is_showroom_inst && !inv.is_showroom_veh && permissions?.actions?.edit_bill !== false && (
+                            <Link href={`/dashboard/pos?edit=${inv.id}`}>
+                              <div className="h-10 w-10 flex items-center justify-center bg-sky-50 text-sky-600 rounded-xl border border-sky-100">
+                                <Edit size={16} />
                               </div>
-                            </div>
+                            </Link>
                           )}
-                        </td>
-                        <td className="py-2 px-3.5 text-right font-bold text-slate-800">
-                          Rs {Math.round(inv.total_amount).toLocaleString()}
-                        </td>
-                        <td className="py-2 px-3.5 text-right text-emerald-600 font-bold">
-                          Rs {Math.round(inv.paid_amount || 0).toLocaleString()}
-                        </td>
-                        <td className="py-2 px-3.5 text-right text-rose-600 font-bold">
-                          Rs {Math.round(outstanding).toLocaleString()}
-                        </td>
-                        <td className="py-2 px-3.5 text-center">
-                          <div className={`px-2 py-0.5 rounded text-[9.5px] font-extrabold border ${
-                            inv.status === "quotation"
-                              ? "bg-purple-50 text-purple-700 border-purple-100"
-                              : inv.status === "paid" 
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
-                                : inv.status === "partial"
-                                  ? "bg-amber-50 text-amber-700 border-amber-100"
-                                  : "bg-red-50 text-red-700 border-red-100"
-                          }`}>
-                            {inv.status === "quotation" ? "Quotation" : inv.status}
-                          </div>
-                        </td>
-                        <td className="py-2 px-3.5 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            {inv.is_showroom_inst ? (
-                              <>
+                        </div>
+                      }
+                    />
+                  );
+                })}
+              </MobileCardList>
+
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[10px] text-slate-700 font-extrabold uppercase tracking-wider bg-slate-100 select-none">
+                      <th className="py-2.5 px-3.5">Invoice ID</th>
+                      <th className="py-2.5 px-3.5">Date & Time</th>
+                      <th className="py-2.5 px-3.5">Customer Account</th>
+                      <th className="py-2.5 px-3.5 text-right">Invoice Total</th>
+                      <th className="py-2.5 px-3.5 text-right">Cash Paid</th>
+                      <th className="py-2.5 px-3.5 text-right">Due Balance</th>
+                      <th className="py-2.5 px-3.5 text-center">Status</th>
+                      <th className="py-2.5 px-3.5 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {filteredInvoices.map((inv) => {
+                      const outstanding = Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount || 0));
+                      return (
+                        <tr key={inv.id} className="hover:bg-slate-50/80 transition-all font-medium text-slate-700">
+                          <td className="py-2 px-3.5 font-mono font-bold text-slate-900 flex items-center gap-1.5">
+                            #{inv.id.slice(0, 8).toUpperCase()}
+                            {inv.is_showroom_inst && (
+                              <div className="bg-violet-50 text-violet-700 border border-violet-200 text-[8px] font-black px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
+                                🚗 اقساط
+                              </div>
+                            )}
+                            {inv.is_showroom_veh && (
+                              <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8px] font-black px-1.5 py-0.5 rounded leading-none flex items-center gap-0.5">
+                                🚗 گاڑی نقد
+                              </div>
+                            )}
+                            {inv.is_edited && (
+                              <button
+                                onClick={() => handleShowHistory(inv)}
+                                className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 font-extrabold text-[8px] px-1 py-0.5 rounded leading-none ml-1 flex items-center gap-0.5 cursor-pointer shadow-2xs"
+                                title="Click to view edits history"
+                              >
+                                Edited 📖
+                              </button>
+                            )}
+                          </td>
+                          <td className="py-2 px-3.5 text-slate-400 font-medium text-[11px]">
+                            {formatDateTime(inv.created_at, timezone)}
+                          </td>
+                          <td className="py-2 px-3.5">
+                            {inv.parties ? (
+                              <div>
+                                <div className="font-extrabold text-slate-800 text-xs">{inv.parties.name}</div>
+                                {inv.parties.phone && (
+                                  <p className="text-[8.5px] text-slate-400 font-mono leading-none mt-0.5">{inv.parties.phone}</p>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-slate-400 text-xs font-semibold">Walk-in Customer</div>
+                            )}
+
+                            {inv.items_summary && (
+                              <div className="mt-1 flex items-center gap-1 max-w-[240px]">
+                                <Package size={10} className="text-indigo-500 shrink-0" />
+                                <div
+                                  className="text-[10px] text-slate-500 truncate font-normal bg-slate-50 px-1 py-0.5 rounded border border-slate-200/60"
+                                  title={inv.items_summary}
+                                >
+                                  {inv.items_summary}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2 px-3.5 text-right font-bold text-slate-800">
+                            Rs {Math.round(inv.total_amount).toLocaleString()}
+                          </td>
+                          <td className="py-2 px-3.5 text-right text-emerald-600 font-bold">
+                            Rs {Math.round(inv.paid_amount || 0).toLocaleString()}
+                          </td>
+                          <td className="py-2 px-3.5 text-right text-rose-600 font-bold">
+                            Rs {Math.round(outstanding).toLocaleString()}
+                          </td>
+                          <td className="py-2 px-3.5 text-center">
+                            <div className={`px-2 py-0.5 rounded text-[9.5px] font-extrabold border ${inv.status === "quotation"
+                                ? "bg-purple-50 text-purple-700 border-purple-100"
+                                : inv.status === "paid"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                  : inv.status === "partial"
+                                    ? "bg-amber-50 text-amber-700 border-amber-100"
+                                    : "bg-red-50 text-red-700 border-red-100"
+                              }`}>
+                              {inv.status === "quotation" ? "Quotation" : inv.status}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3.5 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {inv.is_showroom_inst ? (
+                                <>
+                                  <button
+                                    onClick={() => handleViewReceipt(inv)}
+                                    className="px-2 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg transition-all border border-violet-200 shadow-2xs text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
+                                    title="بیع نامہ اور اقساط معاہدہ پرنٹ کریں"
+                                  >
+                                    <FileText size={12} />
+                                    <div>بیع نامہ / رسید</div>
+                                  </button>
+                                  {inv.showroom_data?.id && (
+                                    <Link
+                                      href={`/dashboard/showroom/installments/agreement/${inv.showroom_data.id}`}
+                                      target="_blank"
+                                    >
+                                      <button
+                                        className="p-1 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-lg transition-all border border-slate-200 shadow-2xs"
+                                        title="مکمل قانونی معاہدہ پیج کھولیں (Full Legal Agreement Page)"
+                                      >
+                                        <ExternalLink size={13} />
+                                      </button>
+                                    </Link>
+                                  )}
+                                </>
+                              ) : inv.is_showroom_veh ? (
                                 <button
                                   onClick={() => handleViewReceipt(inv)}
-                                  className="px-2 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg transition-all border border-violet-200 shadow-2xs text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
-                                  title="بیع نامہ اور اقساط معاہدہ پرنٹ کریں"
+                                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-all border border-emerald-200 shadow-2xs text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
+                                  title="گاڑی کی فروخت کا بیع نامہ پرنٹ کریں"
                                 >
                                   <FileText size={12} />
-                                  <div>بیع نامہ / رسید</div>
+                                  <div>بیع نامہ</div>
                                 </button>
-                                {inv.showroom_data?.id && (
-                                  <Link
-                                    href={`/dashboard/showroom/installments/agreement/${inv.showroom_data.id}`}
-                                    target="_blank"
+                              ) : (
+                                <button
+                                  onClick={() => handleViewReceipt(inv)}
+                                  className="p-1 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg transition-all border border-slate-200 shadow-2xs"
+                                  title="Print / View Thermal Receipt"
+                                >
+                                  <Eye size={13} />
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => handleShareWhatsApp(inv)}
+                                className="p-1 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-all border border-emerald-200/80 shadow-2xs"
+                                title="Share Digital Bill on WhatsApp (ڈاؤن لوڈ لنک بھیجیں)"
+                              >
+                                <MessageCircle size={13} />
+                              </button>
+
+                              {activeSubTab === "quotation" ? (
+                                <Link href={`/dashboard/pos?load_quotation=${inv.id}`}>
+                                  <button
+                                    className="p-1.5 bg-slate-50 hover:bg-purple-50 text-slate-500 hover:text-purple-650 rounded-xl transition-all border border-slate-100 flex items-center justify-center"
+                                    title="Convert to Sale"
                                   >
+                                    <ShoppingCart size={13} />
+                                  </button>
+                                </Link>
+                              ) : activeSubTab === "active" ? (
+                                <>
+                                  {!inv.is_showroom_inst && !inv.is_showroom_veh && permissions?.actions?.edit_bill !== false && (
+                                    <Link href={`/dashboard/pos?edit=${inv.id}`}>
+                                      <button
+                                        className="p-1.5 bg-slate-50 hover:bg-sky-50 text-slate-500 hover:text-sky-650 rounded-xl transition-all border border-slate-100"
+                                        title="Edit Bill in POS"
+                                      >
+                                        <Edit size={13} />
+                                      </button>
+                                    </Link>
+                                  )}
+                                  {!inv.is_showroom_inst && !inv.is_showroom_veh && (
                                     <button
-                                      className="p-1 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-lg transition-all border border-slate-200 shadow-2xs"
-                                      title="مکمل قانونی معاہدہ پیج کھولیں (Full Legal Agreement Page)"
+                                      onClick={() => handleVoidInvoice(inv)}
+                                      disabled={voidingInvoiceId === inv.id || permissions?.actions?.delete_bill === false}
+                                      className="p-1.5 bg-slate-50 hover:bg-red-50 text-slate-500 hover:text-red-650 rounded-xl transition-all border border-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                                      title={permissions?.actions?.delete_bill === false ? "Access Denied" : "Void Bill (Move to Trash)"}
                                     >
-                                      <ExternalLink size={13} />
+                                      {voidingInvoiceId === inv.id ? (
+                                        <Loader2 size={13} className="animate-spin" />
+                                      ) : (
+                                        <Trash2 size={13} />
+                                      )}
                                     </button>
-                                  </Link>
-                                )}
-                              </>
-                            ) : inv.is_showroom_veh ? (
-                              <button
-                                onClick={() => handleViewReceipt(inv)}
-                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-all border border-emerald-200 shadow-2xs text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
-                                title="گاڑی کی فروخت کا بیع نامہ پرنٹ کریں"
-                              >
-                                <FileText size={12} />
-                                <div>بیع نامہ</div>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleViewReceipt(inv)}
-                                className="p-1 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg transition-all border border-slate-200 shadow-2xs"
-                                title="Print / View Thermal Receipt"
-                              >
-                                <Eye size={13} />
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => handleShareWhatsApp(inv)}
-                              className="p-1 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-all border border-emerald-200/80 shadow-2xs"
-                              title="Share Digital Bill on WhatsApp (ڈاؤن لوڈ لنک بھیجیں)"
-                            >
-                              <MessageCircle size={13} />
-                            </button>
-
-                             {activeSubTab === "quotation" ? (
-                               <Link href={`/dashboard/pos?load_quotation=${inv.id}`}>
-                                 <button
-                                   className="p-1.5 bg-slate-50 hover:bg-purple-50 text-slate-500 hover:text-purple-650 rounded-xl transition-all border border-slate-100 flex items-center justify-center"
-                                   title="Convert to Sale"
-                                 >
-                                   <ShoppingCart size={13} />
-                                 </button>
-                               </Link>
-                             ) : activeSubTab === "active" ? (
-                               <>
-                                 {!inv.is_showroom_inst && !inv.is_showroom_veh && permissions?.actions?.edit_bill !== false && (
-                                   <Link href={`/dashboard/pos?edit=${inv.id}`}>
-                                     <button
-                                       className="p-1.5 bg-slate-50 hover:bg-sky-50 text-slate-500 hover:text-sky-650 rounded-xl transition-all border border-slate-100"
-                                       title="Edit Bill in POS"
-                                     >
-                                       <Edit size={13} />
-                                     </button>
-                                   </Link>
-                                 )}
-                                 {!inv.is_showroom_inst && !inv.is_showroom_veh && (
-                                   <button
-                                     onClick={() => handleVoidInvoice(inv)}
-                                     disabled={voidingInvoiceId === inv.id || permissions?.actions?.delete_bill === false}
-                                     className="p-1.5 bg-slate-50 hover:bg-red-50 text-slate-500 hover:text-red-650 rounded-xl transition-all border border-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                                     title={permissions?.actions?.delete_bill === false ? "Access Denied" : "Void Bill (Move to Trash)"}
-                                   >
-                                     {voidingInvoiceId === inv.id ? (
-                                       <Loader2 size={13} className="animate-spin" />
-                                     ) : (
-                                       <Trash2 size={13} />
-                                     )}
-                                   </button>
-                                 )}
-                               </>
-                             ) : (
-                               <button
-                                 onClick={() => handleRestoreInvoice(inv)}
-                                 disabled={restoringInvoiceId === inv.id || permissions?.actions?.delete_bill === false}
-                                 className="p-1.5 bg-slate-50 hover:bg-emerald-50 text-slate-555 hover:text-emerald-655 rounded-xl transition-all border border-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                                 title={permissions?.actions?.delete_bill === false ? "Access Denied" : "Restore Voided Bill"}
-                               >
-                                 {restoringInvoiceId === inv.id ? (
-                                   <Loader2 size={13} className="animate-spin" />
-                                 ) : (
-                                   <RefreshCcw size={13} />
-                                 )}
-                               </button>
-                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                                  )}
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => handleRestoreInvoice(inv)}
+                                  disabled={restoringInvoiceId === inv.id || permissions?.actions?.delete_bill === false}
+                                  className="p-1.5 bg-slate-50 hover:bg-emerald-50 text-slate-555 hover:text-emerald-655 rounded-xl transition-all border border-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  title={permissions?.actions?.delete_bill === false ? "Access Denied" : "Restore Voided Bill"}
+                                >
+                                  {restoringInvoiceId === inv.id ? (
+                                    <Loader2 size={13} className="animate-spin" />
+                                  ) : (
+                                    <RefreshCcw size={13} />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
         </div>
@@ -1470,18 +1463,18 @@ export default function SalesHistoryPage() {
       <AnimatePresence>
         {isReceiptOpen && selectedInvoice && (
           <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} 
-              animate={{ opacity: 1, scale: 1 }} 
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md border border-slate-200 relative my-auto flex flex-col items-center max-h-[90vh]"
             >
-              <button 
+              <button
                 onClick={() => {
                   setIsReceiptOpen(false);
                   setSelectedInvoice(null);
                   setSelectedInvoiceItems([]);
-                }} 
+                }}
                 className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 transition-colors print:hidden z-10"
               >
                 <X size={18} />
@@ -1494,7 +1487,7 @@ export default function SalesHistoryPage() {
                 </div>
               ) : (
                 <div id="sales-thermal-receipt" className="w-full flex justify-center py-2 overflow-y-auto custom-scrollbar max-h-[70vh]">
-                  <ReceiptTemplate 
+                  <ReceiptTemplate
                     settings={receiptSettings}
                     shopDetails={shopDetails}
                     invoice={{
@@ -1529,7 +1522,7 @@ export default function SalesHistoryPage() {
 
               {/* Actions */}
               <div className="flex gap-3 w-full mt-4 print:hidden shrink-0">
-                <Button 
+                <Button
                   onClick={() => {
                     const printContents = document.getElementById("sales-thermal-receipt")?.innerHTML;
                     if (printContents && selectedInvoice) {
@@ -1541,13 +1534,13 @@ export default function SalesHistoryPage() {
                         onError: (err) => toast.error("Printing failed: " + (err?.message || "Check printer"))
                       });
                     }
-                  }} 
+                  }}
                   className="flex-1 bg-slate-900 hover:bg-slate-950 text-white font-bold h-10 rounded-xl text-xs cursor-pointer"
                 >
                   <Printer size={15} className="mr-2" /> Print Receipt
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
                     setIsReceiptOpen(false);
                     setSelectedInvoice(null);
@@ -1566,7 +1559,7 @@ export default function SalesHistoryPage() {
       <AnimatePresence>
         {isHistoryOpen && selectedInvoice && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
               onClick={() => {
@@ -1575,22 +1568,22 @@ export default function SalesHistoryPage() {
                 setSelectedInvoiceItems([]);
               }}
             />
-            
-            <motion.div 
+
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-2xl relative z-10 font-sans max-h-[85vh] flex flex-col border border-slate-100"
             >
               <div className="flex items-center justify-between mb-4 border-b pb-3 shrink-0">
                 <div>
                   <h3 className="font-bold text-slate-800 text-lg">{historyTitle}</h3>
-                  
+
                 </div>
-                <button 
+                <button
                   onClick={() => {
                     setIsHistoryOpen(false);
                     setSelectedInvoice(null);
                     setSelectedInvoiceItems([]);
-                  }} 
+                  }}
                   className="text-slate-400 hover:text-slate-650 cursor-pointer"
                 >
                   <X size={18} />

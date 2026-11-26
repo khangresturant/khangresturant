@@ -175,7 +175,7 @@ export function generateEscPosBuffer(data: EscPosInvoiceData, paperWidth: "80mm"
   if (data.footerText) {
     addText(data.footerText + "\n");
   }
-  addText("Powered by Falcon Shift\n");
+  addText("Powered by Falcon Swift\n");
 
   // 7. Feed 4 lines and Full Cut
   addText("\n\n\n\n");

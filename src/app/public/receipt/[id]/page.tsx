@@ -77,20 +77,20 @@ export default function PublicReceiptPage() {
         const size = item.packing_name?.trim();
         const displayName = size && !baseName.includes(size) ? `${baseName} (${size})` : baseName;
         return {
-        name: displayName,
-        quantity: Number(item.quantity),
-        price: Number(item.unit_price),
-        subtotal: item.subtotal !== undefined && item.subtotal !== null ? Number(item.subtotal) : undefined,
-        packingName: item.packing_name || undefined,
-        code: item.products?.code || undefined,
-        sold_imeis: item.sold_imeis || undefined,
-        warranty: item.warranty || undefined,
-        batchNumber: item.batch_number || undefined,
-        expiryDate: item.expiry_date || undefined,
-        shelfLocation: item.shelf_location || undefined,
-        note: item.products?.note || undefined,
-        translated_names: item.products?.translated_names || undefined
-      };
+          name: displayName,
+          quantity: Number(item.quantity),
+          price: Number(item.unit_price),
+          subtotal: item.subtotal !== undefined && item.subtotal !== null ? Number(item.subtotal) : undefined,
+          packingName: item.packing_name || undefined,
+          code: item.products?.code || undefined,
+          sold_imeis: item.sold_imeis || undefined,
+          warranty: item.warranty || undefined,
+          batchNumber: item.batch_number || undefined,
+          expiryDate: item.expiry_date || undefined,
+          shelfLocation: item.shelf_location || undefined,
+          note: item.products?.note || undefined,
+          translated_names: item.products?.translated_names || undefined
+        };
       });
 
       // 2b. Fetch EMI schedules if payment_mode is emi or exists
@@ -231,9 +231,9 @@ export default function PublicReceiptPage() {
       const tableData = (invoice.items || []).map((it: any, idx: number) => [
         idx + 1,
         it.name +
-          (it.packingName ? ` (${it.packingName})` : "") +
-          (it.sold_imeis ? `\nIMEI: ${it.sold_imeis}` : "") +
-          (it.batchNumber ? `\nBatch: ${it.batchNumber}` : ""),
+        (it.packingName ? ` (${it.packingName})` : "") +
+        (it.sold_imeis ? `\nIMEI: ${it.sold_imeis}` : "") +
+        (it.batchNumber ? `\nBatch: ${it.batchNumber}` : ""),
         Number(it.quantity) || 1,
         `Rs ${(Number(it.price) || 0).toLocaleString()}`,
         `Rs ${(Number(it.subtotal !== undefined ? it.subtotal : it.price * it.quantity) || 0).toLocaleString()}`,
@@ -290,7 +290,7 @@ export default function PublicReceiptPage() {
       // Footer
       doc.setFontSize(8);
       doc.setTextColor(148, 163, 184);
-      doc.text("Thank you for your business! | Powered by Falcon Shift", 105, 285, {
+      doc.text("Thank you for your business! | Powered by Falcon Swift", 105, 285, {
         align: "center",
       });
 
@@ -330,7 +330,7 @@ export default function PublicReceiptPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 py-6 sm:py-10 px-3 sm:px-4 flex flex-col items-center justify-start space-y-5">
-      
+
       {/* Top Banner Message */}
       <div className="w-full max-w-md bg-emerald-500/10 border border-emerald-500/20 px-4 py-3 rounded-2xl flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -354,16 +354,16 @@ export default function PublicReceiptPage() {
 
       {/* Floating Receipt Sheet */}
       <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200/50 print:border-none print:shadow-none animate-in fade-in zoom-in-95 duration-300 w-full max-w-md flex justify-center">
-        <ReceiptTemplate 
-          settings={receiptSettings} 
-          invoice={invoice} 
-          shopDetails={shopDetails} 
+        <ReceiptTemplate
+          settings={receiptSettings}
+          invoice={invoice}
+          shopDetails={shopDetails}
         />
       </div>
 
       {/* Control Buttons */}
       <div className="flex flex-col gap-2.5 w-full max-w-md print:hidden">
-        <Button 
+        <Button
           onClick={handleDownloadPdf}
           disabled={downloadingPdf}
           className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black h-12 rounded-2xl text-sm shadow-xl shadow-emerald-950/40 cursor-pointer flex items-center justify-center gap-2"
@@ -377,13 +377,13 @@ export default function PublicReceiptPage() {
         </Button>
 
         <div className="flex gap-2.5">
-          <Button 
+          <Button
             onClick={handlePrint}
             className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold h-11 rounded-2xl text-xs border border-slate-800 cursor-pointer flex items-center justify-center gap-1.5"
           >
             <Printer size={14} /> Print Bill (پرنٹ کریں)
           </Button>
-          <Button 
+          <Button
             onClick={() => window.location.reload()}
             variant="outline"
             className="flex-1 bg-transparent border-slate-800 hover:bg-slate-900 text-slate-300 hover:text-white font-bold h-11 rounded-2xl text-xs cursor-pointer"

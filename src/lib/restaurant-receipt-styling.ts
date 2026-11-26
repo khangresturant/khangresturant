@@ -90,6 +90,27 @@ export function restaurantDesignerTypeCss(settings?: Partial<ReceiptSettings>): 
 .receipt-container .shop-name,
 .receipt-container .header .shop-name {
   font-size: ${shopPx}px !important;
+  text-align: center !important;
+}
+.receipt-container .header,
+.receipt-container .header p {
+  text-align: center !important;
+}
+.receipt-container .kitchen-order-heading,
+.receipt-container .section-title {
+  text-align: center !important;
+  font-weight: 900 !important;
+  font-size: ${Math.min(Math.max(fontPx + 5, 16), 24)}px !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0.6px !important;
+  padding: 5px 8px !important;
+  margin: 5px 0 6px 0 !important;
+  border: 2px solid #000 !important;
+  border-radius: 3px !important;
+  text-transform: uppercase !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  display: block !important;
 }
 .receipt-container {
   padding-left: ${leftMm}mm !important;

@@ -178,27 +178,27 @@ export const SAMPLE_PREVIEW_INVOICE = {
   discount: 50.00,
   total_amount: 1445.50,
   items: [
-    { 
-      name: "Super Habib Cooking Oil 1L", 
-      quantity: 2, 
-      price: 520, 
-      packingName: "Pack of 1", 
+    {
+      name: "Super Habib Cooking Oil 1L",
+      quantity: 2,
+      price: 520,
+      packingName: "Pack of 1",
       code: "OIL-SH-01",
       note: JSON.stringify({ translations: { ur: "سپر حبیب کوکنگ آئل 1 لیٹر", ar: "سوبر حبيب زيت الطبخ", fa: "روغن سرخ‌کردنی حبیب", ps: "حبيب د پخلي غوړي", sd: "سپرب حبيب ڪوڪنگ آئل" } })
     },
-    { 
-      name: "Sufi Banaspati Ghee 500g", 
-      quantity: 1, 
-      price: 290, 
-      packingName: "Box-Mini", 
+    {
+      name: "Sufi Banaspati Ghee 500g",
+      quantity: 1,
+      price: 290,
+      packingName: "Box-Mini",
       code: "GHEE-S-02",
       note: JSON.stringify({ translations: { ur: "صوفی بنسپتی گھی 500 گرام", ar: "سوفي سمن نباتي", fa: "روغن جامد صوفی", ps: "صوفي نباتي غوړي", sd: "صوفي بناسپتي گيهه" } })
     },
-    { 
-      name: "National Chilli Garlic Sauce 300g", 
-      quantity: 3, 
-      price: 70, 
-      packingName: "Bottle", 
+    {
+      name: "National Chilli Garlic Sauce 300g",
+      quantity: 3,
+      price: 70,
+      packingName: "Bottle",
       code: "SAUCE-NAT-05",
       note: JSON.stringify({ translations: { ur: "نیشنل چلی گارلک سوس 300 گرام", ar: "ناشيونال صلصة الثوم الحار", fa: "سس سیر و چیلی نشنال", ps: "نیشنل د هوږې مرچ ساس", sd: "نيشنل چلي گارلڪ ساس" } })
     }
@@ -286,7 +286,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
     if (borderStyle === "none" || templateId === "minimalist-air") {
       return <div className="my-1.5 border-b border-transparent"></div>;
     }
-    
+
     if (borderStyle === "stars" || templateId === "retro-double") {
       return (
         <div className="text-center text-black font-bold tracking-widest select-none overflow-hidden h-3 leading-none my-1 font-mono text-[9px]">
@@ -319,8 +319,8 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
 
     let borderClass = "border-dashed";
     return (
-      <div 
-        className={`my-1.5 border-t ${borderClass}`} 
+      <div
+        className={`my-1.5 border-t ${borderClass}`}
         style={{ borderColor: "#000000" }}
       ></div>
     );
@@ -339,7 +339,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
   const getItemDisplayName = (item: any, lang?: string) => {
     const defaultName = item.name || item.products?.name || "Item";
     if (!lang || lang === "en") return defaultName;
-    
+
     const tNames = item.translated_names || item.translatedNames || item.products?.translated_names || item.products?.translatedNames;
     if (tNames) {
       if (typeof tNames === "object" && tNames[lang]) {
@@ -349,7 +349,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         try {
           const parsed = JSON.parse(tNames);
           if (parsed[lang]) return parsed[lang];
-        } catch (e) {}
+        } catch (e) { }
       }
     }
 
@@ -361,7 +361,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
           if (parsed.translations && parsed.translations[lang]) {
             return parsed.translations[lang];
           }
-        } catch (e) {}
+        } catch (e) { }
       } else if (typeof noteStr === "object" && noteStr !== null) {
         if (noteStr.translations && noteStr.translations[lang]) {
           return noteStr.translations[lang];
@@ -377,10 +377,10 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
   const bottomMm = Number(mergedSettings.marginBottom || 0);
 
   return (
-    <div 
+    <div
       className={`mx-auto bg-white text-black ${containerWidth} ${fontStyleClass} thermal-receipt-view`}
-      style={{ 
-        fontSize: `${templateId === "paper-saver" ? Math.min(fontSize, 9.5) : fontSize}px`, 
+      style={{
+        fontSize: `${templateId === "paper-saver" ? Math.min(fontSize, 9.5) : fontSize}px`,
         lineHeight: templateId === "paper-saver" ? "1.2" : "1.35",
         color: "#000000",
         width: "100%",
@@ -522,7 +522,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         <div className="font-mono text-[8.5px] text-black font-bold space-y-0.5 my-1">
           <div className="flex justify-between border-b border-dotted border-black pb-0.5">
             <div>DATE: {new Date(invoice?.created_at || Date.now()).toLocaleDateString()}</div>
-            <div>TIME: {new Date(invoice?.created_at || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+            <div>TIME: {new Date(invoice?.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
           </div>
           <div className="flex justify-between pt-0.5">
             <div>RECEIPT: #{receiptBillNo}</div>
@@ -755,27 +755,27 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
             <div className="flex justify-between">
               <div>Payment Mode:</div>
               <div className="font-black uppercase">
-                {invoice.payment_mode === "quotation" 
-                  ? "Quotation / Estimate" 
-                  : invoice.payment_mode === "emi" 
-                    ? "Installments (EMI)" 
+                {invoice.payment_mode === "quotation"
+                  ? "Quotation / Estimate"
+                  : invoice.payment_mode === "emi"
+                    ? "Installments (EMI)"
                     : invoice.payment_mode}
               </div>
             </div>
-            
+
             {((invoice.payment_mode === "credit" || invoice.payment_mode === "emi" || invoice.payment_mode === "partial") ||
               (Number(invoice.received_amount ?? invoice.paid_amount ?? 0) > 0 && Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0)) > 0)) && (
-              <>
-                <div className="flex justify-between font-bold">
-                  <div>{invoice.payment_mode === "emi" ? "Down Payment:" : (billingLanguage === "ur" ? "نقد وصولی (Cash Paid):" : "Cash Paid:")}</div>
-                  <div className="font-mono font-black">{currencySymbol} {Number(invoice.received_amount !== undefined && invoice.received_amount !== null ? invoice.received_amount : (invoice.paid_amount || 0)).toFixed(2)}</div>
-                </div>
-                <div className="flex justify-between font-black border-t border-dashed border-black/40 pt-0.5">
-                  <div>{invoice.payment_mode === "emi" ? "EMI Debt Balance:" : (billingLanguage === "ur" ? "Udhaar Balance (کھاتا):" : "Balance Due:")}</div>
-                  <div className="font-mono">{currencySymbol} {Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount !== undefined && invoice.received_amount !== null ? invoice.received_amount : (invoice.paid_amount || 0))).toFixed(2)}</div>
-                </div>
-              </>
-            )}
+                <>
+                  <div className="flex justify-between font-bold">
+                    <div>{invoice.payment_mode === "emi" ? "Down Payment:" : (billingLanguage === "ur" ? "نقد وصولی (Cash Paid):" : "Cash Paid:")}</div>
+                    <div className="font-mono font-black">{currencySymbol} {Number(invoice.received_amount !== undefined && invoice.received_amount !== null ? invoice.received_amount : (invoice.paid_amount || 0)).toFixed(2)}</div>
+                  </div>
+                  <div className="flex justify-between font-black border-t border-dashed border-black/40 pt-0.5">
+                    <div>{invoice.payment_mode === "emi" ? "EMI Debt Balance:" : (billingLanguage === "ur" ? "Udhaar Balance (کھاتا):" : "Balance Due:")}</div>
+                    <div className="font-mono">{currencySymbol} {Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount !== undefined && invoice.received_amount !== null ? invoice.received_amount : (invoice.paid_amount || 0))).toFixed(2)}</div>
+                  </div>
+                </>
+              )}
           </div>
         )}
 
@@ -788,7 +788,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
                 {invoice.emiSchedules.length} Payments
               </div>
             </div>
-            
+
             <div className="space-y-0.5 font-mono text-[8px] font-bold text-black">
               {invoice.emiSchedules.map((s: any) => (
                 <div key={s.installmentNum} className="flex justify-between border-b border-dotted border-black/40 pb-0.5 last:border-b-0">
@@ -807,43 +807,43 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         {invoice?.customer_balance !== undefined &&
           invoice?.customer_balance !== null &&
           Math.abs(Number(invoice.customer_balance)) > 0.009 && (
-          <div className="mt-2 border-t-2 border-black pt-1.5 space-y-0.5">
-            {/* Previous (pre-this-bill) balance */}
-            <div className="flex justify-between items-center text-[8.5px] font-black text-black">
-              <div>
-                {billingLanguage === "ur" ? "پچھلا بقایا / Prev Balance:" : "Previous Balance:"}
-              </div>
-              <div className="font-mono">
-                {currencySymbol}{" "}
-                {(Number(invoice.customer_balance) - (
-                  (invoice.payment_mode === "credit" || invoice.payment_mode === "partial")
-                    ? Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0))
-                    : 0
-                )).toFixed(2)}
-              </div>
-            </div>
-            {/* This bill's added credit (if credit/partial) */}
-            {(invoice.payment_mode === "credit" || invoice.payment_mode === "partial") &&
-              Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0)) > 0.009 && (
-              <div className="flex justify-between items-center text-[8.5px] font-bold text-black">
-                <div>{billingLanguage === "ur" ? "+ اس بل کا بقایا:" : "+ This Bill Due:"}</div>
+            <div className="mt-2 border-t-2 border-black pt-1.5 space-y-0.5">
+              {/* Previous (pre-this-bill) balance */}
+              <div className="flex justify-between items-center text-[8.5px] font-black text-black">
+                <div>
+                  {billingLanguage === "ur" ? "پچھلا بقایا / Prev Balance:" : "Previous Balance:"}
+                </div>
                 <div className="font-mono">
                   {currencySymbol}{" "}
-                  {Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0)).toFixed(2)}
+                  {(Number(invoice.customer_balance) - (
+                    (invoice.payment_mode === "credit" || invoice.payment_mode === "partial")
+                      ? Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0))
+                      : 0
+                  )).toFixed(2)}
                 </div>
               </div>
-            )}
-            {/* Grand total outstanding - bold black strip */}
-            <div className="flex justify-between items-center py-1 px-1.5 rounded font-black text-[9px] text-white bg-black mt-0.5">
-              <div>
-                {billingLanguage === "ur" ? "کُل بقایا / Total Due:" : "Total Outstanding:"}
-              </div>
-              <div className="font-mono">
-                {currencySymbol} {Math.abs(Number(invoice.customer_balance)).toFixed(2)}
+              {/* This bill's added credit (if credit/partial) */}
+              {(invoice.payment_mode === "credit" || invoice.payment_mode === "partial") &&
+                Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0)) > 0.009 && (
+                  <div className="flex justify-between items-center text-[8.5px] font-bold text-black">
+                    <div>{billingLanguage === "ur" ? "+ اس بل کا بقایا:" : "+ This Bill Due:"}</div>
+                    <div className="font-mono">
+                      {currencySymbol}{" "}
+                      {Math.max(0, Number(invoice.total_amount || 0) - Number(invoice.received_amount ?? invoice.paid_amount ?? 0)).toFixed(2)}
+                    </div>
+                  </div>
+                )}
+              {/* Grand total outstanding - bold black strip */}
+              <div className="flex justify-between items-center py-1 px-1.5 rounded font-black text-[9px] text-white bg-black mt-0.5">
+                <div>
+                  {billingLanguage === "ur" ? "کُل بقایا / Total Due:" : "Total Outstanding:"}
+                </div>
+                <div className="font-mono">
+                  {currencySymbol} {Math.abs(Number(invoice.customer_balance)).toFixed(2)}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
       </div>
 
 
@@ -870,13 +870,13 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
               ⚡ Digital Receipt Verified
             </div>
             <div className="w-16 h-16 bg-white border border-black p-0.5 flex items-center justify-center rounded overflow-hidden shadow-xs">
-              <img 
+              <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(
                   typeof window !== "undefined" && invoice?.id && invoice.id !== "PREVIEW"
-                    ? `${window.location.origin}/public/receipt/${invoice.id}` 
+                    ? `${window.location.origin}/public/receipt/${invoice.id}`
                     : getPublicAppUrl()
-                )}`} 
-                alt="Digital Receipt QR" 
+                )}`}
+                alt="Digital Receipt QR"
                 className="receipt-logo w-full h-full object-contain"
               />
             </div>
@@ -890,13 +890,13 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
             {/* QR 1: Digital Bill */}
             <div className="flex flex-col items-center space-y-0.5 border border-black/20 p-1.5 rounded bg-slate-50">
               <div className="w-12 h-12 bg-white border border-black p-0.5 flex items-center justify-center rounded overflow-hidden">
-                <img 
+                <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(
                     typeof window !== "undefined" && invoice?.id && invoice.id !== "PREVIEW"
-                      ? `${window.location.origin}/public/receipt/${invoice.id}` 
+                      ? `${window.location.origin}/public/receipt/${invoice.id}`
                       : getPublicAppUrl()
-                  )}`} 
-                  alt="Digital Receipt QR" 
+                  )}`}
+                  alt="Digital Receipt QR"
                   className="receipt-logo w-full h-full object-contain"
                 />
               </div>
@@ -906,13 +906,13 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
             {/* QR 2: E-Commerce Store */}
             <div className="flex flex-col items-center space-y-0.5 border border-black/20 p-1.5 rounded bg-slate-50">
               <div className="w-12 h-12 bg-white border border-black p-0.5 flex items-center justify-center rounded overflow-hidden">
-                <img 
+                <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(
                     typeof window !== "undefined"
-                      ? `${window.location.origin}/store/faizan-mobile-shop` 
+                      ? `${window.location.origin}/store/faizan-mobile-shop`
                       : getPublicAppUrl()
-                  )}`} 
-                  alt="Online Web Store QR" 
+                  )}`}
+                  alt="Online Web Store QR"
                   className="receipt-logo w-full h-full object-contain"
                 />
               </div>
@@ -941,11 +941,11 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         {enableFBR && showFbrQrCode !== false && (
           <div className="flex flex-col items-center justify-center py-1.5 my-1.5 border-y border-black space-y-0.5 text-center">
             <div className="w-16 h-16 bg-white border border-black p-0.5 flex items-center justify-center rounded overflow-hidden">
-              <img 
+              <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=0&data=${encodeURIComponent(
                   invoice?.fbr_qr_code || `https://gst.fbr.gov.pk/qrcode?invoice=${invoice?.id || 'DEMO'}&posid=${fbrPosId || '100001'}&usin=${fbrPosId || '100001'}-${(invoice?.id || 'PREVIEW').slice(0, 8).toUpperCase()}`
-                )}`} 
-                alt="FBR Tax Asaan QR" 
+                )}`}
+                alt="FBR Tax Asaan QR"
                 className="receipt-logo w-full h-full object-contain"
               />
             </div>
@@ -959,24 +959,24 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
         )}
 
         {invoice?.status === "quotation" || invoice?.payment_mode === "quotation" ? (
-          <p 
-            className="text-black font-black mt-1.5 text-center" 
-            style={billingLanguage === "ur" ? { 
-              fontFamily: "Nastaliq, 'Noto Nastaliq Urdu', system-ui", 
-              fontSize: `${fontSize + 2}px`, 
-              direction: "rtl" 
+          <p
+            className="text-black font-black mt-1.5 text-center"
+            style={billingLanguage === "ur" ? {
+              fontFamily: "Nastaliq, 'Noto Nastaliq Urdu', system-ui",
+              fontSize: `${fontSize + 2}px`,
+              direction: "rtl"
             } : {}}
           >
             {billingLanguage === "ur" ? "یہ بل نہیں ہے، صرف نرخوں کا تخمینہ ہے" : "This is a price estimate, not a bill."}
           </p>
         ) : (
           billingLanguage === "ur" && customUrduNote && (
-            <p 
-              className="text-black font-black mt-1.5 text-center" 
-              style={{ 
-                fontFamily: "Nastaliq, 'Noto Nastaliq Urdu', system-ui", 
-                fontSize: `${fontSize + 2}px`, 
-                direction: "rtl" 
+            <p
+              className="text-black font-black mt-1.5 text-center"
+              style={{
+                fontFamily: "Nastaliq, 'Noto Nastaliq Urdu', system-ui",
+                fontSize: `${fontSize + 2}px`,
+                direction: "rtl"
               }}
             >
               {customUrduNote}
@@ -986,7 +986,7 @@ export function ReceiptTemplate({ settings, invoice, shopDetails }: ReceiptTempl
 
         {/* Brand attribution */}
         <p className="text-[7.5px] font-medium text-zinc-500 pt-1 tracking-tight">
-          Powered by Falcon Shift
+          Powered by Falcon Swift
         </p>
       </div>
     </div>

@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  CreditCard, Search, PlusCircle, Calendar, Loader2, Save, X, Phone, User, 
-  Landmark, DollarSign, Check, Download, FileText, Printer, ShieldAlert, 
+import {
+  CreditCard, Search, PlusCircle, Calendar, Loader2, Save, X, Phone, User,
+  Landmark, DollarSign, Check, Download, FileText, Printer, ShieldAlert,
   TrendingUp, Clock, AlertCircle, FileSpreadsheet, Eye, Info, MessageCircle, ShieldCheck
 } from "lucide-react";
 import { useShop } from "@/context/ShopContext";
@@ -109,7 +109,7 @@ export default function EMISchedulesPage() {
     accountName: string;
     date: string;
   } | null>(null);
-  const [invoiceTransactions, setInvoiceTransactions] = useState<{[invoiceId: string]: any[]}>({});
+  const [invoiceTransactions, setInvoiceTransactions] = useState<{ [invoiceId: string]: any[] }>({});
 
   useEffect(() => {
     if (shopId) {
@@ -180,7 +180,7 @@ export default function EMISchedulesPage() {
         .order("created_at", { ascending: true });
 
       if (!txError && txData) {
-        const groups: {[invoiceId: string]: any[]} = {};
+        const groups: { [invoiceId: string]: any[] } = {};
         txData.forEach((tx: any) => {
           if (!tx.ref_id) return;
           if (!groups[tx.ref_id]) {
@@ -222,7 +222,7 @@ export default function EMISchedulesPage() {
         .eq("shop_id", shopId)
         .maybeSingle();
       if (error) throw error;
-      
+
       if (data && (data.address || data.phone)) {
         setCompanyDetails(data);
       } else {
@@ -232,7 +232,7 @@ export default function EMISchedulesPage() {
           .select("name, phone, address")
           .eq("id", shopId)
           .maybeSingle();
-          
+
         if (!shopErr && shopData) {
           setCompanyDetails({
             name: shopData.name || "THE ACCOUNTS STORE",
@@ -262,9 +262,9 @@ export default function EMISchedulesPage() {
     if (!inv || !inv.parties) return { id: "", name: "Walk-in Customer", phone: null, balance: 0, cnic_number: null, father_name: null };
     const party = Array.isArray(inv.parties) ? inv.parties[0] : inv.parties;
     if (!party) return { id: "", name: "Walk-in Customer", phone: null, balance: 0, cnic_number: null, father_name: null };
-    return { 
+    return {
       id: party.id,
-      name: party.name || "Walk-in Customer", 
+      name: party.name || "Walk-in Customer",
       phone: party.phone || null,
       balance: Number(party.current_balance || 0),
       cnic_number: (party as any).cnic_number || null,
@@ -283,7 +283,7 @@ export default function EMISchedulesPage() {
     const schedules = inv.emi_schedules || [];
     const unpaid = [...schedules].filter(s => s.status !== "paid").sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
     const targetSchedule = specificSchedule || unpaid[0];
-    
+
     const totalBill = Number(inv.total_amount);
     const downPayment = Number(inv.paid_amount);
     const totalPaidSchedules = schedules.reduce((sum: number, s: any) => sum + Number(s.amount_paid || 0), 0);
@@ -334,7 +334,7 @@ export default function EMISchedulesPage() {
   // Open payment collection modal with pre-filled details
   const handleOpenCollect = (invoice: EMIInvoice) => {
     setSelectedInvoice(invoice);
-    
+
     // Sort schedules to find the first unpaid or partially paid installment
     const unpaidSchedules = [...(invoice.emi_schedules || [])]
       .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
@@ -347,7 +347,7 @@ export default function EMISchedulesPage() {
     } else {
       setAmountToCollect("0");
     }
-    
+
     setPenaltyAmount("0");
     setIsCollectModalOpen(true);
   };
@@ -459,7 +459,7 @@ export default function EMISchedulesPage() {
         return found ? found : s;
       });
       const allSettled = updatedAllSchedules.every((s: any) => s.status === "paid");
-      
+
       const { error: invStatusError } = await supabase
         .from("invoices")
         .update({ status: allSettled ? "paid" : "partial" })
@@ -526,7 +526,7 @@ export default function EMISchedulesPage() {
       toast.success("Payment collected and schedules updated successfully!");
       setIsCollectModalOpen(false);
       setSelectedInvoice(null);
-      
+
       // Open print preview popup
       setActiveSlipData({
         invoice: updatedInvoiceForReceipt,
@@ -536,7 +536,7 @@ export default function EMISchedulesPage() {
         date: new Date().toLocaleString()
       });
       setIsPrintModalOpen(true);
-      
+
       // Refresh list
       fetchEMIInvoices();
       fetchAccounts();
@@ -579,11 +579,11 @@ export default function EMISchedulesPage() {
     const totalBill = Number(activeSlipData.invoice.total_amount);
     const downPayment = Number(activeSlipData.invoice.paid_amount);
     const principal = totalBill - downPayment;
-    
+
     const schedules = activeSlipData.invoice.emi_schedules || [];
     const totalPaidSchedules = schedules.reduce((sum: number, s: any) => sum + Number(s.amount_paid || 0), 0);
     const totalLateFee = schedules.reduce((sum: number, s: any) => sum + Number(s.late_fee || 0), 0);
-    
+
     const totalPaidAmount = downPayment + totalPaidSchedules;
     const totalRemaining = (principal + totalLateFee) - totalPaidSchedules;
 
@@ -726,7 +726,7 @@ export default function EMISchedulesPage() {
             
             <div style="text-align: center; color: #94a3b8; font-size: 7.5px; margin-top: 20px; font-style: italic;">
               <p style="margin: 0;">Thank you for your business!</p>
-              <p style="margin: 2px 0 0 0;">Powered by Falcon Shift</p>
+              <p style="margin: 2px 0 0 0;">Powered by Falcon Swift</p>
             </div>
           </div>
           
@@ -768,11 +768,11 @@ export default function EMISchedulesPage() {
       const totalBill = Number(invoice.total_amount);
       const downPayment = Number(invoice.paid_amount);
       const principal = totalBill - downPayment;
-      
+
       const schedules = invoice.emi_schedules || [];
       const totalPaidSchedules = schedules.reduce((sum, s) => sum + Number(s.amount_paid || 0), 0);
       const totalLateFee = schedules.reduce((sum, s) => sum + Number(s.late_fee || 0), 0);
-      
+
       const totalPaidAmount = downPayment + totalPaidSchedules;
       const totalRemaining = (principal + totalLateFee) - totalPaidSchedules;
 
@@ -780,7 +780,7 @@ export default function EMISchedulesPage() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.setTextColor(30, 41, 59);
-      
+
       // Center shop name
       const shopNameWidth = doc.getTextWidth(shopName);
       doc.text(shopName, (80 - shopNameWidth) / 2, 10);
@@ -788,7 +788,7 @@ export default function EMISchedulesPage() {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(71, 85, 105);
-      
+
       let headerY = 14;
       if (shopAddress) {
         const splitAddress = doc.splitTextToSize(shopAddress, 70);
@@ -827,7 +827,7 @@ export default function EMISchedulesPage() {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(71, 85, 105);
-      
+
       doc.text(`Date & Time: ${new Date().toLocaleString()}`, 5, headerY);
       headerY += 3.5;
       doc.text(`Receipt ID: INV-${invoice.id.slice(0, 8).toUpperCase()}-RC`, 5, headerY);
@@ -915,7 +915,7 @@ export default function EMISchedulesPage() {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(71, 85, 105);
-      
+
       doc.text("Customer Sign", 8, headerY);
       doc.text("Shop Stamp/Sign", 48, headerY);
       headerY += 8;
@@ -928,7 +928,7 @@ export default function EMISchedulesPage() {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(6.5);
       doc.setTextColor(148, 163, 184); // Slate 400
-      const footerText = "Thank you for your business! Powered by Falcon Shift";
+      const footerText = "Thank you for your business! Powered by Falcon Swift";
       const footerWidth = doc.getTextWidth(footerText);
       doc.text(footerText, (80 - footerWidth) / 2, headerY);
 
@@ -1016,11 +1016,11 @@ export default function EMISchedulesPage() {
       const totalBill = Number(invoice.total_amount);
       const downPayment = Number(invoice.paid_amount);
       const principal = totalBill - downPayment;
-      
+
       const schedules = invoice.emi_schedules || [];
       const totalPaidSchedules = schedules.reduce((sum, s) => sum + Number(s.amount_paid || 0), 0);
       const totalLateFee = schedules.reduce((sum, s) => sum + Number(s.late_fee || 0), 0);
-      
+
       const totalPaidAmount = downPayment + totalPaidSchedules;
       const totalRemaining = (principal + totalLateFee) - totalPaidSchedules;
 
@@ -1059,7 +1059,7 @@ export default function EMISchedulesPage() {
       // Table for installments (Shifted down to startY=98)
       const tableHeaders = [["Installment", "Due Date", "Original", "Penalty", "Paid Amount", "Remaining", "Status"]];
       const sortedSchedules = [...schedules].sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
-      
+
       const tableRows = sortedSchedules.map((s, idx) => {
         const instAmt = Number(s.installment_amount);
         const penalty = Number(s.late_fee || 0);
@@ -1191,11 +1191,11 @@ export default function EMISchedulesPage() {
         const totalBill = Number(inv.total_amount);
         const downPayment = Number(inv.paid_amount);
         const principal = totalBill - downPayment;
-        
+
         const schedules = inv.emi_schedules || [];
         const totalPaidSchedules = schedules.reduce((sum, s) => sum + Number(s.amount_paid || 0), 0);
         const totalLateFee = schedules.reduce((sum, s) => sum + Number(s.late_fee || 0), 0);
-        
+
         const totalDebt = principal + totalLateFee;
         const totalRemaining = (principal + totalLateFee) - totalPaidSchedules;
 
@@ -1276,17 +1276,17 @@ export default function EMISchedulesPage() {
   // Perform client-side filter & search
   const filteredInvoices = invoices.filter(inv => {
     const customer = getCustomerDetails(inv);
-    
+
     // Search query matches customer name or phone
-    const matchesSearch = customer.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (customer.phone && customer.phone.includes(searchQuery));
-    
+
     if (!matchesSearch) return false;
 
     // Filters
     const schedules = inv.emi_schedules || [];
     const unpaidSchedules = schedules.filter(s => s.status !== "paid");
-    
+
     if (filterMode === "active") {
       return unpaidSchedules.length > 0;
     }
@@ -1295,11 +1295,11 @@ export default function EMISchedulesPage() {
       const todayStr = new Date().toISOString().split("T")[0];
       return unpaidSchedules.some(s => s.due_date && s.due_date.startsWith(todayStr));
     }
-    
+
     if (filterMode === "paid") {
       return schedules.length > 0 && unpaidSchedules.length === 0;
     }
-    
+
     if (filterMode === "overdue") {
       const now = new Date();
       return unpaidSchedules.some(s => new Date(s.due_date) < now);
@@ -1318,7 +1318,7 @@ export default function EMISchedulesPage() {
     invoices.forEach(inv => {
       const schedules = inv.emi_schedules || [];
       const unpaid = schedules.filter(s => s.status !== "paid");
-      
+
       if (unpaid.length > 0) {
         activeCount++;
       }
@@ -1330,7 +1330,7 @@ export default function EMISchedulesPage() {
         const instAmt = Number(s.installment_amount);
         const penalty = Number(s.late_fee || 0);
         const paid = Number(s.amount_paid || 0);
-        
+
         totalOutstanding += (instAmt + penalty) - paid;
         totalCollected += paid;
 
@@ -1345,7 +1345,7 @@ export default function EMISchedulesPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 font-sans pb-12">
-      
+
       {/* Header & Master Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
         <div>
@@ -1355,9 +1355,9 @@ export default function EMISchedulesPage() {
           </h2>
           <p className="text-xs text-slate-500 mt-1">Manage installment plans, guarantor records, legal agreements, and collections</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
-          <Button 
+          <Button
             onClick={downloadMasterReportPDF}
             className="bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-[0.98]"
           >
@@ -1369,7 +1369,7 @@ export default function EMISchedulesPage() {
 
       {/* KPI Stats Blocks */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <motion.div 
+        <motion.div
           whileHover={{ y: -2 }}
           className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between"
         >
@@ -1382,7 +1382,7 @@ export default function EMISchedulesPage() {
           </div>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           whileHover={{ y: -2 }}
           className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between"
         >
@@ -1395,7 +1395,7 @@ export default function EMISchedulesPage() {
           </div>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           whileHover={{ y: -2 }}
           className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between"
         >
@@ -1410,7 +1410,7 @@ export default function EMISchedulesPage() {
           </div>
         </motion.div>
 
-        <motion.div 
+        <motion.div
           whileHover={{ y: -2 }}
           className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between"
         >
@@ -1439,11 +1439,10 @@ export default function EMISchedulesPage() {
             <button
               key={mode.id}
               onClick={() => setFilterMode(mode.id)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                filterMode === mode.id
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${filterMode === mode.id
                   ? mode.id === "overdue" ? "bg-amber-600 text-white shadow-sm" : "bg-blue-600 text-white shadow-sm"
                   : "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200"
-              }`}
+                }`}
             >
               {mode.label}
             </button>
@@ -1452,8 +1451,8 @@ export default function EMISchedulesPage() {
 
         <div className="relative w-full md:w-[300px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input 
-            placeholder="Search customer, phone, or CNIC..." 
+          <Input
+            placeholder="Search customer, phone, or CNIC..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 w-full bg-slate-50/50 border-slate-200/80 text-sm focus:bg-white rounded-xl"
@@ -1483,23 +1482,23 @@ export default function EMISchedulesPage() {
 
             const schedules = inv.emi_schedules || [];
             const sortedSchedules = [...schedules].sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
-            
+
             const totalPaidSchedules = schedules.reduce((sum, s) => sum + Number(s.amount_paid || 0), 0);
             const totalLateFee = schedules.reduce((sum, s) => sum + Number(s.late_fee || 0), 0);
-            
+
             const totalPaid = downPayment + totalPaidSchedules;
             const totalRemaining = (principal + totalLateFee) - totalPaidSchedules;
-            
+
             // Progress Bar calc
             const totalEmiSum = totalBill + totalLateFee;
             const progressPct = totalEmiSum > 0 ? Math.min(100, Math.round((totalPaid / totalEmiSum) * 100)) : 0;
-            
+
             const unpaidSchedules = sortedSchedules.filter(s => s.status !== "paid");
             const isFullySettled = unpaidSchedules.length === 0;
 
             // Next Installment details
             const nextInstallment = unpaidSchedules.length > 0 ? unpaidSchedules[0] : null;
-            const nextDueAmount = nextInstallment 
+            const nextDueAmount = nextInstallment
               ? Number(nextInstallment.installment_amount) + Number(nextInstallment.late_fee || 0) - Number(nextInstallment.amount_paid || 0)
               : 0;
             const isOverdue = nextInstallment ? new Date(nextInstallment.due_date) < new Date() : false;
@@ -1508,27 +1507,26 @@ export default function EMISchedulesPage() {
             const productsList = inv.invoice_items?.map(it => `${it.products?.name || "Product"} (x${it.quantity})`).join(", ") || "No items listed";
 
             return (
-              <motion.div 
+              <motion.div
                 layout
                 whileHover={{ y: -3 }}
-                key={inv.id} 
+                key={inv.id}
                 className="bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between p-5"
               >
                 {/* Visual indicator bar */}
-                <div className={`absolute top-0 left-0 w-full h-1.5 ${
-                  isFullySettled 
-                    ? 'bg-emerald-500' 
-                    : isOverdue 
-                      ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' 
+                <div className={`absolute top-0 left-0 w-full h-1.5 ${isFullySettled
+                    ? 'bg-emerald-500'
+                    : isOverdue
+                      ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
                       : 'bg-blue-500'
-                }`}></div>
+                  }`}></div>
 
                 {/* Card Top Section: Customer details */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-start">
                     <div className="space-y-0.5">
                       <h3 className="font-bold text-slate-800 text-base flex items-center gap-1.5">
-                        <User size={18} className="text-slate-400" /> 
+                        <User size={18} className="text-slate-400" />
                         <span>{customer.name}</span>
                         {customer.phone && (
                           <span className="text-xs text-slate-400 font-normal">({customer.phone})</span>
@@ -1540,14 +1538,13 @@ export default function EMISchedulesPage() {
                         <span>{new Date(inv.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    
-                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase border ${
-                      isFullySettled
+
+                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase border ${isFullySettled
                         ? "bg-emerald-50 border-emerald-200 text-emerald-800"
                         : isOverdue
                           ? "bg-amber-50 border-amber-200 text-amber-800 animate-pulse"
                           : "bg-blue-50 border-blue-200 text-blue-800"
-                    }`}>
+                      }`}>
                       {isFullySettled ? "Settled" : isOverdue ? "Overdue" : "Active"}
                     </span>
                   </div>
@@ -1567,10 +1564,9 @@ export default function EMISchedulesPage() {
                       </span>
                     </div>
                     <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-500 ${
-                          isFullySettled ? "bg-emerald-500" : "bg-blue-600"
-                        }`} 
+                      <div
+                        className={`h-full transition-all duration-500 ${isFullySettled ? "bg-emerald-500" : "bg-blue-600"
+                          }`}
                         style={{ width: `${progressPct}%` }}
                       ></div>
                     </div>
@@ -1591,11 +1587,10 @@ export default function EMISchedulesPage() {
 
                   {/* Next Installment detail */}
                   {!isFullySettled && nextInstallment ? (
-                    <div className={`p-3 border rounded-xl flex items-center justify-between text-xs ${
-                      isOverdue 
-                        ? 'bg-amber-50/60 border-amber-200 text-amber-900' 
+                    <div className={`p-3 border rounded-xl flex items-center justify-between text-xs ${isOverdue
+                        ? 'bg-amber-50/60 border-amber-200 text-amber-900'
                         : 'bg-blue-50/40 border-blue-100 text-slate-700'
-                    }`}>
+                      }`}>
                       <div className="space-y-0.5">
                         <p className="font-semibold flex items-center gap-1">
                           <Calendar size={13} className="text-slate-400" />
@@ -1622,7 +1617,7 @@ export default function EMISchedulesPage() {
                 {/* Actions Bottom Bar */}
                 <div className="flex flex-wrap justify-between items-center gap-2 border-t border-slate-100 pt-4 mt-4">
                   <div className="flex flex-wrap gap-2">
-                    <Button 
+                    <Button
                       variant="outline"
                       onClick={() => {
                         setActiveInvoiceDetails(inv);
@@ -1633,8 +1628,8 @@ export default function EMISchedulesPage() {
                       <Eye size={14} />
                       <span>Details</span>
                     </Button>
-                    
-                    <Button 
+
+                    <Button
                       variant="outline"
                       onClick={() => {
                         setActiveAgreementInvoice(inv);
@@ -1647,7 +1642,7 @@ export default function EMISchedulesPage() {
                       <span>Agreement</span>
                     </Button>
 
-                    <Button 
+                    <Button
                       variant="outline"
                       onClick={() => sendWhatsAppReminder(inv)}
                       className="border-emerald-200 hover:bg-emerald-50 text-emerald-700 font-bold text-xs h-9 px-3 rounded-lg flex items-center gap-1 cursor-pointer"
@@ -1659,7 +1654,7 @@ export default function EMISchedulesPage() {
                   </div>
 
                   {!isFullySettled && (
-                    <Button 
+                    <Button
                       onClick={() => handleOpenCollect(inv)}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 px-4 rounded-lg flex items-center gap-1 shadow-sm active:scale-[0.98]"
                     >
@@ -1678,7 +1673,7 @@ export default function EMISchedulesPage() {
       <AnimatePresence>
         {isCollectModalOpen && selectedInvoice && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -1693,7 +1688,7 @@ export default function EMISchedulesPage() {
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">Receive installment payment</p>
                 </div>
-                <button 
+                <button
                   onClick={() => setIsCollectModalOpen(false)}
                   className="text-slate-400 hover:text-white transition-colors"
                 >
@@ -1715,8 +1710,8 @@ export default function EMISchedulesPage() {
                   <div className="flex justify-between text-red-600 font-bold border-t border-slate-200/60 pt-1.5 mt-1.5">
                     <span>Outstanding:</span>
                     <span>
-                      Rs {(Number(selectedInvoice.total_amount) - Number(selectedInvoice.paid_amount) + 
-                        (selectedInvoice.emi_schedules?.reduce((sum, s) => sum + Number(s.late_fee || 0), 0) || 0) - 
+                      Rs {(Number(selectedInvoice.total_amount) - Number(selectedInvoice.paid_amount) +
+                        (selectedInvoice.emi_schedules?.reduce((sum, s) => sum + Number(s.late_fee || 0), 0) || 0) -
                         (selectedInvoice.emi_schedules?.reduce((sum, s) => sum + Number(s.amount_paid || 0), 0) || 0)).toLocaleString()}
                     </span>
                   </div>
@@ -1822,7 +1817,7 @@ export default function EMISchedulesPage() {
       <AnimatePresence>
         {isDetailModalOpen && activeInvoiceDetails && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -1837,7 +1832,7 @@ export default function EMISchedulesPage() {
                   </h3>
                   <p className="text-slate-400 text-xs mt-0.5">Invoice ID: #{activeInvoiceDetails.id.substring(0, 8).toUpperCase()}</p>
                 </div>
-                <button 
+                <button
                   onClick={() => setIsDetailModalOpen(false)}
                   className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors"
                 >
@@ -1847,7 +1842,7 @@ export default function EMISchedulesPage() {
 
               {/* Scrollable Body */}
               <div className="p-6 overflow-y-auto space-y-6">
-                
+
                 {/* Top Info Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 border border-slate-100 rounded-xl text-sm">
                   {/* Customer Details */}
@@ -1871,7 +1866,7 @@ export default function EMISchedulesPage() {
                   {/* Guarantor Details */}
                   <div className="space-y-2 border-t md:border-t-0 md:border-l border-slate-200/60 pt-2 md:pt-0 md:pl-4">
                     <h4 className="font-bold text-indigo-700 text-xs uppercase tracking-wider flex items-center gap-1">
-                      <ShieldCheck size={13}/>
+                      <ShieldCheck size={13} />
                       <span>Guarantor Details</span>
                     </h4>
                     <div className="space-y-1 text-xs">
@@ -1885,7 +1880,7 @@ export default function EMISchedulesPage() {
                         <p className="text-slate-600 font-mono">CNIC: {activeInvoiceDetails.guarantor_cnic}</p>
                       )}
                       {activeInvoiceDetails.guarantor_phone && (
-                        <p className="text-slate-600 flex items-center gap-1"><Phone size={11}/> {activeInvoiceDetails.guarantor_phone}</p>
+                        <p className="text-slate-600 flex items-center gap-1"><Phone size={11} /> {activeInvoiceDetails.guarantor_phone}</p>
                       )}
                       {activeInvoiceDetails.guarantor_address && (
                         <p className="text-slate-500 text-[11px] truncate">{activeInvoiceDetails.guarantor_address}</p>
@@ -1962,7 +1957,7 @@ export default function EMISchedulesPage() {
                       size="sm"
                       className="h-7 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-2.5 shadow-2xs"
                     >
-                      <MessageCircle size={12} className="mr-1"/>
+                      <MessageCircle size={12} className="mr-1" />
                       Send Full Plan WhatsApp
                     </Button>
                   </div>
@@ -2002,15 +1997,14 @@ export default function EMISchedulesPage() {
                                 <td className="p-3 text-right text-emerald-600 font-mono font-semibold">Rs {paid.toLocaleString()}</td>
                                 <td className="p-3 text-right text-red-600 font-mono font-bold">Rs {rem.toLocaleString()}</td>
                                 <td className="p-3 text-center">
-                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
-                                    isPaid
+                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${isPaid
                                       ? "bg-emerald-50 border-emerald-200 text-emerald-800"
                                       : rem < (instAmt + penalty) && rem > 0
                                         ? "bg-amber-50 border-amber-200 text-amber-800"
                                         : isOverdue
                                           ? "bg-red-50 border-red-200 text-red-800 animate-pulse"
                                           : "bg-blue-50 border-blue-200 text-blue-800"
-                                  }`}>
+                                    }`}>
                                     {isPaid ? "Paid" : rem < (instAmt + penalty) && rem > 0 ? "Partial" : isOverdue ? "Overdue" : "Unpaid"}
                                   </span>
                                 </td>
@@ -2022,13 +2016,13 @@ export default function EMISchedulesPage() {
                                       className="p-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
                                       title="Send WhatsApp Reminder for this installment"
                                     >
-                                      <MessageCircle size={13}/>
+                                      <MessageCircle size={13} />
                                     </button>
                                   )}
                                 </td>
                               </tr>
                             );
-                        })}
+                          })}
                       </tbody>
                     </table>
                   </div>
@@ -2078,7 +2072,7 @@ export default function EMISchedulesPage() {
 
               {/* Footer */}
               <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-between items-center">
-                <Button 
+                <Button
                   onClick={() => downloadReceiptPDF(activeInvoiceDetails)}
                   className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs h-10 px-4 rounded-xl flex items-center gap-1.5"
                 >
@@ -2104,7 +2098,7 @@ export default function EMISchedulesPage() {
       <AnimatePresence>
         {isPrintModalOpen && activeSlipData && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -2119,7 +2113,7 @@ export default function EMISchedulesPage() {
                   </h3>
                   <p className="text-[10px] text-slate-400 font-urdu mt-0.5">رسید پرنٹ یا ڈاؤن لوڈ کریں</p>
                 </div>
-                <button 
+                <button
                   onClick={() => setIsPrintModalOpen(false)}
                   className="text-slate-400 hover:text-white transition-colors"
                 >
@@ -2129,7 +2123,7 @@ export default function EMISchedulesPage() {
 
               {/* Preview Box */}
               <div className="p-4 bg-slate-50 overflow-y-auto flex justify-center items-start flex-1 border-b border-slate-100">
-                <div 
+                <div
                   id="thermal-slip-preview"
                   className="w-[72mm] bg-white border border-slate-200/80 shadow-sm p-4 rounded-lg text-slate-800 text-[10px] line-height-normal space-y-3 font-sans"
                 >
@@ -2220,7 +2214,7 @@ export default function EMISchedulesPage() {
                     <div className="flex justify-between">
                       <span>Total Paid So Far:</span>
                       <span className="text-slate-700">
-                        Rs {(Number(activeSlipData.invoice.paid_amount) + 
+                        Rs {(Number(activeSlipData.invoice.paid_amount) +
                           activeSlipData.invoice.emi_schedules.reduce((sum: number, s: any) => sum + Number(s.amount_paid || 0), 0)
                         ).toLocaleString()}
                       </span>
@@ -2228,8 +2222,8 @@ export default function EMISchedulesPage() {
                     <div className="flex justify-between text-red-600 font-extrabold border-t border-dashed border-slate-200 pt-1 mt-1 text-[9px]">
                       <span>Remaining Balance:</span>
                       <span>
-                        Rs {((Number(activeSlipData.invoice.total_amount) - Number(activeSlipData.invoice.paid_amount) + 
-                          activeSlipData.invoice.emi_schedules.reduce((sum: number, s: any) => sum + Number(s.late_fee || 0), 0)) - 
+                        Rs {((Number(activeSlipData.invoice.total_amount) - Number(activeSlipData.invoice.paid_amount) +
+                          activeSlipData.invoice.emi_schedules.reduce((sum: number, s: any) => sum + Number(s.late_fee || 0), 0)) -
                           activeSlipData.invoice.emi_schedules.reduce((sum: number, s: any) => sum + Number(s.amount_paid || 0), 0)
                         ).toLocaleString()}
                       </span>
@@ -2253,22 +2247,22 @@ export default function EMISchedulesPage() {
                   {/* Thank you footer */}
                   <div className="text-center text-[8px] text-slate-400 pt-3">
                     <p>Thank you for your business!</p>
-                    <p className="text-[7px]">Powered by Falcon Shift</p>
+                    <p className="text-[7px]">Powered by Falcon Swift</p>
                   </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="p-4 bg-white flex gap-2">
-                <Button 
+                <Button
                   onClick={handlePrintSlip}
                   className="flex-1 bg-slate-900 hover:bg-slate-950 text-white font-bold h-10 rounded-xl text-xs flex items-center justify-center gap-1.5"
                 >
                   <Printer size={14} />
                   <span>Print Receipt</span>
                 </Button>
-                
-                <Button 
+
+                <Button
                   variant="outline"
                   onClick={() => downloadPaymentSlipPDF(
                     activeSlipData.invoice,
@@ -2282,7 +2276,7 @@ export default function EMISchedulesPage() {
                   <span>PDF Slip</span>
                 </Button>
 
-                <Button 
+                <Button
                   variant="outline"
                   onClick={() => setIsPrintModalOpen(false)}
                   className="border-slate-200 text-slate-600 hover:bg-slate-50 font-bold h-10 rounded-xl text-xs"

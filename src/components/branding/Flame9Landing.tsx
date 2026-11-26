@@ -96,7 +96,7 @@ export default function Flame9Landing() {
                 ))}
               </div>
               <p className="mt-6 text-center text-[11px] font-semibold uppercase tracking-wider text-white/40">
-                Powered by Falcon Shift · Restaurant module only
+                Powered by Falcon Swift · Restaurant module only
               </p>
             </div>
           </div>
